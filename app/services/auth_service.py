@@ -24,7 +24,6 @@ ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from app.config import config
 from app.database.connection import get_db
 from app.database.repositories import UserRepository
 from app.models.db_models import UserDB

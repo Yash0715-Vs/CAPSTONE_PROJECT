@@ -9,14 +9,14 @@ Meets Capstone Specification Section 9:
 
 import sys
 from pathlib import Path
-from typing import Generator, List, Dict, Any, Iterable
+from typing import Generator, List, Iterable
 
 # Ensure project root is in sys.path
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from app.models.ticket import Ticket, TicketCategory, TicketPriority, TicketStatus
+from app.models.ticket import Ticket, TicketCategory, TicketPriority
 
 
 def ticket_stream_generator(total_count: int = 1000) -> Generator[Ticket, None, None]:
@@ -77,7 +77,7 @@ if __name__ == "__main__":
 
     # Complete list simulation calculation
     # In Python, a list of 50,000 pointers alone takes ~400 KB, plus individual object overhead
-    sample_list = [i for i in range(NUM_ITEMS)]
+    sample_list = list(range(NUM_ITEMS))
     list_memory_bytes = sys.getsizeof(sample_list)
     print(f"  -> Memory consumed by List pointer container: {list_memory_bytes:,} bytes")
     print("  => Generator uses ~99.9% less container memory by yielding items on-demand!")

@@ -10,7 +10,7 @@ Demonstrates core Object-Oriented Programming (OOP) concepts:
 
 import sys
 from pathlib import Path
-from datetime import date, datetime
+from datetime import date
 from enum import Enum
 from typing import Optional, Dict, Any
 
