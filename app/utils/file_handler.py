@@ -135,44 +135,36 @@ if __name__ == "__main__":
     print("RUNNING FILE I/O AND OS PROCESSING DEMO")
     print("=" * 65)
 
-    test_data_dir = os.path.join(ROOT_DIR, "data", "test_scratch")
-    os.makedirs(test_data_dir, exist_ok=True)
+    data_dir = os.path.join(ROOT_DIR, "data")
+    assets_file = os.path.join(data_dir, "assets.txt")
 
-    sample_assets_file = os.path.join(test_data_dir, "assets_sample.txt")
-
-    # 1. Write file
-    sample_content = (
-        "asset_id | type | brand | model | serial_number\n"
-        "LAP-101 | Laptop | Dell | Latitude 5440 | SN1001\n"
-        "MON-201 | Monitor | LG | UltraFine 27 | SN2001\n"
-        "LAP-101 | Laptop | Dell | Latitude 5440 | SN1001\n"  # Duplicate row
-        "KEY-301 | Keyboard | Logitech | MX Keys | SN3001\n"
-    )
-    FileHandler.write_file(sample_assets_file, sample_content)
-    print(f"\n[+] Created sample file at: {sample_assets_file}")
-
-    # 2. Text Statistics
-    stats = FileHandler.get_text_statistics(sample_assets_file)
+    # 1. Text Statistics on data/assets.txt
+    print(f"\n[+] Analyzing file: {assets_file}")
+    stats = FileHandler.get_text_statistics(assets_file)
     print(f"  -> File Statistics: {stats['line_count']} lines, {stats['word_count']} words, {stats['char_count']} chars")
 
-    # 3. Parse and Deduplicate
-    records = FileHandler.parse_delimited_records(sample_assets_file, delimiter="|")
+    # 2. Parse Delimited Records
+    records = FileHandler.parse_delimited_records(assets_file, delimiter="|")
     print(f"  -> Total records parsed: {len(records)}")
 
+    # 3. Deduplicate
     unique_records = FileHandler.deduplicate_records(records, primary_key="asset_id")
-    print(f"  -> Unique records after deduplication: {len(unique_records)}")
-    for r in unique_records:
-        print(f"     * {r['asset_id']} - {r['type']} ({r['brand']} {r['model']})")
+    print(f"  -> Unique records: {len(unique_records)}")
+    for r in unique_records[:4]:
+        print(f"     * {r['asset_id']} - {r['type']} ({r['brand']} {r['model']}) -> {r['status']}")
 
-    # 4. Archive file using os & shutil
-    archive_folder = os.path.join(test_data_dir, "archive")
-    archived_loc = FileHandler.archive_file(sample_assets_file, archive_folder)
-    print(f"\n[+] Archived processed file to: {archived_loc}")
-    print(f"  -> Source exists? {os.path.exists(sample_assets_file)}")
-    print(f"  -> Archive exists? {os.path.exists(archived_loc)}")
+    # 4. Demonstrate Archiving on a sample copy
+    archive_dir = os.path.join(data_dir, "archive")
+    sample_copy = os.path.join(data_dir, "assets_batch_run.tmp")
+    FileHandler.write_file(sample_copy, "temporary batch content")
+    archived_loc = FileHandler.archive_file(sample_copy, archive_dir)
+    print(f"\n[+] Archived batch file to: {archived_loc}")
 
-    # Clean up test scratch
-    shutil.rmtree(test_data_dir, ignore_errors=True)
+    # Clean up temp file in archive
+    if os.path.exists(archived_loc):
+        os.remove(archived_loc)
+    if os.path.exists(archive_dir) and not os.listdir(archive_dir):
+        os.rmdir(archive_dir)
 
     print("\n" + "=" * 65)
     print("ALL FILE I/O AND OS TESTS COMPLETED SUCCESSFULLY!")

@@ -1,0 +1,5 @@
+employee_id | name | email | department | role
+EMP-101 | Sarah Connor | sarah.connor@company.com | Engineering | EMPLOYEE
+EMP-102 | John Doe | john.doe@company.com | Product | EMPLOYEE
+IT-501 | Alex Murphy | alex.murphy@company.com | IT Support | SUPPORT
+ADM-001 | Ellen Ripley | ellen.ripley@company.com | IT Operations | ADMIN

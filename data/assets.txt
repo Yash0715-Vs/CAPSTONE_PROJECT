@@ -1,0 +1,9 @@
+asset_id | type | brand | model | serial_number | status | assigned_to
+LAP-1021 | Laptop | Dell | Latitude 5440 | DL1021ABC | AVAILABLE | 
+LAP-1022 | Laptop | Apple | MacBook Pro M3 | AP1022XYZ | ASSIGNED | EMP-101
+LAP-1023 | Laptop | Lenovo | ThinkPad T14 | LN1023QWE | ASSIGNED | EMP-102
+MON-2041 | Monitor | Dell | UltraSharp U2723QE | DL2041MON | ASSIGNED | EMP-101
+MON-2042 | Monitor | LG | 27UK850 4K | LG2042MON | AVAILABLE | 
+KEY-3011 | Keyboard | Logitech | MX Keys S | LG3011KEY | ASSIGNED | EMP-102
+MOU-4011 | Mouse | Logitech | MX Master 3S | LG4011MOU | ASSIGNED | EMP-102
+PRN-5011 | Printer | HP | LaserJet Pro M404 | HP5011PRN | AVAILABLE | 

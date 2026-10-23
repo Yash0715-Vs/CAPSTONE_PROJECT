@@ -1,0 +1,5 @@
+ticket_id | title | category | priority | status | created_by | assigned_to
+INC-1001 | Laptop screen flickering | Hardware | MEDIUM | IN_PROGRESS | EMP-101 | IT-501
+INC-1002 | VPN authentication failing | Network | HIGH | OPEN | EMP-102 | 
+INC-1003 | Request for vertical mouse | Hardware | LOW | RESOLVED | EMP-101 | IT-501
+INC-1004 | Entire floor WiFi down | Network | CRITICAL | OPEN | EMP-102 | 
