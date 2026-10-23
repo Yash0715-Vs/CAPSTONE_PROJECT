@@ -28,8 +28,8 @@ def test_api_workflow():
     print("=" * 65)
 
     # 1. Health check
-    print("\n[1] Testing Root Endpoint GET / ...")
-    res_root = client.get("/")
+    print("\n[1] Testing Health Endpoint GET /health ...")
+    res_root = client.get("/health")
     assert res_root.status_code == 200
     print(f"  -> Response: {res_root.json()}")
 

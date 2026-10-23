@@ -17,9 +17,17 @@ from app.main import app
 client = TestClient(app)
 
 
-def test_api_root_status():
-    """Validates root endpoint status and metadata."""
+def test_api_root_serves_dashboard():
+    """Validates that root endpoint serves the frontend dashboard HTML."""
     response = client.get("/")
+    assert response.status_code == 200
+    assert "<!DOCTYPE html>" in response.text
+    assert "Smart IT Asset" in response.text
+
+
+def test_api_health_status():
+    """Validates health check endpoint returns ONLINE status."""
+    response = client.get("/health")
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "ONLINE"

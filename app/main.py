@@ -15,7 +15,8 @@ from typing import List
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
 # Ensure project root is in sys.path
@@ -121,11 +122,37 @@ async def domain_exception_handler(request: Request, exc: ITAssetBaseException):
     )
 
 
+
+FRONTEND_DIR = ROOT_DIR / "frontend"
+
+# Mount Frontend static assets (CSS, JS)
+if (FRONTEND_DIR / "css").exists():
+    app.mount("/css", StaticFiles(directory=str(FRONTEND_DIR / "css")), name="css")
+if (FRONTEND_DIR / "js").exists():
+    app.mount("/js", StaticFiles(directory=str(FRONTEND_DIR / "js")), name="js")
+
+
 # =====================================================================
-# Root & Health Check Endpoints
+# Dashboard & Health Check Endpoints
 # =====================================================================
-@app.get("/", tags=["Health"])
-def root():
+@app.get("/", tags=["Dashboard"])
+@app.get("/dashboard", tags=["Dashboard"])
+def serve_dashboard():
+    """Serves the interactive React Single Page Application (SPA)."""
+    index_file = FRONTEND_DIR / "index.html"
+    if index_file.exists():
+        return FileResponse(str(index_file))
+    return {
+        "system": "Smart IT Asset & Support Ticket Management System",
+        "status": "ONLINE",
+        "docs": "/docs",
+        "redoc": "/redoc",
+    }
+
+
+@app.get("/health", tags=["Health"])
+def health_check():
+    """Returns system status, active database dialect, and OpenAPI links."""
     return {
         "system": "Smart IT Asset & Support Ticket Management System",
         "status": "ONLINE",
