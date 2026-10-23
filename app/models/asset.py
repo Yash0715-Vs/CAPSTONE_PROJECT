@@ -8,9 +8,16 @@ Demonstrates core Object-Oriented Programming (OOP) concepts:
 - Composition (HardwareSpecs composed inside device models)
 """
 
+import sys
+from pathlib import Path
 from datetime import date, datetime
 from enum import Enum
 from typing import Optional, Dict, Any
+
+# Ensure project root is in sys.path so the file can be executed directly
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 from app.utils.exceptions import InvalidAssetError, InvalidStatusTransitionError
 
@@ -316,3 +323,60 @@ class Printer(Asset):
             "technology": self.technology,
         })
         return details
+
+
+if __name__ == "__main__":
+    import json
+
+    print("=" * 60)
+    print("RUNNING ASSET MANAGEMENT DEMO (OOP & Polymorphism)")
+    print("=" * 60)
+
+    # 1. Create a Laptop with composed HardwareSpecs
+    laptop_specs = HardwareSpecs(processor="Intel Core i7-1370P", ram_gb=32, storage_gb=1024)
+    laptop = Laptop(
+        asset_id="LAP-1023",
+        brand="Dell",
+        model="Latitude 5440",
+        serial_number="ABC12345XYZ",
+        specs=laptop_specs,
+        battery_health_percent=98
+    )
+
+    print("\n[+] Created Laptop Instance:")
+    print(json.dumps(laptop.get_details(), indent=2))
+
+    # 2. Assign the Laptop to an Employee
+    print("\n[+] Assigning Laptop to EMP-102...")
+    laptop.assign_to_employee("EMP-102")
+    print(f"Status: {laptop.status.value} | Assigned To: {laptop.assigned_to}")
+
+    # 3. Create a Monitor (Polymorphism)
+    monitor = Monitor(
+        asset_id="MON-2045",
+        brand="Dell",
+        model="UltraSharp U2723QE",
+        serial_number="MON987654",
+        screen_size_inches=27.0,
+        resolution="3840x2160 (4K UHD)"
+    )
+
+    print("\n[+] Created Monitor Instance (Polymorphic details):")
+    print(json.dumps(monitor.get_details(), indent=2))
+
+    # 4. Demonstrate Exception Handling: Try assigning already assigned asset
+    print("\n[!] Testing Error Handling (Assigning already assigned asset):")
+    try:
+        laptop.assign_to_employee("EMP-999")
+    except InvalidStatusTransitionError as err:
+        print(f"    Caught Expected Exception: {err}")
+
+    # 5. Return the asset
+    print("\n[+] Returning Laptop to Inventory...")
+    laptop.return_asset()
+    print(f"Status: {laptop.status.value} | Assigned To: {laptop.assigned_to}")
+
+    print("\n" + "=" * 60)
+    print("ALL ASSET TESTS & OOP DEMOS COMPLETED SUCCESSFULLY!")
+    print("=" * 60)
+

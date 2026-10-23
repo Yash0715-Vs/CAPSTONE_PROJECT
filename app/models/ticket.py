@@ -4,9 +4,16 @@ Support Ticket Model.
 Defines the Ticket lifecycle, state transitions, priorities, and validation rules.
 """
 
+import sys
+from pathlib import Path
 from datetime import datetime
 from enum import Enum
 from typing import Optional, Dict, Any
+
+# Ensure project root is in sys.path so the file can be executed directly
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 from app.utils.exceptions import InvalidTicketError, InvalidStatusTransitionError
 
@@ -147,3 +154,55 @@ class Ticket:
 
     def __repr__(self) -> str:
         return f"<Ticket id={self.ticket_id} priority={self.priority.value} status={self.status.value}>"
+
+
+if __name__ == "__main__":
+    import json
+
+    print("=" * 60)
+    print("RUNNING TICKET LIFECYCLE & WORKFLOW DEMO")
+    print("=" * 60)
+
+    # 1. Create a support ticket
+    ticket = Ticket(
+        ticket_id="INC-1024",
+        title="Laptop does not boot up",
+        description="Screen remains black with power button LED blinking amber.",
+        created_by="EMP-102",
+        category=TicketCategory.HARDWARE,
+        priority=TicketPriority.HIGH
+    )
+    print("\n[+] Created New Support Ticket:")
+    print(json.dumps(ticket.to_dict(), indent=2))
+
+    # 2. Assign to IT Support
+    print("\n[+] Assigning ticket to IT specialist IT-501...")
+    ticket.assign_to("IT-501")
+    print(f"Status: {ticket.status.value} | Assigned To: {ticket.assigned_to}")
+
+    # 3. Start progress
+    print("\n[+] Moving ticket to IN_PROGRESS...")
+    ticket.start_progress()
+    print(f"Status: {ticket.status.value}")
+
+    # 4. Resolve ticket
+    print("\n[+] Resolving ticket with diagnostic notes...")
+    ticket.resolve("Replaced faulty RAM module; system boots properly.")
+    print(f"Status: {ticket.status.value} | Resolution: {ticket.resolution}")
+
+    # 5. Close ticket
+    print("\n[+] Closing ticket after user confirmation...")
+    ticket.close()
+    print(f"Status: {ticket.status.value} | Closed At: {ticket.closed_date}")
+
+    # 6. Test Error Handling: Cannot assign a closed ticket
+    print("\n[!] Testing Error Handling (Assigning closed ticket):")
+    try:
+        ticket.assign_to("IT-999")
+    except InvalidStatusTransitionError as err:
+        print(f"    Caught Expected Exception: {err}")
+
+    print("\n" + "=" * 60)
+    print("ALL TICKET WORKFLOW TESTS COMPLETED SUCCESSFULLY!")
+    print("=" * 60)
+
