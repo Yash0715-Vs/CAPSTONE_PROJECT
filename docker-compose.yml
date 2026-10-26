@@ -1,0 +1,98 @@
+version: '3.8'
+
+# =====================================================================
+# Docker Compose - Smart IT Asset & Support Ticket Management System
+# Meets Capstone Architecture (Section 16, 45)
+# Services:
+#   1. db (PostgreSQL 15)
+#   2. backend (FastAPI REST & WebSocket API)
+#   3. frontend (Nginx Web Server & Reverse Proxy)
+# =====================================================================
+
+services:
+  # -------------------------------------------------------------------
+  # 1. Database Service (PostgreSQL)
+  # -------------------------------------------------------------------
+  db:
+    image: postgres:15-alpine
+    container_name: it_asset_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-it_asset_db}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres_secure_pass_2026}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-it_asset_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - it_asset_network
+
+  # -------------------------------------------------------------------
+  # 2. Backend Service (FastAPI + Uvicorn + SQLAlchemy)
+  # -------------------------------------------------------------------
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: it_asset_backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      APP_ENV: ${APP_ENV:-prod}
+      DEBUG: ${DEBUG:-False}
+      DB_TYPE: postgres
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-it_asset_db}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres_secure_pass_2026}
+      SECRET_KEY: ${SECRET_KEY:-supersecretjwtkey_production_capstone_2026}
+      ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 60
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - it_asset_network
+
+  # -------------------------------------------------------------------
+  # 3. Frontend Service (Nginx Dashboard & Reverse Proxy)
+  # -------------------------------------------------------------------
+  frontend:
+    image: nginx:alpine
+    container_name: it_asset_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+      - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - it_asset_network
+
+# ---------------------------------------------------------------------
+# Networks & Persistent Volumes
+# ---------------------------------------------------------------------
+networks:
+  it_asset_network:
+    driver: bridge
+
+volumes:
+  pgdata:
+    driver: local

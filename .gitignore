@@ -31,6 +31,10 @@ logs/
 .DS_Store
 Thumbs.db
 
+# Database Files
+*.db
+*.sqlite3
+
 # Frontend build & dependencies (for later React phase)
 node_modules/
 dist/

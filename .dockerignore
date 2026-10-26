@@ -1,0 +1,44 @@
+# Git & CI/CD
+.git/
+.github/
+
+# Python Virtual Environments & Caches
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.pylintrc_cache/
+
+# Local Environment & Secrets
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# IDE & Editor Configs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Node / Frontend Build artifacts (if any)
+node_modules/
+dist/
+build/
+.npm/
+
+# Operating System specific
+.DS_Store
+Thumbs.db
