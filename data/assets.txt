@@ -1,9 +1,63 @@
 asset_id | type | brand | model | serial_number | status | assigned_to
-LAP-1021 | Laptop | Dell | Latitude 5440 | DL1021ABC | AVAILABLE | 
-LAP-1022 | Laptop | Apple | MacBook Pro M3 | AP1022XYZ | ASSIGNED | EMP-101
-LAP-1023 | Laptop | Lenovo | ThinkPad T14 | LN1023QWE | ASSIGNED | EMP-102
-MON-2041 | Monitor | Dell | UltraSharp U2723QE | DL2041MON | ASSIGNED | EMP-101
-MON-2042 | Monitor | LG | 27UK850 4K | LG2042MON | AVAILABLE | 
-KEY-3011 | Keyboard | Logitech | MX Keys S | LG3011KEY | ASSIGNED | EMP-102
-MOU-4011 | Mouse | Logitech | MX Master 3S | LG4011MOU | ASSIGNED | EMP-102
-PRN-5011 | Printer | HP | LaserJet Pro M404 | HP5011PRN | AVAILABLE | 
+LAP-1001 | Laptop | Apple | MacBook Pro M3 Pro | AP1001MBP | ASSIGNED | EMP-101
+LAP-1002 | Laptop | Dell | Latitude 5440 | DL1002LAT | ASSIGNED | EMP-102
+LAP-1003 | Laptop | Lenovo | ThinkPad T14 Gen 4 | LN1003TPD | ASSIGNED | EMP-103
+LAP-1004 | Laptop | Apple | MacBook Air M2 | AP1004MBA | ASSIGNED | EMP-104
+LAP-1005 | Laptop | Dell | XPS 15 9530 | DL1005XPS | ASSIGNED | EMP-105
+LAP-1006 | Laptop | HP | EliteBook 840 G10 | HP1006ELT | ASSIGNED | EMP-106
+LAP-1007 | Laptop | Lenovo | ThinkPad P16s Mobile Workstation | LN1007PWS | ASSIGNED | EMP-107
+LAP-1008 | Laptop | Dell | Latitude 3440 | DL1008LAT | ASSIGNED | EMP-108
+LAP-1009 | Laptop | HP | ProBook 450 G9 | HP1009PRB | ASSIGNED | EMP-109
+LAP-1010 | Laptop | Asus | ZenBook Pro 14 OLED | AS1010ZEN | ASSIGNED | EMP-110
+LAP-1011 | Laptop | Lenovo | ThinkPad X1 Carbon Gen 11 | LN1011X1C | ASSIGNED | EMP-111
+LAP-1012 | Laptop | Apple | MacBook Pro 16 M3 Max | AP1012MBP | ASSIGNED | EMP-112
+LAP-1013 | Laptop | Dell | Latitude 7440 | DL1013LAT | ASSIGNED | EMP-113
+LAP-1014 | Laptop | HP | ZBook Firefly 14 G10 | HP1014ZBK | ASSIGNED | EMP-114
+LAP-1015 | Laptop | Apple | MacBook Pro 14 M2 Pro | AP1015MBP | ASSIGNED | EMP-115
+LAP-1016 | Laptop | Lenovo | ThinkPad E14 Gen 5 | LN1016TPD | ASSIGNED | EMP-116
+LAP-1017 | Laptop | Dell | Precision 3581 Workstation | DL1017PRC | ASSIGNED | EMP-117
+LAP-1018 | Laptop | HP | EliteBook x360 830 | HP1018X36 | ASSIGNED | EMP-118
+LAP-1019 | Laptop | Lenovo | ThinkPad T16 Gen 2 | LN1019TPD | ASSIGNED | EMP-119
+LAP-1020 | Laptop | Apple | MacBook Air M1 | AP1020MBA | ASSIGNED | EMP-120
+LAP-1021 | Laptop | Dell | Latitude 5440 | DL1021LAT | AVAILABLE | 
+LAP-1022 | Laptop | Lenovo | ThinkPad L14 Gen 4 | LN1022TPD | AVAILABLE | 
+LAP-1023 | Laptop | HP | ProBook 440 G10 | HP1023PRB | AVAILABLE | 
+LAP-1024 | Laptop | Acer | TravelMate P2 | AC1024TMP | UNDER_REPAIR | 
+LAP-1025 | Laptop | Dell | Inspiron 14 5430 | DL1025INS | RETIRED | 
+MON-2001 | Monitor | Dell | UltraSharp U2723QE 4K | DL2001MON | ASSIGNED | EMP-101
+MON-2002 | Monitor | LG | 27UK850 4K UHD | LG2002MON | ASSIGNED | EMP-102
+MON-2003 | Monitor | BenQ | PD2705U Designer Monitor | BQ2003MON | ASSIGNED | EMP-104
+MON-2004 | Monitor | Samsung | ViewFinity S8 32-inch | SM2004MON | ASSIGNED | EMP-105
+MON-2005 | Monitor | Dell | P2422H 24-inch FHD | DL2005MON | ASSIGNED | EMP-106
+MON-2006 | Monitor | LG | UltraFine 32UN880 Ergo | LG2006MON | ASSIGNED | EMP-107
+MON-2007 | Monitor | Dell | UltraSharp U3223QE | DL2007MON | ASSIGNED | EMP-112
+MON-2008 | Monitor | Asus | ProArt PA278CV | AS2008MON | ASSIGNED | EMP-113
+MON-2009 | Monitor | HP | E27 G5 QHD | HP2009MON | ASSIGNED | EMP-115
+MON-2010 | Monitor | Dell | P2723D QHD | DL2010MON | AVAILABLE | 
+MON-2011 | Monitor | LG | 24QP500-B QHD | LG2011MON | AVAILABLE | 
+MON-2012 | Monitor | Samsung | Odyssey G5 27-inch | SM2012MON | UNDER_REPAIR | 
+KEY-3001 | Keyboard | Logitech | MX Keys S Advanced Wireless | LG3001KEY | ASSIGNED | EMP-101
+KEY-3002 | Keyboard | Keychron | K2 Wireless Mechanical | KC3002KEY | ASSIGNED | EMP-103
+KEY-3003 | Keyboard | Dell | Premier Multi-Device KB700 | DL3003KEY | ASSIGNED | EMP-105
+KEY-3004 | Keyboard | Apple | Magic Keyboard with Touch ID | AP3004KEY | ASSIGNED | EMP-104
+KEY-3005 | Keyboard | HP | 970 Programmable Wireless | HP3005KEY | ASSIGNED | EMP-106
+KEY-3006 | Keyboard | Logitech | Wave Keys Ergonomic | LG3006KEY | ASSIGNED | EMP-108
+KEY-3007 | Keyboard | Keychron | K8 Pro QMK Wireless | KC3007KEY | ASSIGNED | EMP-113
+KEY-3008 | Keyboard | Dell | QuietKey KB216 Wired | DL3008KEY | AVAILABLE | 
+KEY-3009 | Keyboard | Logitech | K380 Multi-Device | LG3009KEY | AVAILABLE | 
+KEY-3010 | Keyboard | Microsoft | Sculpt Ergonomic Keyboard | MS3010KEY | RETIRED | 
+MOU-4001 | Mouse | Logitech | MX Master 3S Performance | LG4001MOU | ASSIGNED | EMP-101
+MOU-4002 | Mouse | Logitech | Lift Vertical Ergonomic | LG4002MOU | ASSIGNED | EMP-102
+MOU-4003 | Mouse | Apple | Magic Mouse | AP4003MOU | ASSIGNED | EMP-104
+MOU-4004 | Mouse | Razer | DeathAdder V3 Pro | RZ4004MOU | ASSIGNED | EMP-105
+MOU-4005 | Mouse | Dell | Premier Rechargeable MS7421W | DL4005MOU | ASSIGNED | EMP-106
+MOU-4006 | Mouse | Logitech | MX Anywhere 3S Compact | LG4006MOU | ASSIGNED | EMP-107
+MOU-4007 | Mouse | HP | 930 Creator Wireless Mouse | HP4007MOU | ASSIGNED | EMP-112
+MOU-4008 | Mouse | Logitech | B100 Optical USB | LG4008MOU | AVAILABLE | 
+MOU-4009 | Mouse | Dell | MS116 Optical Wired | DL4009MOU | AVAILABLE | 
+MOU-4010 | Mouse | Lenovo | Go Wireless Multi-Device | LN4010MOU | UNDER_REPAIR | 
+PRN-5001 | Printer | HP | LaserJet Pro MFP 4104fdw | HP5001PRN | ASSIGNED | ADM-001
+PRN-5002 | Printer | Canon | imageCLASS LBP6030w | CN5002PRN | ASSIGNED | IT-501
+PRN-5003 | Printer | Epson | EcoTank L3250 All-in-One | EP5003PRN | AVAILABLE | 
+PRN-5004 | Printer | Brother | HL-L2321D Monochrome | BR5004PRN | AVAILABLE | 
+PRN-5005 | Printer | HP | Neverstop Laser 1000w | HP5005PRN | RETIRED | 

@@ -30,6 +30,8 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY app /app/app
 COPY frontend /app/frontend
 COPY data /app/data
+COPY alembic /app/alembic
+COPY alembic.ini /app/alembic.ini
 
 # Create data directory if not present and non-root user setup
 RUN useradd -m -u 1001 appuser && \

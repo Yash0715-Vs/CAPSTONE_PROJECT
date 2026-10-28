@@ -20,8 +20,13 @@ htmlcov/
 
 # Local Environment & Secrets
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+
+# Local Database Files
+data/*.db
+*.db
+*.sqlite3
 
 # Logs
 *.log

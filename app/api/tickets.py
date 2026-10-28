@@ -12,7 +12,7 @@ Meets Capstone Specification Section 12:
 """
 
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 
@@ -28,7 +28,6 @@ from app.schemas.ticket import (
 )
 from app.services.auth_service import get_current_user, require_roles
 from app.services.ticket_classifier import TicketClassifier
-from app.services.sla_service import SLAService
 
 router = APIRouter(prefix="/tickets", tags=["Tickets"])
 
@@ -107,7 +106,7 @@ def create_ticket(
         priority=priority,
         status="OPEN",
         created_by=current_user.user_id,
-        created_date=datetime.utcnow(),
+        created_date=datetime.now(timezone.utc),
     )
     saved = TicketRepository.create(session, ticket)
     ActivityLogRepository.log(
@@ -216,7 +215,7 @@ def close_ticket(
             detail=f"Cannot close ticket '{ticket_id}' before it is RESOLVED (current status: {ticket.status})."
         )
 
-    ticket.closed_date = datetime.utcnow()
+    ticket.closed_date = datetime.now(timezone.utc)
     TicketRepository.update_status(
         session=session,
         ticket_id=ticket_id,

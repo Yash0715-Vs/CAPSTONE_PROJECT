@@ -92,7 +92,7 @@ class DatabaseConnectionManager:
                 conn.execute(text("SELECT 1"))
             return True
         except OperationalError as err:
-            logger.warning(f"Database connection attempt failed: {err}")
+            logger.warning("Database connection attempt failed: %s", err)
             return False
 
     def init_tables(self) -> None:
@@ -146,7 +146,7 @@ if __name__ == "__main__":
     # 1. Verify Singleton Property
     manager1 = DatabaseConnectionManager()
     manager2 = DatabaseConnectionManager()
-    print(f"\n[1] Verifying Singleton Pattern:")
+    print("\n[1] Verifying Singleton Pattern:")
     print(f"  manager1 id: {id(manager1)}")
     print(f"  manager2 id: {id(manager2)}")
     print(f"  Same instance? {manager1 is manager2} (SINGLETON VERIFIED)")

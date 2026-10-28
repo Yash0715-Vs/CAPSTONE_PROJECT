@@ -8,11 +8,12 @@ const { useState, useEffect, useCallback, useMemo } = React;
 const API_BASE = window.location.origin;
 const WS_URL = `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/ws/tickets`;
 
-// Sample Demo Accounts for Instant Switching
+// Sample Demo Accounts for Instant Switching (Indian Employee Roles)
 const DEMO_ACCOUNTS = [
-  { user_id: "EMP-101", name: "Sarah Connor", role: "EMPLOYEE", label: "Employee View" },
-  { user_id: "IT-501", name: "Alex Murphy", role: "SUPPORT", label: "IT Support View" },
-  { user_id: "ADM-001", name: "Ellen Ripley", role: "ADMIN", label: "Admin View" }
+  { user_id: "ADM-001", name: "Rajesh Sharma", role: "ADMIN", label: "Admin View (Rajesh Sharma)" },
+  { user_id: "IT-501", name: "Priya Patel", role: "SUPPORT", label: "IT Support View (Priya Patel)" },
+  { user_id: "EMP-101", name: "Aarav Verma", role: "EMPLOYEE", label: "Employee View (Aarav Verma)" },
+  { user_id: "EMP-102", name: "Ananya Iyer", role: "EMPLOYEE", label: "Employee View (Ananya Iyer)" }
 ];
 
 function App() {
@@ -574,8 +575,11 @@ function App() {
               <div className="form-group">
                 <label className="form-label">Assign To Employee ID</label>
                 <select name="empId" className="form-select">
-                  <option value="EMP-101">EMP-101 (Sarah Connor)</option>
-                  <option value="EMP-102">EMP-102 (John Doe)</option>
+                  <option value="EMP-101">EMP-101 (Aarav Verma)</option>
+                  <option value="EMP-102">EMP-102 (Ananya Iyer)</option>
+                  <option value="EMP-103">EMP-103 (Vikram Singh)</option>
+                  <option value="EMP-104">EMP-104 (Sneha Kulkarni)</option>
+                  <option value="EMP-105">EMP-105 (Rohan Gupta)</option>
                 </select>
               </div>
               <div className="modal-actions">

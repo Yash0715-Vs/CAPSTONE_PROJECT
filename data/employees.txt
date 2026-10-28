@@ -1,5 +1,51 @@
 employee_id | name | email | department | role
-EMP-101 | Sarah Connor | sarah.connor@company.com | Engineering | EMPLOYEE
-EMP-102 | John Doe | john.doe@company.com | Product | EMPLOYEE
-IT-501 | Alex Murphy | alex.murphy@company.com | IT Support | SUPPORT
-ADM-001 | Ellen Ripley | ellen.ripley@company.com | IT Operations | ADMIN
+ADM-001 | Rajesh Sharma | rajesh.sharma@company.com | IT Operations | ADMIN
+ADM-002 | Sunita Narain | sunita.narain@company.com | Security & Governance | ADMIN
+IT-501 | Priya Patel | priya.patel@company.com | IT Support | SUPPORT
+IT-502 | Amit Verma | amit.verma@company.com | IT Support | SUPPORT
+IT-503 | Karthik Raman | karthik.raman@company.com | Infrastructure Support | SUPPORT
+IT-504 | Deepa Krishnan | deepa.krishnan@company.com | Cloud Support | SUPPORT
+IT-505 | Sanjay Deshmukh | sanjay.deshmukh@company.com | Hardware Operations | SUPPORT
+EMP-101 | Aarav Verma | aarav.verma@company.com | Software Engineering | EMPLOYEE
+EMP-102 | Ananya Iyer | ananya.iyer@company.com | Product Management | EMPLOYEE
+EMP-103 | Vikram Singh | vikram.singh@company.com | DevOps & Cloud | EMPLOYEE
+EMP-104 | Sneha Kulkarni | sneha.kulkarni@company.com | Frontend Engineering | EMPLOYEE
+EMP-105 | Rohan Gupta | rohan.gupta@company.com | Backend Engineering | EMPLOYEE
+EMP-106 | Neha Reddy | neha.reddy@company.com | Data Science | EMPLOYEE
+EMP-107 | Aditya Joshi | aditya.joshi@company.com | Machine Learning | EMPLOYEE
+EMP-108 | Pooja Nair | pooja.nair@company.com | Human Resources | EMPLOYEE
+EMP-109 | Manoj Tiwari | manoj.tiwari@company.com | Finance & Accounts | EMPLOYEE
+EMP-110 | Divya Menon | divya.menon@company.com | Quality Assurance | EMPLOYEE
+EMP-111 | Suresh Prabhu | suresh.prabhu@company.com | Supply Chain | EMPLOYEE
+EMP-112 | Kavita Rao | kavita.rao@company.com | UI/UX Design | EMPLOYEE
+EMP-113 | Rahul Chatterjee | rahul.chatterjee@company.com | Software Engineering | EMPLOYEE
+EMP-114 | Meera Nambiar | meera.nambiar@company.com | Technical Writing | EMPLOYEE
+EMP-115 | Arjun Kapoor | arjun.kapoor@company.com | Mobile Engineering | EMPLOYEE
+EMP-116 | Ritu Bhattacharya | ritu.bhatt@company.com | Business Analytics | EMPLOYEE
+EMP-117 | Nikhil Pillai | nikhil.pillai@company.com | Site Reliability | EMPLOYEE
+EMP-118 | Swati Saxena | swati.saxena@company.com | Legal & Compliance | EMPLOYEE
+EMP-119 | Harish Gowda | harish.gowda@company.com | Operations | EMPLOYEE
+EMP-120 | Shreya Sen | shreya.sen@company.com | Marketing Tech | EMPLOYEE
+EMP-121 | Manish Agarwal | manish.agarwal@company.com | Backend Engineering | EMPLOYEE
+EMP-122 | Shilpa Hegde | shilpa.hegde@company.com | Quality Assurance | EMPLOYEE
+EMP-123 | Abhinav Mishra | abhinav.mishra@company.com | Information Security | EMPLOYEE
+EMP-124 | Tanvi Shah | tanvi.shah@company.com | Product Design | EMPLOYEE
+EMP-125 | Pradeep Choudhury | pradeep.c@company.com | Cloud Infrastructure | EMPLOYEE
+EMP-126 | Bhavna Jain | bhavna.jain@company.com | Talent Acquisition | EMPLOYEE
+EMP-127 | Nitin Gokhale | nitin.g@company.com | Database Engineering | EMPLOYEE
+EMP-128 | Aishwarya Sundaram | aishwarya.s@company.com | AI Research | EMPLOYEE
+EMP-129 | Gaurav Trivedi | gaurav.t@company.com | Systems Engineering | EMPLOYEE
+EMP-130 | Pallavi Varma | pallavi.v@company.com | Operations | EMPLOYEE
+EMP-131 | Chetan Bhat | chetan.bhat@company.com | Software Engineering | EMPLOYEE
+EMP-132 | Radhika Somani | radhika.s@company.com | Finance | EMPLOYEE
+EMP-133 | Deepak Chawla | deepak.c@company.com | Network Engineering | EMPLOYEE
+EMP-134 | Rashmi Mukherjee | rashmi.m@company.com | Frontend Engineering | EMPLOYEE
+EMP-135 | Vinod Bansal | vinod.b@company.com | Logistics | EMPLOYEE
+EMP-136 | Jyoti Panicker | jyoti.p@company.com | Human Resources | EMPLOYEE
+EMP-137 | Alok Srivastava | alok.s@company.com | Backend Engineering | EMPLOYEE
+EMP-138 | Preeti Dandekar | preeti.d@company.com | Graphic Design | EMPLOYEE
+EMP-139 | Tarun Singhal | tarun.s@company.com | DevOps | EMPLOYEE
+EMP-140 | Malini Swaminathan | malini.s@company.com | Project Management | EMPLOYEE
+EMP-141 | Sandeep Kothari | sandeep.k@company.com | Security Operations | EMPLOYEE
+EMP-142 | Geeta Nayak | geeta.nayak@company.com | Quality Assurance | EMPLOYEE
+EMP-143 | Vivek Namboodiri | vivek.n@company.com | Data Platform | EMPLOYEE

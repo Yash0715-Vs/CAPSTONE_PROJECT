@@ -1,5 +1,56 @@
 ticket_id | title | category | priority | status | created_by | assigned_to
-INC-1001 | Laptop screen flickering | Hardware | MEDIUM | IN_PROGRESS | EMP-101 | IT-501
-INC-1002 | VPN authentication failing | Network | HIGH | OPEN | EMP-102 | 
-INC-1003 | Request for vertical mouse | Hardware | LOW | RESOLVED | EMP-101 | IT-501
-INC-1004 | Entire floor WiFi down | Network | CRITICAL | OPEN | EMP-102 | 
+INC-1001 | Laptop screen flickering after wake from sleep | Hardware | MEDIUM | IN_PROGRESS | EMP-101 | IT-501
+INC-1002 | VPN Cisco AnyConnect timeout on corporate WiFi | Network | HIGH | OPEN | EMP-102 | IT-502
+INC-1003 | Ergonomic mouse request for carpal tunnel relief | Hardware | LOW | RESOLVED | EMP-104 | IT-501
+INC-1004 | Entire 4th floor Bangalore office WiFi down | Network | CRITICAL | IN_PROGRESS | EMP-103 | IT-503
+INC-1005 | Docker desktop crashing on macOS Sequoia during boot | Software | HIGH | OPEN | EMP-105 | IT-504
+INC-1006 | MacBook battery health degraded below 70% | Hardware | MEDIUM | ASSIGNED | EMP-101 | IT-505
+INC-1007 | Request for AWS Staging EKS cluster access | Access | MEDIUM | RESOLVED | EMP-103 | IT-504
+INC-1008 | PostgreSQL connection pool timeout in dev environment | Software | HIGH | IN_PROGRESS | EMP-107 | IT-502
+INC-1009 | Dell UltraSharp monitor display port no signal | Hardware | MEDIUM | OPEN | EMP-106 | 
+INC-1010 | Jenkins CI/CD pipeline build permission required | Access | LOW | RESOLVED | EMP-110 | IT-501
+INC-1011 | Ransomware alert on local development container | Network | CRITICAL | RESOLVED | EMP-123 | IT-503
+INC-1012 | Slack desktop client freezing on screen sharing | Software | MEDIUM | CLOSED | EMP-108 | IT-502
+INC-1013 | RAM upgrade request from 16GB to 32GB for ML workload | Hardware | LOW | ASSIGNED | EMP-107 | IT-505
+INC-1014 | Cisco router gateway packet loss on Floor 2 | Network | HIGH | OPEN | EMP-119 | IT-503
+INC-1015 | Keychron wireless keyboard Bluetooth lag | Hardware | LOW | CLOSED | EMP-103 | IT-501
+INC-1016 | GitHub Enterprise Organization SSO invitation expired | Access | MEDIUM | RESOLVED | EMP-113 | IT-501
+INC-1017 | HP LaserJet printer paper jam on HR floor | Hardware | LOW | RESOLVED | EMP-108 | IT-505
+INC-1018 | Blue Screen of Death BSOD crash on Dell Latitude | Hardware | CRITICAL | IN_PROGRESS | EMP-117 | IT-502
+INC-1019 | IntelliJ IDEA Ultimate annual license renewal | Software | LOW | RESOLVED | EMP-121 | IT-501
+INC-1020 | Production database replica read latency high | Software | HIGH | IN_PROGRESS | EMP-127 | IT-504
+INC-1021 | Corporate proxy blocking PyPI package downloads | Network | HIGH | RESOLVED | EMP-105 | IT-503
+INC-1022 | Microsoft 365 Outlook calendar sync issue on mobile | Software | LOW | CLOSED | EMP-114 | IT-502
+INC-1023 | Second external monitor request for financial modelling | Hardware | LOW | ASSIGNED | EMP-109 | IT-505
+INC-1024 | Office firewall blocking Figma WebSocket connection | Network | MEDIUM | RESOLVED | EMP-112 | IT-503
+INC-1025 | macOS Keychain constantly prompting for Wi-Fi credentials | Software | MEDIUM | OPEN | EMP-115 | 
+INC-1026 | Jira administrator permission required for Sprint board | Access | LOW | CLOSED | EMP-102 | IT-501
+INC-1027 | External hard drive encrypted by BitLocker locked | Access | HIGH | IN_PROGRESS | EMP-118 | IT-502
+INC-1028 | Laptop charger replacement USB-C 100W cable frayed | Hardware | LOW | RESOLVED | EMP-116 | IT-505
+INC-1029 | Zero-day malware vulnerability detection in local npm cache | Software | CRITICAL | RESOLVED | EMP-141 | IT-503
+INC-1030 | S3 bucket upload permission denied for data pipeline | Access | MEDIUM | RESOLVED | EMP-106 | IT-504
+INC-1031 | Logitech MX Master mouse scroll wheel skipping | Hardware | LOW | OPEN | EMP-101 | 
+INC-1032 | DNS resolution failure for internal staging domains | Network | HIGH | IN_PROGRESS | EMP-125 | IT-503
+INC-1033 | Zoom rooms video conference mic dead in Room 3B | Hardware | MEDIUM | RESOLVED | EMP-130 | IT-505
+INC-1034 | Confluence page edit access for Operations team | Access | LOW | CLOSED | EMP-119 | IT-501
+INC-1035 | Python poetry virtualenv path corrupted after OS update | Software | LOW | RESOLVED | EMP-131 | IT-502
+INC-1036 | Corrupted SSL certificate on internal QA test server | Network | HIGH | RESOLVED | EMP-122 | IT-504
+INC-1037 | Dell laptop fan making grinding noise under heavy load | Hardware | MEDIUM | ASSIGNED | EMP-111 | IT-505
+INC-1038 | Grafana dashboard viewer access for Business Analytics | Access | LOW | RESOLVED | EMP-116 | IT-501
+INC-1039 | Server room AC failure temperature exceeding 35C | Hardware | CRITICAL | RESOLVED | EMP-129 | IT-503
+INC-1040 | DBeaver MySQL database connection refused 3306 | Software | MEDIUM | IN_PROGRESS | EMP-105 | IT-502
+INC-1041 | Subnet IP conflict on VLAN 20 Bangalore lab | Network | HIGH | OPEN | EMP-133 | 
+INC-1042 | Temporary guest WiFi access for external auditors | Access | LOW | CLOSED | EMP-132 | IT-501
+INC-1043 | VS Code remote SSH session terminates after 5 minutes | Software | MEDIUM | RESOLVED | EMP-137 | IT-504
+INC-1044 | Wireless presenter clicker needed for Town Hall meeting | Hardware | LOW | RESOLVED | EMP-136 | IT-505
+INC-1045 | Active Directory account locked after 3 failed logins | Access | MEDIUM | RESOLVED | EMP-135 | IT-502
+INC-1046 | GitHub Actions self-hosted runner offline | Software | HIGH | IN_PROGRESS | EMP-139 | IT-504
+INC-1047 | 10G Fiber link down between Core Switch 1 and 2 | Network | CRITICAL | IN_PROGRESS | EMP-133 | IT-503
+INC-1048 | Battery backup UPS failure in Training Hall | Hardware | HIGH | OPEN | EMP-120 | IT-505
+INC-1049 | Tableau Desktop client unable to connect to Redshift | Software | MEDIUM | OPEN | EMP-128 | 
+INC-1050 | Request for Postman Enterprise shared workspace license | Software | LOW | RESOLVED | EMP-134 | IT-501
+INC-1051 | VPN gateway certificate expiration warning | Network | HIGH | RESOLVED | EMP-103 | IT-503
+INC-1052 | Webcam resolution restricted to 480p on Teams | Hardware | LOW | OPEN | EMP-142 | 
+INC-1053 | Laptop liquid spill emergency on keyboard | Hardware | CRITICAL | IN_PROGRESS | EMP-143 | IT-505
+INC-1054 | Datadog production log viewer role required | Access | LOW | RESOLVED | EMP-117 | IT-504
+INC-1055 | Chrome browser enterprise extension update conflict | Software | LOW | CLOSED | EMP-138 | IT-502

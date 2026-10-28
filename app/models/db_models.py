@@ -8,7 +8,7 @@ Meets Capstone Specification Sections 13, 31, and 32:
 """
 
 from datetime import datetime, date
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 
 from sqlalchemy import (
     Column,
@@ -18,7 +18,6 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
-    Boolean,
 )
 from sqlalchemy.orm import declarative_base, relationship
 

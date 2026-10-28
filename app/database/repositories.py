@@ -6,8 +6,8 @@ Separates database query logic from business services and API endpoints.
 Provides clean CRUD interfaces for Users, Assets, Tickets, and Activity Logs.
 """
 
-from typing import List, Optional, Dict, Any
-from datetime import datetime
+from typing import List, Optional
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
@@ -131,7 +131,7 @@ class TicketRepository:
             old_status="NONE",
             new_status=ticket.status,
             comment="Ticket created",
-            timestamp=datetime.utcnow()
+            timestamp=datetime.now(timezone.utc)
         )
         session.add(history)
         session.flush()
@@ -204,7 +204,7 @@ class ActivityLogRepository:
             action=action,
             user_id=user_id,
             details=details,
-            timestamp=datetime.utcnow()
+            timestamp=datetime.now(timezone.utc)
         )
         session.add(entry)
         session.flush()
