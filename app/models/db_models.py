@@ -10,6 +10,7 @@ Meets Capstone Specification Sections 13, 31, and 32:
 from datetime import datetime, date
 from typing import Dict, Any
 
+from enum import Enum
 from sqlalchemy import (
     Column,
     Integer,
@@ -24,6 +25,20 @@ from sqlalchemy.orm import declarative_base, relationship
 Base = declarative_base()
 
 
+class UserRole(str, Enum):
+    """Supported user authorization roles."""
+    ADMIN = "ADMIN"
+    SUPPORT = "SUPPORT"
+    EMPLOYEE = "EMPLOYEE"
+
+
+class UserStatus(str, Enum):
+    """User account lifecycle status."""
+    ACTIVE = "ACTIVE"
+    PENDING = "PENDING"
+    DISABLED = "DISABLED"
+
+
 class UserDB(Base):
     """
     SQLAlchemy ORM Model for `users` table.
@@ -35,7 +50,10 @@ class UserDB(Base):
     name = Column(String(100), nullable=False)
     email = Column(String(150), unique=True, nullable=False, index=True)
     hashed_password = Column(String(255), nullable=False)
-    role = Column(String(30), nullable=False, default="EMPLOYEE")  # ADMIN, SUPPORT, EMPLOYEE
+    role = Column(String(30), nullable=False, default=UserRole.EMPLOYEE.value)  # ADMIN, SUPPORT, EMPLOYEE
+    status = Column(String(30), nullable=False, default=UserStatus.ACTIVE.value, server_default=UserStatus.ACTIVE.value)  # ACTIVE, PENDING, DISABLED
+    invitation_token_hash = Column(String(255), nullable=True, index=True)
+    invitation_expires_at = Column(DateTime, nullable=True)
     department = Column(String(100), nullable=True, default="General")
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -51,9 +69,11 @@ class UserDB(Base):
             "name": self.name,
             "email": self.email,
             "role": self.role,
+            "status": self.status,
             "department": self.department,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
+
 
 
 class AssetDB(Base):

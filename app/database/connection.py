@@ -129,13 +129,18 @@ db_manager = DatabaseConnectionManager()
 def get_db() -> Generator[Session, None, None]:
     """
     FastAPI dependency-compatible session generator.
-    Yields session and guarantees closure.
+    Yields session, commits on success, and rolls back on error (ACID Atomicity).
     """
     session = db_manager.session_factory()
     try:
         yield session
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
     finally:
         session.close()
+
 
 
 if __name__ == "__main__":

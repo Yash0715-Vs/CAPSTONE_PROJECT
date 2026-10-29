@@ -39,8 +39,13 @@ class UserRepository:
         return session.query(UserDB).filter(UserDB.email == email).first()
 
     @staticmethod
+    def get_by_invitation_token_hash(session: Session, token_hash: str) -> Optional[UserDB]:
+        return session.query(UserDB).filter(UserDB.invitation_token_hash == token_hash).first()
+
+    @staticmethod
     def list_all(session: Session) -> List[UserDB]:
         return session.query(UserDB).order_by(UserDB.user_id).all()
+
 
 
 class AssetRepository:
@@ -84,7 +89,7 @@ class AssetRepository:
         assignment_log = AssetAssignmentDB(
             asset_id=asset_id,
             employee_id=employee_id,
-            assigned_date=datetime.utcnow(),
+            assigned_date=datetime.now(timezone.utc),
             notes=notes
         )
         session.add(assignment_log)
@@ -108,7 +113,7 @@ class AssetRepository:
             .first()
         )
         if latest_assignment:
-            latest_assignment.returned_date = datetime.utcnow()
+            latest_assignment.returned_date = datetime.now(timezone.utc)
 
         asset.assigned_to = None
         asset.status = "AVAILABLE"
@@ -177,7 +182,7 @@ class TicketRepository:
         old_status = ticket.status
         ticket.status = new_status
         if new_status == "CLOSED":
-            ticket.closed_date = datetime.utcnow()
+            ticket.closed_date = datetime.now(timezone.utc)
 
         # Audit log in ticket_history table
         history = TicketHistoryDB(
@@ -186,8 +191,9 @@ class TicketRepository:
             old_status=old_status,
             new_status=new_status,
             comment=comment or f"Status changed to {new_status}",
-            timestamp=datetime.utcnow()
+            timestamp=datetime.now(timezone.utc)
         )
+
         session.add(history)
         session.flush()
         return ticket

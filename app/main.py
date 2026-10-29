@@ -11,7 +11,7 @@ Meets Capstone Specification Section 12, 38, and 41:
 
 import sys
 from pathlib import Path
-from typing import List
+from typing import Optional
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, status
@@ -36,32 +36,10 @@ from app.api import (
 from app.utils.exceptions import ITAssetBaseException
 
 
-# =====================================================================
-# Real-Time WebSocket Connection Manager (Section 38)
-# =====================================================================
-class WebSocketNotificationManager:
-    """Manages active WebSocket connections for live ticket updates."""
-    def __init__(self):
-        self.active_connections: List[WebSocket] = []
-
-    async def connect(self, websocket: WebSocket):
-        await websocket.accept()
-        self.active_connections.append(websocket)
-
-    def disconnect(self, websocket: WebSocket):
-        if websocket in self.active_connections:
-            self.active_connections.remove(websocket)
-
-    async def broadcast(self, message: dict):
-        """Broadcasts live event to all connected dashboards."""
-        for connection in list(self.active_connections):
-            try:
-                await connection.send_json(message)
-            except Exception:
-                self.disconnect(connection)
+# Import Centralized WebSocket Notification Manager
+from app.services.websocket_manager import ws_manager
 
 
-ws_manager = WebSocketNotificationManager()
 
 
 # =====================================================================
@@ -69,7 +47,8 @@ ws_manager = WebSocketNotificationManager()
 # =====================================================================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Ensure database tables are created
+    # Startup: Validate configuration and ensure database tables
+    config.validate_production_configuration()
     print("[STARTUP] Checking database connection and initializing tables...")
     try:
         db_manager.init_tables()
@@ -94,10 +73,10 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS Middleware (Allows React frontend at localhost:3000 / localhost:5173 to connect)
+# CORS Middleware (Allows frontend development workflow with restricted origins)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=config.ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -166,21 +145,48 @@ def health_check():
 # Real-Time WebSocket Route (Section 38)
 # =====================================================================
 @app.websocket("/ws/tickets")
-async def websocket_tickets_endpoint(websocket: WebSocket):
+async def websocket_tickets_endpoint(
+    websocket: WebSocket,
+    token: Optional[str] = None
+):
     """
     WebSocket endpoint for real-time ticket notifications.
-    Frontend connects here to receive instant updates without polling.
+    Supports token authentication via query parameter (?token=...) or in-band AUTH frame.
+    Enforces authorization on ticket subscriptions and restricts event delivery.
     """
-    await ws_manager.connect(websocket)
+    auth_user_id: Optional[str] = None
+    auth_role: Optional[str] = None
+
+    if token:
+        try:
+            from app.services.auth_service import AuthService
+            from app.database.repositories import UserRepository
+            payload = AuthService.decode_token(token)
+            uid = payload.get("sub")
+            with db_manager.get_session() as session:
+                user = UserRepository.get_by_user_id(session, uid)
+                if user and user.status == "ACTIVE":
+                    auth_user_id = user.user_id
+                    auth_role = user.role
+        except Exception:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid authentication token")
+            return
+
+    conn = await ws_manager.connect(websocket, user_id=auth_user_id, role=auth_role)
+
     try:
         await websocket.send_json({
             "event": "CONNECTED",
+            "authenticated": conn.is_authenticated,
+            "user_id": conn.user_id,
+            "role": conn.role,
             "message": "Connected to real-time IT ticket event stream."
         })
+
         while True:
-            data = await websocket.receive_text()
-            # Echo heartbeat or client ping
-            await websocket.send_json({"event": "PONG", "data": data})
+            raw_data = await websocket.receive_text()
+            await ws_manager.handle_client_message(websocket, raw_data, db_manager.get_session)
+
     except WebSocketDisconnect:
         ws_manager.disconnect(websocket)
 
@@ -189,3 +195,4 @@ if __name__ == "__main__":
     import uvicorn
     print("Starting FastAPI server on http://localhost:8000 ...")
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+

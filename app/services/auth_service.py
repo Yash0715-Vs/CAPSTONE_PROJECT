@@ -8,7 +8,8 @@ Meets Capstone Specification Section 39:
 """
 
 import sys
-import os
+import hashlib
+import secrets
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional, List, Dict, Any
@@ -24,20 +25,16 @@ ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
+from app.config import config
 from app.database.connection import get_db
 from app.database.repositories import UserRepository
-from app.models.db_models import UserDB
-
-# Security settings
-SECRET_KEY = os.getenv("SECRET_KEY", "super_secret_jwt_key_capstone_2026")
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 120
+from app.models.db_models import UserDB, UserStatus
 
 security = HTTPBearer(auto_error=False)
 
 
 class AuthService:
-    """Handles password hashing, token lifecycle, and authentication checks."""
+    """Handles password hashing, token lifecycle, invitation tokens, and authentication checks."""
 
     @staticmethod
     def hash_password(password: str) -> str:
@@ -55,18 +52,30 @@ class AuthService:
             return False
 
     @staticmethod
+    def generate_invitation_token() -> str:
+        """Generates a cryptographically secure, unpredictable invitation token."""
+        return secrets.token_urlsafe(32)
+
+    @staticmethod
+    def hash_invitation_token(token: str) -> str:
+        """Computes SHA-256 hash of an invitation token for safe database storage."""
+        return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+    @staticmethod
     def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
-        """Generates a signed JWT access token."""
+        """Generates a signed JWT access token using centralized configuration."""
         to_encode = data.copy()
-        expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+        expire = datetime.now(timezone.utc) + (
+            expires_delta or timedelta(minutes=config.ACCESS_TOKEN_EXPIRE_MINUTES)
+        )
         to_encode.update({"exp": expire})
-        return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+        return jwt.encode(to_encode, config.SECRET_KEY, algorithm=config.ALGORITHM)
 
     @staticmethod
     def decode_token(token: str) -> Dict[str, Any]:
-        """Decodes and validates a JWT token."""
+        """Decodes and validates a JWT token using centralized configuration."""
         try:
-            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            payload = jwt.decode(token, config.SECRET_KEY, algorithms=[config.ALGORITHM])
             return payload
         except jwt.ExpiredSignatureError:
             raise HTTPException(
@@ -88,6 +97,7 @@ def get_current_user(
 ) -> UserDB:
     """
     FastAPI dependency that extracts and validates the logged-in user from Bearer Token.
+    Enforces active account status.
     """
     if not credentials:
         raise HTTPException(
@@ -105,6 +115,26 @@ def get_current_user(
     user = UserRepository.get_by_user_id(session, user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found.")
+
+    # Reject pending or disabled accounts from accessing protected resources
+    if user.status == UserStatus.PENDING.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account registration is pending activation.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if user.status == UserStatus.DISABLED.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is disabled. Please contact an administrator.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if user.status != UserStatus.ACTIVE.value:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Account is not active.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     return user
 
@@ -124,3 +154,4 @@ def require_roles(allowed_roles: List[str]):
             )
         return current_user
     return role_checker
+

@@ -4,7 +4,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688.svg)](https://fastapi.tiangolo.com/)
 [![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0-red.svg)](https://www.sqlalchemy.org/)
 [![Pylint](https://img.shields.io/badge/Pylint-10.00%2F10-brightgreen.svg)]()
-[![Tests](https://img.shields.io/badge/Pytest-33%20Passed-success.svg)]()
+[![Tests](https://img.shields.io/badge/Pytest-59%20Passed-success.svg)]()
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://www.docker.com/)
 
 An enterprise-grade, production-style **IT Asset Management and Support Ticket Management System** developed with **Python, FastAPI, SQLAlchemy 2, Alembic, MySQL/PostgreSQL, WebSockets, and a React 18 Single Page Application (SPA)**.
@@ -290,7 +290,14 @@ docker-compose down
 - Python 3.11 or 3.12
 - MySQL 8.0 running locally (or SQLite fallback)
 
-### 2. Activate Virtual Environment & Install Dependencies
+### 2. Environment Configuration
+Copy `.env.example` to create your local `.env`:
+```powershell
+cp .env.example .env
+```
+Ensure you provide a strong `JWT_SECRET_KEY` (at least 32 characters in production) and configure your database connection string.
+
+### 3. Activate Virtual Environment & Install Dependencies
 ```powershell
 # In project root
 .\.venv\Scripts\Activate.ps1
@@ -299,25 +306,42 @@ docker-compose down
 pip install -r requirements.txt
 ```
 
-### 3. Launch the Backend Server
+### 4. Database Schema Migrations (Alembic)
+Run Alembic migrations to apply all schema updates (including user status, invitation tokens, and foreign keys):
+```powershell
+alembic upgrade head
+```
+
+### 5. Secure Admin Account Bootstrap
+To create an initial Administrator account safely with cryptographically hashed passwords and audit logging:
+```powershell
+python scripts/bootstrap_admin.py --user-id ADM-999 --name "System Administrator" --email admin@enterprise.local --department "IT Operations"
+```
+*(You will be prompted for an admin password securely without echo).*
+
+### 6. Launch the Backend Server
 ```powershell
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-### 4. Access the Application
+### 7. Access the Application
 - **Interactive Web Dashboard**: [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
 - **Swagger Interactive API Documentation**: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 - **ReDoc API Documentation**: [http://127.0.0.1:8000/redoc](http://127.0.0.1:8000/redoc)
 - **Health Check**: [http://127.0.0.1:8000/health](http://127.0.0.1:8000/health)
 
-### 5. Pre-Seeded Demo Accounts (Password: `password`)
-| User ID | Name | Role | Department |
-| :--- | :--- | :--- | :--- |
-| `ADM-001` | Rajesh Sharma | **ADMIN** | IT Operations |
-| `IT-501` | Priya Patel | **SUPPORT** | IT Support |
-| `EMP-101` | Aarav Verma | **EMPLOYEE** | Software Engineering |
-| `EMP-102` | Ananya Iyer | **EMPLOYEE** | Product Management |
-| `EMP-103` | Vikram Singh | **EMPLOYEE** | DevOps & Cloud |
+### 8. Employee Registration Workflow
+1. **Admin Invites Employee** (`POST /users/`):
+   - Admin provides `user_id`, `name`, `email`, `department`, `role` (`EMPLOYEE` or `SUPPORT`).
+   - Account is created in `PENDING` status with an unguessable, cryptographically secure invitation token valid for 48 hours (stored as a SHA-256 hash).
+   - In development, the single-use invitation token is returned in the response for delivery (`invitation_token`).
+2. **Employee Verifies Invitation** (`GET /auth/verify-invitation?token=<TOKEN>`):
+   - Validates the token exists, is not expired, and account is `PENDING`. Returns employee ID and name.
+3. **Employee Completes Registration** (`POST /auth/complete-registration`):
+   - Employee submits `token`, `name`, `password` (minimum 8 characters).
+   - Password is salted and hashed with bcrypt; `status` transitions to `ACTIVE`; token hash is cleared (single-use).
+4. **Employee Logs In** (`POST /auth/login`):
+   - Returns Bearer JWT with claims (`sub`, `role`, `status`).
 
 ---
 
@@ -327,44 +351,71 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```powershell
 pytest tests/ -v
 ```
-**Results**: **33 passed** (100% pass rate in ~2.7s), covering models, validation, SLA calculations, file I/O, WebSockets, and external APIs.
+**Results**: **59 passed** (100% pass rate in ~9.5s), covering:
+- **Authentication & Registration** (`test_auth_registration.py`): Login success/rejection, elimination of placeholder password bypass, pending/disabled account rejection, single-use invitation lifecycle, invitation expiry.
+- **RBAC & Resource Security** (`test_rbac_and_resources.py`): Unauthorized endpoint rejection, IDOR prevention on assets and tickets, support-only assignments, ticket closure rules.
+- **WebSocket Security** (`test_websockets_security.py`): Token query authentication, in-band JSON authentication frame, ticket subscription authorization, event broadcast segregation.
+- **Configuration & Security** (`test_config_security.py`): Production weak-secret rejection, CORS wildcard prevention, secret omission in API responses.
+- **Core Domain Logic** (`test_api.py`, `test_assets.py`, `test_tickets.py`, `test_sla.py`, `test_file_handler.py`).
 
 ### 2. Code Quality (Pylint)
 ```powershell
 pylint app/
 ```
-**Rating**: **10.00 / 10** (Zero warnings, zero errors).
+**Rating**: **10.00 / 10** (Zero warnings, zero errors across all modules).
 
 ### 3. Static Code Analysis (SonarLint)
 To run SonarLint in VS Code:
 1. Install the official **SonarLint** extension (`SonarSource.sonarlint-vscode`).
-2. Open any `.py` file; SonarLint will automatically detect bugs, code smells, and security hotspots in real time.
+2. Open any `.py` file; SonarLint automatically verifies clean code and zero security hotspots.
 
 ---
 
 ## 📡 API Endpoints Reference
 
-### Authentication
-- `POST /auth/login`: Authenticate credentials, returns Bearer JWT.
-- `GET /auth/me`: Returns current user's profile and permissions.
+### Authentication & Account Lifecycle (`/auth`)
+| Method | Path | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/auth/login` | Public | Authenticates credentials, returns Bearer JWT. Rejects pending/disabled accounts. |
+| `GET` | `/auth/me` | Authenticated | Returns current authenticated user's profile and permissions. |
+| `GET` | `/auth/verify-invitation` | Public | Validates invitation token for pending employee account. |
+| `POST` | `/auth/complete-registration`| Public | Sets password and activates account using valid invitation token. |
+| `POST` | `/auth/register` | Disabled | Public registration disabled (`HTTP 403`). All accounts created by Admin. |
+
+### User Management (`/users`)
+| Method | Path | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/users/` | Admin, Support | Lists users with pagination and role filtering. |
+| `POST` | `/users/` | Admin Only | Creates pending user account and generates expiring invitation token. |
+| `GET` | `/users/{user_id}` | Authenticated | Retrieves profile (Employees can only view self; Admin/Support can view all). |
+| `PUT` | `/users/{user_id}` | Admin Only | Updates user details or role. Validates email uniqueness. |
+| `POST` | `/users/{user_id}/reinvite`| Admin Only | Generates a fresh invitation token for pending accounts. |
 
 ### Assets (`/assets`)
-- `GET /assets`: List assets with filtering by status and type.
-- `POST /assets`: Register a new physical asset (Admin only).
-- `POST /assets/{asset_id}/assign`: Assign asset to employee.
-- `POST /assets/{asset_id}/return`: Return asset to inventory.
+| Method | Path | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/assets` | Authenticated | Lists assets. Employees restricted strictly to their assigned hardware. |
+| `POST` | `/assets` | Admin Only | Registers a new physical asset with serial number validation. |
+| `GET` | `/assets/{asset_id}` | Authenticated | Asset details. Employees denied access to hardware assigned to others. |
+| `POST` | `/assets/{asset_id}/assign` | Admin, Support | Assigns available asset to employee. |
+| `POST` | `/assets/{asset_id}/return` | Admin, Support | Returns assigned asset back to available inventory. |
 
 ### Tickets (`/tickets`)
-- `GET /tickets`: List tickets (Employees see their own; IT/Admin see all).
-- `POST /tickets`: Create a support ticket with auto-categorization.
-- `POST /tickets/{ticket_id}/assign`: Assign ticket to IT specialist.
-- `POST /tickets/{ticket_id}/resolve`: Mark ticket resolved with comments.
-- `POST /tickets/{ticket_id}/close`: Confirm closure.
+| Method | Path | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/tickets` | Authenticated | Lists tickets. Employees restricted to tickets created by them. |
+| `POST` | `/tickets` | Authenticated | Creates support ticket with automated regex priority classification. |
+| `GET` | `/tickets/{ticket_id}` | Authenticated | Ticket details. Employees denied access to tickets created by others. |
+| `POST` | `/tickets/{ticket_id}/assign` | Admin, Support | Assigns ticket to support engineer. |
+| `POST` | `/tickets/{ticket_id}/resolve`| Admin, Support | Resolves ticket with resolution notes and stops SLA clock. |
+| `POST` | `/tickets/{ticket_id}/close` | Authenticated | Confirms closure. Standard employees can only close own resolved tickets. |
 
-### Real-Time & Reports
-- `GET /reports/tickets`: Status counts, priority breakdowns, SLA compliance rate.
-- `GET /reports/external-status`: External API integration probe.
-- `WebSocket /ws/tickets`: Real-time bi-directional event stream.
+### Real-Time & WebSockets (`/ws`)
+| Protocol | Path | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `WS` | `/ws/tickets?token=...` | Authenticated | Live ticket events. Supports query token or in-band `auth` frame. |
+| `WS Action` | `{"action": "subscribe", "ticket_id": "..."}` | Authenticated | Subscribes to ticket events. Validates ownership for employees. |
+| `WS Action` | `{"action": "unsubscribe", "ticket_id": "..."}` | Authenticated | Unsubscribes from ticket notifications. |
 
 ---
 

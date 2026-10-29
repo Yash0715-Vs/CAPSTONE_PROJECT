@@ -28,8 +28,10 @@ from app.schemas.ticket import (
 )
 from app.services.auth_service import get_current_user, require_roles
 from app.services.ticket_classifier import TicketClassifier
+from app.services.websocket_manager import ws_manager
 
 router = APIRouter(prefix="/tickets", tags=["Tickets"])
+
 
 
 @router.get("", response_model=List[TicketResponse])
@@ -94,9 +96,13 @@ def create_ticket(
         category = category or classification["category_name"]
         priority = priority or classification["priority_name"]
 
-    # Generate next Ticket ID (e.g. INC-1005)
-    existing_count = len(TicketRepository.list_tickets(session))
-    generated_ticket_id = f"INC-{1000 + existing_count + 1}"
+    # Generate robust next Ticket ID (e.g. INC-1056)
+    last_ticket = session.query(TicketDB).order_by(TicketDB.id.desc()).first()
+    next_num = (last_ticket.id + 1) if last_ticket else 1
+    generated_ticket_id = f"INC-{1000 + next_num}"
+    while TicketRepository.get_by_ticket_id(session, generated_ticket_id):
+        next_num += 1
+        generated_ticket_id = f"INC-{1000 + next_num}"
 
     ticket = TicketDB(
         ticket_id=generated_ticket_id,
@@ -112,7 +118,9 @@ def create_ticket(
     ActivityLogRepository.log(
         session, "TICKET_CREATED", current_user.user_id, f"Created {saved.ticket_id} ({category}/{priority})"
     )
+    ws_manager.trigger_ticket_broadcast("TICKET_CREATED", saved.to_dict())
     return saved
+
 
 
 @router.put("/{ticket_id}", response_model=TicketResponse)
@@ -140,7 +148,9 @@ def update_ticket(
 
     session.flush()
     ActivityLogRepository.log(session, "TICKET_UPDATED", staff_user.user_id, f"Updated ticket {ticket_id}")
+    ws_manager.trigger_ticket_broadcast("TICKET_UPDATED", ticket.to_dict())
     return ticket
+
 
 
 @router.post("/{ticket_id}/assign", response_model=TicketResponse)
@@ -155,11 +165,23 @@ def assign_ticket(
     if not ticket:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Ticket '{ticket_id}' not found.")
 
+    if ticket.status == "CLOSED":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot assign closed ticket '{ticket_id}'."
+        )
+
     support_user = UserRepository.get_by_user_id(session, assign_req.assigned_to)
     if not support_user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"IT Support user '{assign_req.assigned_to}' not found."
+        )
+
+    if support_user.role not in ("SUPPORT", "ADMIN"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"User '{assign_req.assigned_to}' has role '{support_user.role}'. Tickets can only be assigned to SUPPORT or ADMIN staff."
         )
 
     ticket.assigned_to = assign_req.assigned_to
@@ -171,7 +193,9 @@ def assign_ticket(
         comment=f"Assigned to {assign_req.assigned_to}"
     )
     session.flush()
+    ws_manager.trigger_ticket_broadcast("TICKET_ASSIGNED", ticket.to_dict())
     return ticket
+
 
 
 @router.post("/{ticket_id}/resolve", response_model=TicketResponse)
@@ -186,6 +210,18 @@ def resolve_ticket(
     if not ticket:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Ticket '{ticket_id}' not found.")
 
+    if ticket.status == "CLOSED":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot resolve ticket '{ticket_id}' because it is already CLOSED."
+        )
+
+    if ticket.status == "RESOLVED":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Ticket '{ticket_id}' is already RESOLVED."
+        )
+
     ticket.resolution = resolve_req.resolution
     TicketRepository.update_status(
         session=session,
@@ -195,7 +231,9 @@ def resolve_ticket(
         comment=f"Resolved: {resolve_req.resolution}"
     )
     session.flush()
+    ws_manager.trigger_ticket_broadcast("TICKET_RESOLVED", ticket.to_dict())
     return ticket
+
 
 
 @router.post("/{ticket_id}/close", response_model=TicketResponse)
@@ -204,16 +242,32 @@ def close_ticket(
     session: Session = Depends(get_db),
     current_user: UserDB = Depends(get_current_user)
 ):
-    """Closes a ticket after resolution confirmation."""
+    """
+    Closes a ticket after resolution confirmation.
+    - Employees can only close their own tickets, and only after the ticket is RESOLVED.
+    - Support and Admins can close tickets according to business rules.
+    """
     ticket = TicketRepository.get_by_ticket_id(session, ticket_id)
     if not ticket:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Ticket '{ticket_id}' not found.")
 
-    if ticket.status != "RESOLVED" and current_user.role == "EMPLOYEE":
+    if ticket.status == "CLOSED":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot close ticket '{ticket_id}' before it is RESOLVED (current status: {ticket.status})."
+            detail=f"Ticket '{ticket_id}' is already CLOSED."
         )
+
+    if current_user.role == "EMPLOYEE":
+        if ticket.created_by != current_user.user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are only authorized to close support tickets created by you."
+            )
+        if ticket.status != "RESOLVED":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot close ticket '{ticket_id}' before it is RESOLVED (current status: {ticket.status})."
+            )
 
     ticket.closed_date = datetime.now(timezone.utc)
     TicketRepository.update_status(
@@ -224,4 +278,7 @@ def close_ticket(
         comment="Ticket confirmed and closed."
     )
     session.flush()
+    ws_manager.trigger_ticket_broadcast("TICKET_CLOSED", ticket.to_dict())
     return ticket
+
+

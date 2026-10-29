@@ -33,9 +33,11 @@ def list_assets(
 ):
     """
     Lists assets.
-    Employees see only assets assigned to them unless requesting as Support/Admin.
+    Employees see only assets assigned to them.
+    IT Support and Admins can view all assets or filter by assignee.
     """
-    if current_user.role == "EMPLOYEE" and not assigned_to:
+    if current_user.role == "EMPLOYEE":
+        # Enforce that employees can only view hardware assigned to themselves
         assigned_to = current_user.user_id
 
     return AssetRepository.list_assets(session, status=status_filter, assigned_to=assigned_to)
@@ -73,6 +75,14 @@ def create_asset(
             detail=f"Asset ID '{asset_in.asset_id}' already exists."
         )
 
+    # Check serial number uniqueness
+    existing_serial = session.query(AssetDB).filter(AssetDB.serial_number == asset_in.serial_number).first()
+    if existing_serial:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Serial number '{asset_in.serial_number}' is already registered to asset '{existing_serial.asset_id}'."
+        )
+
     asset = AssetDB(
         asset_id=asset_in.asset_id,
         type=asset_in.type,
@@ -86,6 +96,7 @@ def create_asset(
     saved = AssetRepository.create(session, asset)
     ActivityLogRepository.log(session, "ASSET_CREATED", staff_user.user_id, f"Added asset {saved.asset_id}")
     return saved
+
 
 
 @router.put("/{asset_id}", response_model=AssetResponse)

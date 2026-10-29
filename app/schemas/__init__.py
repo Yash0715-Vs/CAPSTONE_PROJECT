@@ -2,8 +2,13 @@
 Schemas Package Exports.
 """
 from app.schemas.user import (
+    UserRole,
+    UserStatus,
     UserBase,
     UserCreate,
+    UserCreateResponse,
+    CompleteRegistrationRequest,
+    VerifyInvitationResponse,
     UserUpdate,
     UserResponse,
     UserLogin,

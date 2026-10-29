@@ -44,8 +44,31 @@ class Config:
     ALGORITHM: str = os.getenv("ALGORITHM", "HS256")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 
+    # CORS settings (supports ALLOWED_ORIGINS and CORS_ORIGINS)
+    _cors_env: str = os.getenv("ALLOWED_ORIGINS") or os.getenv("CORS_ORIGINS") or (
+        "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173,http://localhost:8000,http://127.0.0.1:8000"
+    )
+    ALLOWED_ORIGINS: list = [origin.strip() for origin in _cors_env.split(",") if origin.strip()]
+
+
     # Logging settings (Section 37)
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
+
+    @classmethod
+    def validate_production_configuration(cls) -> None:
+        """Validates security settings for non-development environments."""
+        env = cls.APP_ENV.lower()
+        if env in ("prod", "production"):
+            if not cls.SECRET_KEY or cls.SECRET_KEY in (
+                "dev_secret_key_for_local_testing_only_capstone_2026",
+                "super_secret_jwt_key_capstone_2026",
+                "supersecretjwtkey_production_capstone_2026",
+            ) or len(cls.SECRET_KEY) < 32:
+                raise ValueError(
+                    "CRITICAL SECURITY CONFIGURATION ERROR: A strong, unique SECRET_KEY (minimum 32 characters) "
+                    "must be configured in environment variables for production environments."
+                )
+
 
     @classmethod
     def get_database_url(cls) -> str:
