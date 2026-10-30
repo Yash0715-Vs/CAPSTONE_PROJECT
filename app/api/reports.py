@@ -14,10 +14,10 @@ from sqlalchemy.orm import Session
 import requests
 
 from app.database.connection import get_db
-from app.database.repositories import TicketRepository, AssetRepository
+from app.database.repositories import TicketRepository, AssetRepository, ActivityLogRepository
 from app.models.db_models import UserDB
 from app.models.ticket import Ticket, TicketCategory, TicketPriority, TicketStatus
-from app.services.auth_service import require_roles
+from app.services.auth_service import require_roles, get_current_user
 from app.services.sla_service import SLAService
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
@@ -123,6 +123,25 @@ def get_sla_report(
         "resolution_metrics": avg_stats,
         "individual_ticket_sla": sla_evaluations,
     }
+
+
+@router.get("/audit")
+def get_audit_trail(
+    session: Session = Depends(get_db),
+    current_user: UserDB = Depends(get_current_user)
+) -> List[Dict[str, Any]]:
+    """Returns recent system activity logs from the database."""
+    logs = ActivityLogRepository.list_recent(session, limit=40)
+    return [
+        {
+            "id": log.id,
+            "user_id": log.user_id,
+            "action": log.action,
+            "details": log.details,
+            "timestamp": log.timestamp.isoformat() if log.timestamp else None,
+        }
+        for log in logs
+    ]
 
 
 @router.get("/external-status")

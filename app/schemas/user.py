@@ -42,6 +42,15 @@ class UserCreate(UserBase):
     )
 
 
+class UserInviteRequest(BaseModel):
+    """Payload submitted by admin to invite an employee via single-use token."""
+    name: str = Field(..., min_length=2, max_length=100, json_schema_extra={"example": "Aarav Verma"})
+    email: EmailStr = Field(..., json_schema_extra={"example": "aarav.verma@company.com"})
+    role: UserRole = Field(default=UserRole.EMPLOYEE, json_schema_extra={"example": "EMPLOYEE"}, description="ADMIN, SUPPORT, or EMPLOYEE")
+    department: Optional[str] = Field(default="General", json_schema_extra={"example": "Engineering"})
+    user_id: Optional[str] = Field(default=None, min_length=2, max_length=50, json_schema_extra={"example": "EMP-901"}, description="Optional user ID; auto-generated if omitted")
+
+
 class CompleteRegistrationRequest(BaseModel):
     """Payload submitted by employee to accept invitation and activate account."""
     invitation_token: str = Field(..., min_length=16, description="Cryptographic single-use invitation token")

@@ -118,7 +118,16 @@ def update_asset(
     if update_in.status is not None:
         asset.status = update_in.status
     if update_in.assigned_to is not None:
-        asset.assigned_to = update_in.assigned_to
+        if update_in.assigned_to:
+            emp = UserRepository.get_by_user_id(session, update_in.assigned_to)
+            if not emp:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Employee '{update_in.assigned_to}' not found."
+                )
+            asset.assigned_to = update_in.assigned_to
+        else:
+            asset.assigned_to = None
     if update_in.specs_json is not None:
         asset.specs_json = update_in.specs_json
 

@@ -19,10 +19,87 @@ from sqlalchemy.orm import Session
 from app.database.connection import get_db
 from app.database.repositories import UserRepository, ActivityLogRepository
 from app.models.db_models import UserDB, UserStatus, UserRole
-from app.schemas.user import UserCreate, UserCreateResponse, UserUpdate, UserResponse
+from app.schemas.user import UserCreate, UserCreateResponse, UserInviteRequest, UserUpdate, UserResponse
 from app.services.auth_service import AuthService, get_current_user, require_roles
 
 router = APIRouter(prefix="/users", tags=["Users"])
+
+
+@router.post("/invite", response_model=UserCreateResponse, status_code=status.HTTP_201_CREATED)
+def invite_user(
+    invite_in: UserInviteRequest,
+    session: Session = Depends(get_db),
+    admin: UserDB = Depends(require_roles(["ADMIN"]))
+):
+    """
+    Admin-only endpoint to invite an employee or staff member.
+    Generates a unique user ID (e.g. EMP-XXXXX) if omitted, provisions the account
+    in PENDING state, and generates a cryptographically secure single-use invitation token.
+    """
+    if UserRepository.get_by_email(session, invite_in.email):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Email '{invite_in.email}' is already registered."
+        )
+
+    # Determine role value
+    role_val = invite_in.role.value if hasattr(invite_in.role, "value") else str(invite_in.role).upper()
+    if role_val not in [r.value for r in UserRole]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid role '{role_val}'. Allowed roles: {[r.value for r in UserRole]}"
+        )
+
+    # Determine or generate unique user_id
+    user_id = invite_in.user_id
+    if user_id:
+        if UserRepository.get_by_user_id(session, user_id):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"User ID '{user_id}' already exists."
+            )
+    else:
+        prefix = "IT" if role_val == UserRole.SUPPORT.value else ("ADM" if role_val == UserRole.ADMIN.value else "EMP")
+        for _ in range(200):
+            candidate = f"{prefix}-{secrets.randbelow(90000) + 10000}"
+            if not UserRepository.get_by_user_id(session, candidate):
+                user_id = candidate
+                break
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Could not generate unique user ID."
+            )
+
+    invitation_token = AuthService.generate_invitation_token()
+    token_hash = AuthService.hash_invitation_token(invitation_token)
+    invitation_expires_at = datetime.now(timezone.utc) + timedelta(hours=48)
+    hashed_pw = AuthService.hash_password(secrets.token_hex(32))
+
+    new_user = UserDB(
+        user_id=user_id,
+        name=invite_in.name,
+        email=invite_in.email,
+        hashed_password=hashed_pw,
+        role=role_val,
+        status=UserStatus.PENDING.value,
+        invitation_token_hash=token_hash,
+        invitation_expires_at=invitation_expires_at,
+        department=invite_in.department or "General",
+    )
+    saved = UserRepository.create(session, new_user)
+    ActivityLogRepository.log(
+        session,
+        "ADMIN_INVITE_USER",
+        admin.user_id,
+        f"Invited user {saved.user_id} ({saved.email}) with role {saved.role}"
+    )
+
+    response_dict = saved.to_dict()
+    response_dict["invitation_token"] = invitation_token
+    response_dict["invitation_expires_at"] = invitation_expires_at
+    response_dict["message"] = "User invitation generated successfully."
+    return UserCreateResponse(**response_dict)
 
 
 @router.get("", response_model=List[UserResponse])

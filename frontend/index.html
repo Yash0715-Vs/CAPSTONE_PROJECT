@@ -3,9 +3,104 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Smart IT Asset & Support Ticket Management System</title>
-  <meta name="description" content="Production-ready IT Asset Management and Support Ticket Lifecycle Dashboard powered by FastAPI, MySQL, and WebSockets.">
-  <link rel="stylesheet" href="/css/style.css">
+  <title>AssetDesk — Smart IT Asset & Ticket Management System</title>
+  <meta name="description" content="Centralized enterprise operations platform to manage hardware assets, employee accounts, priority support queues, and SLA compliance.">
+  
+  <!-- Google Fonts: Newsreader (Editorial Serif), Inter (Sans), JetBrains Mono (Code/Badges) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  
+  <!-- Theme loader: restores saved theme before rendering to eliminate flash -->
+  <script>
+    (function() {
+      try {
+        const saved = localStorage.getItem("apex_theme") || "light";
+        document.documentElement.setAttribute("data-theme", saved);
+        if (saved === "dark") {
+          document.documentElement.classList.add("dark");
+        } else {
+          document.documentElement.classList.remove("dark");
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <!-- Tailwind CSS CDN for Executive Stitch Dashboard -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script id="tailwind-config">
+    if (window.tailwind) {
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "primary-fixed-dim": "#ffb59d",
+              "secondary-fixed-dim": "#cac5c4",
+              "error": "#ba1a1a",
+              "on-background": "#1b1c1a",
+              "on-tertiary-fixed": "#002204",
+              "inverse-on-surface": "#f2f1ed",
+              "on-primary-fixed": "#390b00",
+              "tertiary-fixed-dim": "#88d982",
+              "on-secondary-container": "#676462",
+              "on-primary": "#ffffff",
+              "error-container": "#ffdad6",
+              "on-surface": "#1b1c1a",
+              "on-primary-container": "#fffbff",
+              "on-error": "#ffffff",
+              "primary-container": "#b95837",
+              "surface-container-highest": "#e3e2df",
+              "surface-container": "#efeeea",
+              "secondary-container": "#e7e1df",
+              "surface-container-lowest": "#ffffff",
+              "outline-variant": "#dcc1b8",
+              "surface-variant": "#e3e2df",
+              "inverse-primary": "#ffb59d",
+              "surface": "#faf9f5",
+              "tertiary": "#186a22",
+              "surface-container-low": "#f4f4f0",
+              "inverse-surface": "#2f312e",
+              "on-error-container": "#93000a",
+              "on-secondary": "#ffffff",
+              "background": "#faf9f5",
+              "on-secondary-fixed-variant": "#494645",
+              "surface-tint": "#9d4324",
+              "on-primary-fixed-variant": "#7e2c0e",
+              "primary-fixed": "#ffdbd0",
+              "on-tertiary": "#ffffff",
+              "on-tertiary-container": "#f7fff1",
+              "tertiary-fixed": "#a3f69c",
+              "on-tertiary-fixed-variant": "#005312",
+              "surface-container-high": "#e9e8e4",
+              "secondary-fixed": "#e7e1df",
+              "outline": "#89726b",
+              "on-secondary-fixed": "#1d1b1a",
+              "surface-bright": "#faf9f5",
+              "primary": "#9a4021",
+              "secondary": "#615e5c",
+              "tertiary-container": "#358438",
+              "on-surface-variant": "#56423c",
+              "surface-dim": "#dbdad6"
+            },
+            borderRadius: {
+              "DEFAULT": "0.25rem",
+              "lg": "0.5rem",
+              "xl": "0.75rem",
+              "full": "9999px"
+            },
+            fontFamily: {
+              headline: ["Newsreader", "serif"],
+              display: ["Newsreader", "serif"],
+              body: ["Inter", "sans-serif"],
+              label: ["Inter", "sans-serif"]
+            }
+          }
+        }
+      };
+    }
+  </script>
+  <link rel="stylesheet" href="/css/style.css?v=2.6.0">
   
   <!-- React 18 & Babel Standalone CDN (Zero Node/NPM required) -->
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
@@ -16,6 +111,6 @@
   <div id="root"></div>
 
   <!-- Load React Application -->
-  <script type="text/babel" src="/js/app.jsx"></script>
+  <script type="text/babel" src="/js/app.jsx?v=2.6.0"></script>
 </body>
 </html>

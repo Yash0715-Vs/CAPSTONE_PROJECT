@@ -53,6 +53,27 @@ async def lifespan(app: FastAPI):
     try:
         db_manager.init_tables()
         print("[STARTUP] Database connection verified successfully.")
+
+        # Ensure Stitch demo employee EMP-84920 exists for immediate account setup testing
+        from datetime import datetime, timedelta, timezone
+        from app.models.db_models import UserDB, UserStatus
+        from app.services.auth_service import AuthService
+        with db_manager.get_session() as s:
+            if not s.query(UserDB).filter(UserDB.user_id == "EMP-84920").first():
+                demo_hash = AuthService.hash_invitation_token("APX-INV-99482-SEC-AUTH-PROD")
+                s.add(UserDB(
+                    user_id="EMP-84920",
+                    name="Sarah Jenkins",
+                    email="s.jenkins@company.com",
+                    hashed_password=AuthService.hash_password("ValidPassword#123"),
+                    role="EMPLOYEE",
+                    department="Engineering",
+                    status=UserStatus.PENDING.value,
+                    invitation_token_hash=demo_hash,
+                    invitation_expires_at=datetime.now(timezone.utc) + timedelta(days=365),
+                    created_at=datetime.now(timezone.utc)
+                ))
+                s.commit()
     except Exception as err:
         print(f"[STARTUP WARNING] Database auto-init error: {err}")
     yield
@@ -109,6 +130,8 @@ if (FRONTEND_DIR / "css").exists():
     app.mount("/css", StaticFiles(directory=str(FRONTEND_DIR / "css")), name="css")
 if (FRONTEND_DIR / "js").exists():
     app.mount("/js", StaticFiles(directory=str(FRONTEND_DIR / "js")), name="js")
+if (FRONTEND_DIR / "images").exists():
+    app.mount("/images", StaticFiles(directory=str(FRONTEND_DIR / "images")), name="images")
 
 
 # =====================================================================
@@ -120,7 +143,11 @@ def serve_dashboard():
     """Serves the interactive React Single Page Application (SPA)."""
     index_file = FRONTEND_DIR / "index.html"
     if index_file.exists():
-        return FileResponse(str(index_file))
+        response = FileResponse(str(index_file))
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
     return {
         "system": "Smart IT Asset & Support Ticket Management System",
         "status": "ONLINE",
