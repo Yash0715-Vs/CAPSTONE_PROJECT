@@ -7,7 +7,7 @@ import base64
 import websockets
 
 CHROME_PATH = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
-OUTPUT_PNG = r"C:\Users\Yash\.gemini\antigravity-ide\brain\8a5c3c8a-d705-4f9f-af6a-be25a78f8687\live_dashboard_verified.png"
+OUTPUT_PNG = r"C:\Users\Yash\.gemini\antigravity\brain\ae60aac7-2d6e-43c3-8735-5bed26f117f5\live_dashboard_verified.png"
 
 async def check():
     proc = subprocess.Popen([
@@ -58,7 +58,12 @@ async def check():
             await send_cmd("Page.navigate", {"url": "http://127.0.0.1:8000/"})
             await asyncio.sleep(3)
 
+            # Wait for initial page to load and Babel to transpile
+            print("Navigated to http://127.0.0.1:8000/, waiting for Babel compilation...")
+            await asyncio.sleep(5)
+
             # Log in as ADM-001 (Admin)
+            print("Logging in as ADM-001...")
             login_eval = """
             (async () => {
                 const res = await fetch('/auth/login', {
@@ -72,20 +77,22 @@ async def check():
                 location.reload();
             })();
             """
-            await send_cmd("Runtime.evaluate", {"expression": login_eval})
+            await send_cmd("Runtime.evaluate", {"expression": login_eval, "awaitPromise": True})
 
-            # Wait 4 seconds for authenticated dashboard to render and fetch data
-            await asyncio.sleep(4)
+            # Wait for page reload and authenticated dashboard to mount
+            print("Waiting for page reload and authenticated dashboard render...")
+            await asyncio.sleep(7)
 
             # Check DOM contents and console errors
             check_eval = """
             ({
+                url: window.location.href,
+                readyState: document.readyState,
                 rootLength: document.getElementById('root')?.innerHTML?.length || 0,
-                headlineText: document.querySelector('h1')?.innerText || '',
+                headlineText: document.querySelector('h1')?.innerText || document.querySelector('.table-header-title')?.innerText || '',
                 bodyTextSample: document.body?.innerText?.slice(0, 500) || '',
-                has62: document.body?.innerText?.includes('62'),
-                has54: document.body?.innerText?.includes('54'),
-                has212: document.body?.innerText?.includes('212')
+                hasFleet: document.body?.innerText?.includes('Hardware') || document.body?.innerText?.includes('AssetDesk'),
+                hasLogout: document.body?.innerText?.includes('Sign Out') || document.body?.innerText?.includes('Logout')
             })
             """
             cid = await send_cmd("Runtime.evaluate", {"expression": check_eval, "returnByValue": True})
@@ -102,9 +109,13 @@ async def check():
                     elif data.get("method") == "Runtime.exceptionThrown":
                         details = data["params"]["exceptionDetails"]
                         errors.append(f"[EXCEPTION] {details.get('text')} - {details.get('exception', {}).get('description', '')}")
-                    elif data.get("method") == "Runtime.consoleAPICalled" and data["params"]["type"] == "error":
+                    elif data.get("method") == "Runtime.consoleAPICalled":
                         args = [str(a.get("value", a.get("description", ""))) for a in data["params"]["args"]]
-                        errors.append(f"[CONSOLE ERROR] {' '.join(args)}")
+                        msg_str = ' '.join(args)
+                        if data["params"]["type"] == "error":
+                            errors.append(f"[CONSOLE ERROR] {msg_str}")
+                        else:
+                            print(f"[CONSOLE {data['params']['type'].upper()}] {msg_str}")
                 except asyncio.TimeoutError:
                     break
 

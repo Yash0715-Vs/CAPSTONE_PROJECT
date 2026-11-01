@@ -17,6 +17,43 @@ const DEMO_ACCOUNTS = [
 ];
 
 // =====================================================================
+// Centralized API Error Parser
+// Safely unpacks FastAPI/Pydantic validation schemas, RFC 7807 problem details,
+// status code semantics, and network failure exceptions.
+// =====================================================================
+function parseApiError(errData, status, defaultMsg = "An unexpected error occurred.") {
+  if (status === 401) {
+    return "Session expired or unauthorized credentials. Please sign in again.";
+  }
+  if (status === 403) {
+    if (errData && typeof errData.detail === "string") return errData.detail;
+    return "Access Denied: You lack permissions for this operation.";
+  }
+  if (status === 404) {
+    if (errData && typeof errData.detail === "string") return errData.detail;
+    return "The requested record or resource was not found.";
+  }
+  if (status === 500) {
+    return "Internal server error. Please try again or contact IT Support.";
+  }
+  if (errData) {
+    if (typeof errData === "string") return errData;
+    // FastAPI 422 Unprocessable Entity list of dicts
+    if (Array.isArray(errData.detail)) {
+      return errData.detail
+        .map(d => {
+          const loc = d.loc ? d.loc.filter(k => k !== "body").join(".") : "";
+          return loc ? `${loc}: ${d.msg}` : d.msg;
+        })
+        .join("; ");
+    }
+    if (typeof errData.detail === "string") return errData.detail;
+    if (errData.message && typeof errData.message === "string") return errData.message;
+  }
+  return defaultMsg;
+}
+
+// =====================================================================
 // Component: Apex Sentinel Split-Screen Login Page (Matches User Design)
 // =====================================================================
 function LoginPage({ onLoginSuccess, onSwitchToRegister, demoAccounts, theme, onToggleTheme }) {
@@ -39,14 +76,14 @@ function LoginPage({ onLoginSuccess, onSwitchToRegister, demoAccounts, theme, on
         body: JSON.stringify({ user_id: identifier.trim(), password })
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
       if (!res.ok) {
-        throw new Error(data.detail || "Invalid enterprise credentials or account inactive.");
+        throw new Error(parseApiError(data, res.status, "Invalid enterprise credentials or account inactive."));
       }
 
       onLoginSuccess(data.user, data.access_token);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Failed to connect to authentication server.");
     } finally {
       setLoading(false);
     }
@@ -347,22 +384,22 @@ function RegisterPage({ onRegisterSuccess, onSwitchToLogin, theme, onToggleTheme
         })
       });
 
-      const regData = await regRes.json();
+      const regData = await regRes.json().catch(() => null);
       if (!regRes.ok) {
-        throw new Error(regData.detail || "Account activation failed.");
+        throw new Error(parseApiError(regData, regRes.status, "Account activation failed."));
       }
 
       // 2. Registration succeeded, login with active credentials
-      const userIdentifier = regData.user_id || (regData.user ? regData.user.user_id : email);
+      const userIdentifier = regData?.user_id || (regData?.user ? regData.user.user_id : email);
       const loginRes = await fetch(`${API_BASE}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user_id: userIdentifier, password })
       });
 
-      const loginData = await loginRes.json();
+      const loginData = await loginRes.json().catch(() => null);
       if (!loginRes.ok) {
-        throw new Error("Registration complete! Please proceed to Sign In.");
+        throw new Error(parseApiError(loginData, loginRes.status, "Registration complete! Please proceed to Sign In."));
       }
 
       onRegisterSuccess(loginData.user, loginData.access_token);
@@ -815,13 +852,28 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
   const [liveEvents, setLiveEvents] = useState([]);
   const [toasts, setToasts] = useState([]);
 
-  // Modals
+  // Data Loading & API Error State
+  const [fetchError, setFetchError] = useState(null);
+
+  // Modals & Action Error / Submitting States
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showResolveModal, setShowResolveModal] = useState(null);
+  const [resolveModalError, setResolveModalError] = useState("");
+  const [isSubmittingResolve, setIsSubmittingResolve] = useState(false);
+
   const [showAssignModal, setShowAssignModal] = useState(null);
+  const [assignAssetError, setAssignAssetError] = useState("");
+  const [isSubmittingAssignAsset, setIsSubmittingAssignAsset] = useState(false);
+
   const [showAssignTicketModal, setShowAssignTicketModal] = useState(null);
+  const [assignTicketError, setAssignTicketError] = useState("");
+  const [isSubmittingAssignTicket, setIsSubmittingAssignTicket] = useState(false);
+
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteError, setInviteError] = useState("");
+  const [isSubmittingInvite, setIsSubmittingInvite] = useState(false);
+
   const [showCreateAssetModal, setShowCreateAssetModal] = useState(false);
 
   // Filters
@@ -830,14 +882,43 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
   const [filterPriority, setFilterPriority] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
 
-  // Toast notification helper
+  // Toast notification helper with sanitization (prevents object-as-child React errors)
   const addToast = useCallback((msg, type = "info") => {
-    const id = Date.now();
-    setToasts(prev => [...prev, { id, msg, type }]);
+    let cleanMsg = msg;
+    if (typeof msg === "object" && msg !== null) {
+      if (Array.isArray(msg)) {
+        cleanMsg = msg.map(m => (typeof m === "object" ? (m.msg || JSON.stringify(m)) : String(m))).join("; ");
+      } else if (msg.detail) {
+        if (Array.isArray(msg.detail)) {
+          cleanMsg = msg.detail.map(d => (d.msg ? `${d.loc ? d.loc.filter(k => k !== "body").join(".") : ""}: ${d.msg}` : JSON.stringify(d))).join("; ");
+        } else if (typeof msg.detail === "string") {
+          cleanMsg = msg.detail;
+        } else {
+          cleanMsg = JSON.stringify(msg.detail);
+        }
+      } else if (msg.message && typeof msg.message === "string") {
+        cleanMsg = msg.message;
+      } else {
+        cleanMsg = JSON.stringify(msg);
+      }
+    }
+    const id = Date.now() + Math.random();
+    setToasts(prev => [...prev, { id, msg: String(cleanMsg || "Notification"), type }]);
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
     }, 4500);
   }, []);
+
+  // Central Logout & Session Invalidation
+  const handleLogout = useCallback((reason) => {
+    localStorage.removeItem("it_token");
+    localStorage.removeItem("it_user");
+    setToken("");
+    setCurrentUser(null);
+    if (reason) {
+      addToast(reason, "info");
+    }
+  }, [addToast]);
 
   // Quick switch role inside dashboard
   const authenticateUser = async (userId) => {
@@ -847,17 +928,20 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user_id: userId, password: "password" })
       });
-      if (res.ok) {
-        const data = await res.json();
+      const data = await res.json().catch(() => null);
+      if (res.ok && data) {
         setToken(data.access_token);
         setCurrentUser(data.user);
         localStorage.setItem("it_token", data.access_token);
         localStorage.setItem("it_user", JSON.stringify(data.user));
         addToast(`Switched account to ${data.user.name} (${data.user.role})`, "success");
         return data.access_token;
+      } else {
+        const msg = parseApiError(data, res.status, "Authentication failed.");
+        addToast(msg, "error");
       }
     } catch (e) {
-      console.warn("Auth fallback", e);
+      addToast("Network error during role switch.", "error");
     }
     return token;
   };
@@ -870,64 +954,103 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
       })
         .then(res => {
           if (!res.ok) {
-            localStorage.removeItem("it_token");
-            localStorage.removeItem("it_user");
-            setToken("");
-            setCurrentUser(null);
+            handleLogout("Session expired. Please sign in again.");
           }
         })
         .catch(() => { });
     }
-  }, []);
+  }, [token, currentUser, handleLogout]);
 
-  // Fetch All Data in Parallel
+  // Fetch All Data in Parallel with Status Code Verification & Error Handling
   const fetchData = useCallback(async () => {
     if (!token) return;
     setLoading(true);
+    setFetchError(null);
     const headers = { "Authorization": `Bearer ${token}` };
 
     try {
       const pTickets = fetch(`${API_BASE}/tickets`, { headers })
-        .then(r => r.ok ? r.json() : [])
-        .then(data => setTickets(data))
-        .catch(err => console.warn("Failed to load tickets", err));
+        .then(async r => {
+          if (r.status === 401) {
+            handleLogout("Session expired. Please sign in again.");
+            return [];
+          }
+          if (!r.ok) {
+            const err = await r.json().catch(() => ({}));
+            throw new Error(parseApiError(err, r.status, "Failed to load incident tickets."));
+          }
+          return r.json();
+        })
+        .then(data => setTickets(Array.isArray(data) ? data : []));
 
       const pAssets = fetch(`${API_BASE}/assets`, { headers })
-        .then(r => r.ok ? r.json() : [])
-        .then(data => setAssets(data))
-        .catch(err => console.warn("Failed to load assets", err));
+        .then(async r => {
+          if (r.status === 401) {
+            handleLogout("Session expired. Please sign in again.");
+            return [];
+          }
+          if (!r.ok) {
+            const err = await r.json().catch(() => ({}));
+            throw new Error(parseApiError(err, r.status, "Failed to load hardware inventory."));
+          }
+          return r.json();
+        })
+        .then(data => setAssets(Array.isArray(data) ? data : []));
 
       const pAudit = fetch(`${API_BASE}/reports/audit`, { headers })
-        .then(r => r.ok ? r.json() : [])
-        .then(data => setAuditLogs(data))
-        .catch(err => console.warn("Failed to load audit logs", err));
+        .then(async r => {
+          if (r.status === 401) {
+            handleLogout("Session expired. Please sign in again.");
+            return [];
+          }
+          if (!r.ok) return [];
+          return r.json();
+        })
+        .then(data => setAuditLogs(Array.isArray(data) ? data : []));
 
       const pSla = fetch(`${API_BASE}/reports/sla`, { headers })
-        .then(r => r.ok ? r.json() : null)
-        .then(data => setSlaReport(data))
-        .catch(err => console.warn("Failed to load SLA", err));
+        .then(async r => {
+          if (r.status === 401) {
+            handleLogout("Session expired. Please sign in again.");
+            return null;
+          }
+          if (r.status === 403) return null; // Expected for standard employees
+          if (!r.ok) return null;
+          return r.json();
+        })
+        .then(data => setSlaReport(data));
 
       const staffPromises = [];
       if (currentUser && currentUser.role !== "EMPLOYEE") {
         staffPromises.push(
           fetch(`${API_BASE}/users`, { headers })
-            .then(r => r.ok ? r.json() : [])
-            .then(data => setUsersList(data))
-            .catch(err => console.warn("Failed to load users", err)),
+            .then(async r => {
+              if (r.status === 401) {
+                handleLogout("Session expired. Please sign in again.");
+                return [];
+              }
+              if (!r.ok) {
+                const err = await r.json().catch(() => ({}));
+                throw new Error(parseApiError(err, r.status, "Failed to load employee directory."));
+              }
+              return r.json();
+            })
+            .then(data => setUsersList(Array.isArray(data) ? data : [])),
+
           fetch(`${API_BASE}/reports/tickets`, { headers })
             .then(r => r.ok ? r.json() : null)
             .then(data => setTicketMetrics(data))
-            .catch(err => console.warn("Failed to load ticket metrics", err))
         );
       }
 
       await Promise.all([pTickets, pAssets, pAudit, pSla, ...staffPromises]);
     } catch (err) {
-      console.error("Data fetch error", err);
+      console.error("Dashboard fetch error:", err);
+      setFetchError(err.message || "Failed to synchronize operations data with server.");
     } finally {
       setLoading(false);
     }
-  }, [token, currentUser]);
+  }, [token, currentUser, handleLogout]);
 
   useEffect(() => {
     fetchData();
@@ -1865,7 +1988,40 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
           {/* TAB 1: INCIDENT TICKETS */}
           {(activeTab === "tickets" || activeTab === "it-support-desk" || activeTab === "ticket-operations") && (
             <div>
-              <div className="filter-bar">
+              
+              {fetchError && (
+                <div style={{
+                  padding: "0.85rem 1.25rem",
+                  background: "var(--status-critical-bg)",
+                  border: "1px solid var(--status-critical)",
+                  borderRadius: "var(--radius-md)",
+                  marginBottom: "1.25rem",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  color: "var(--status-critical)"
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>error</span>
+                    <span style={{ fontSize: "0.88rem", fontWeight: 500 }}>{fetchError}</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="table-btn"
+                    onClick={() => fetchData()}
+                    style={{
+                      borderColor: "var(--status-critical)",
+                      color: "var(--status-critical)",
+                      background: "transparent",
+                      fontWeight: 600
+                    }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: "15px" }}>refresh</span>
+                    <span>Retry</span>
+                  </button>
+                </div>
+              )}
+<div className="filter-bar">
                 <div className="search-input-wrap">
                   <span className="material-symbols-outlined">search</span>
                   <input
@@ -1945,84 +2101,104 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredTickets.map(t => (
-                      <tr key={t.id || t.ticket_id}>
-                        <td style={{ fontWeight: 600, color: "var(--primary)", fontFamily: "var(--font-mono)" }}>
-                          #{t.ticket_id}
-                        </td>
-                        <td>
-                          <div style={{ fontWeight: 600 }}>{t.title}</div>
-                          <div style={{ fontSize: "0.78rem", color: "var(--text-secondary)", maxWidth: "340px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {t.description}
+                    {loading && tickets.length === 0 ? (
+                      <tr>
+                        <td colSpan="7" style={{ textAlign: "center", padding: "3rem", color: "var(--text-muted)" }}>
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.75rem" }}>
+                            <span className="material-symbols-outlined apex-spinner" style={{ fontSize: "28px", color: "var(--primary)" }}>sync</span>
+                            <span style={{ fontSize: "0.9rem", fontWeight: 500 }}>Loading incident ticket records...</span>
                           </div>
                         </td>
-                        <td>
-                          <span className="badge-status" style={{ background: "var(--bg-subtle)", color: "var(--text-main)" }}>
-                            {t.category}
-                          </span>
-                        </td>
-                        <td>
-                          <span className={`badge-priority ${(t.priority || "").toLowerCase()}`}>
-                            {t.priority}
-                          </span>
-                        </td>
-                        <td>
-                          <span className={`badge-status ${(t.status || "").toLowerCase().replace('_', '-')}`}>
-                            {t.status}
-                          </span>
-                        </td>
-                        <td style={{ fontSize: "0.84rem" }}>
-                          {t.assigned_to ? (
-                            <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", fontWeight: 600, color: "var(--primary)" }}>
-                              <span className="material-symbols-outlined" style={{ fontSize: "16px" }}>support_agent</span>
-                              {t.assigned_to}
+                      </tr>
+                    ) : filteredTickets.length === 0 ? (
+                      <tr>
+                        <td colSpan="7" style={{ textAlign: "center", padding: "3rem", color: "var(--text-muted)" }}>
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem" }}>
+                            <span className="material-symbols-outlined" style={{ fontSize: "32px", color: "var(--text-dim)" }}>inbox</span>
+                            <span style={{ fontSize: "0.92rem", fontWeight: 500, color: "var(--text-secondary)" }}>
+                              {tickets.length === 0 ? "No incident tickets registered in database" : "No tickets match the selected filters"}
                             </span>
-                          ) : (
-                            <span style={{ color: "var(--text-muted)", fontStyle: "italic" }}>Unassigned</span>
-                          )}
-                        </td>
-                        <td>
-                          <div style={{ display: "flex", gap: "0.4rem" }}>
-                            {currentUser.role !== "EMPLOYEE" && t.status !== "CLOSED" && (
+                            {tickets.length > 0 && (search || filterCategory || filterPriority || filterStatus) && (
                               <button
                                 type="button"
                                 className="table-btn"
-                                onClick={() => setShowAssignTicketModal(t)}
-                                title="Assign ticket to an IT Support specialist"
+                                onClick={() => { setSearch(""); setFilterCategory(""); setFilterPriority(""); setFilterStatus(""); }}
+                                style={{ marginTop: "0.5rem" }}
                               >
-                                <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>person_add</span>
-                                <span>{t.assigned_to ? "Reassign" : "Assign"}</span>
-                              </button>
-                            )}
-                            {currentUser.role !== "EMPLOYEE" && t.status !== "RESOLVED" && t.status !== "CLOSED" && (
-                              <button className="table-btn" onClick={() => setShowResolveModal(t)}>
-                                <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>check</span>
-                                <span>Resolve</span>
-                              </button>
-                            )}
-                            {t.status === "RESOLVED" && (
-                              <button className="table-btn" onClick={async () => {
-                                await fetch(`${API_BASE}/tickets/${t.ticket_id}/close`, {
-                                  method: "POST",
-                                  headers: { "Authorization": `Bearer ${token}` }
-                                });
-                                addToast(`Closed ticket ${t.ticket_id}`, "success");
-                                fetchData();
-                              }}>
-                                <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>lock</span>
-                                <span>Close</span>
+                                Clear Filters
                               </button>
                             )}
                           </div>
                         </td>
                       </tr>
-                    ))}
-                    {filteredTickets.length === 0 && (
-                      <tr>
-                        <td colSpan="7" style={{ textAlign: "center", padding: "2.5rem", color: "var(--text-muted)" }}>
-                          No incident tickets match the selected filters.
-                        </td>
-                      </tr>
+                    ) : (
+                      filteredTickets.map(t => (
+                        <tr key={t.id || t.ticket_id}>
+                          <td style={{ fontWeight: 600, color: "var(--primary)", fontFamily: "var(--font-mono)" }}>
+                            #{t.ticket_id}
+                          </td>
+                          <td>
+                            <div style={{ fontWeight: 600 }}>{t.title}</div>
+                            <div style={{ fontSize: "0.82rem", color: "var(--text-secondary)", maxWidth: "380px" }}>{t.description}</div>
+                          </td>
+                          <td>
+                            <span className="badge-status" style={{ background: "var(--bg-subtle)", color: "var(--text-main)" }}>
+                              {t.category}
+                            </span>
+                          </td>
+                          <td>
+                            <span className={`badge-priority ${(t.priority || "").toLowerCase()}`}>
+                              {t.priority}
+                            </span>
+                          </td>
+                          <td>
+                            <span className={`badge-status ${(t.status || "").toLowerCase().replace('_', '-')}`}>
+                              {t.status}
+                            </span>
+                          </td>
+                          <td>{t.assigned_to || "Unassigned"}</td>
+                          <td>
+                            <div style={{ display: "flex", gap: "0.4rem" }}>
+                              {currentUser.role !== "EMPLOYEE" && t.status !== "CLOSED" && (
+                                <button className="table-btn" onClick={() => setShowAssignTicketModal(t)}>
+                                  <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>person_add</span>
+                                  <span>Assign</span>
+                                </button>
+                              )}
+                              {currentUser.role !== "EMPLOYEE" && t.status !== "RESOLVED" && t.status !== "CLOSED" && (
+                                <button className="table-btn" onClick={() => setShowResolveModal(t)}>
+                                  <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>check</span>
+                                  <span>Resolve</span>
+                                </button>
+                              )}
+                              {t.status === "RESOLVED" && (
+                                <button className="table-btn" onClick={async () => {
+                                  try {
+                                    const res = await fetch(`${API_BASE}/tickets/${t.ticket_id}/close`, {
+                                      method: "POST",
+                                      headers: { "Authorization": `Bearer ${token}` }
+                                    });
+                                    if (res.ok) {
+                                      addToast(`Closed ticket ${t.ticket_id}`, "success");
+                                      fetchData();
+                                    } else {
+                                      const err = await res.json().catch(() => null);
+                                      const msg = parseApiError(err, res.status, `Failed to close ticket ${t.ticket_id}`);
+                                      if (res.status === 401) handleLogout(msg);
+                                      else addToast(msg, "error");
+                                    }
+                                  } catch (e) {
+                                    addToast("Network failure. Could not reach server.", "error");
+                                  }
+                                }}>
+                                  <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>lock</span>
+                                  <span>Close</span>
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))
                     )}
                   </tbody>
                 </table>
@@ -2033,7 +2209,40 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
           {/* TAB 2: ASSET INVENTORY */}
           {(activeTab === "assets" || activeTab === "asset-management") && (
             <div>
-              <div className="filter-bar">
+              
+              {fetchError && (
+                <div style={{
+                  padding: "0.85rem 1.25rem",
+                  background: "var(--status-critical-bg)",
+                  border: "1px solid var(--status-critical)",
+                  borderRadius: "var(--radius-md)",
+                  marginBottom: "1.25rem",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  color: "var(--status-critical)"
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>error</span>
+                    <span style={{ fontSize: "0.88rem", fontWeight: 500 }}>{fetchError}</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="table-btn"
+                    onClick={() => fetchData()}
+                    style={{
+                      borderColor: "var(--status-critical)",
+                      color: "var(--status-critical)",
+                      background: "transparent",
+                      fontWeight: 600
+                    }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: "15px" }}>refresh</span>
+                    <span>Retry</span>
+                  </button>
+                </div>
+              )}
+<div className="filter-bar">
                 <div className="search-input-wrap">
                   <span className="material-symbols-outlined">search</span>
                   <input
@@ -2106,53 +2315,89 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredAssets.map(a => (
-                      <tr key={a.id || a.asset_id}>
-                        <td style={{ fontWeight: 600, color: "var(--primary)", fontFamily: "var(--font-mono)" }}>
-                          {a.asset_id}
+                    {loading && assets.length === 0 ? (
+                      <tr>
+                        <td colSpan="7" style={{ textAlign: "center", padding: "3rem", color: "var(--text-muted)" }}>
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.75rem" }}>
+                            <span className="material-symbols-outlined apex-spinner" style={{ fontSize: "28px", color: "var(--primary)" }}>sync</span>
+                            <span style={{ fontSize: "0.9rem", fontWeight: 500 }}>Loading hardware fleet inventory...</span>
+                          </div>
                         </td>
-                        <td style={{ fontWeight: 500 }}>{a.type}</td>
-                        <td>{a.brand} {a.model}</td>
-                        <td style={{ fontFamily: "var(--font-mono)", fontSize: "0.8rem", color: "var(--text-muted)" }}>
-                          {a.serial_number}
-                        </td>
-                        <td>
-                          <span className={`badge-status ${a.status === 'AVAILABLE' ? 'open' : a.status === 'ASSIGNED' ? 'resolved' : 'closed'}`}>
-                            {a.status}
-                          </span>
-                        </td>
-                        <td style={{ fontWeight: 500 }}>{a.assigned_to || "In Depository"}</td>
-                        <td>
-                          <div style={{ display: "flex", gap: "0.4rem" }}>
-                            {currentUser.role !== "EMPLOYEE" && a.status === "AVAILABLE" && (
-                              <button className="table-btn" onClick={() => setShowAssignModal(a)}>
-                                <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>assignment_ind</span>
-                                <span>Assign</span>
-                              </button>
-                            )}
-                            {currentUser.role !== "EMPLOYEE" && a.status === "ASSIGNED" && (
-                              <button className="table-btn" onClick={async () => {
-                                await fetch(`${API_BASE}/assets/${a.asset_id}/return`, {
-                                  method: "POST",
-                                  headers: { "Authorization": `Bearer ${token}` }
-                                });
-                                addToast(`Returned asset ${a.asset_id} to inventory`, "success");
-                                fetchData();
-                              }}>
-                                <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>keyboard_return</span>
-                                <span>Return</span>
+                      </tr>
+                    ) : filteredAssets.length === 0 ? (
+                      <tr>
+                        <td colSpan="7" style={{ textAlign: "center", padding: "3rem", color: "var(--text-muted)" }}>
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem" }}>
+                            <span className="material-symbols-outlined" style={{ fontSize: "32px", color: "var(--text-dim)" }}>devices</span>
+                            <span style={{ fontSize: "0.92rem", fontWeight: 500, color: "var(--text-secondary)" }}>
+                              {assets.length === 0 ? "No hardware devices registered in database" : "No hardware devices match the selected filters"}
+                            </span>
+                            {assets.length > 0 && (assetSearch || assetStatusFilter || assetTypeFilter) && (
+                              <button
+                                type="button"
+                                className="table-btn"
+                                onClick={() => { setAssetSearch(""); setAssetStatusFilter(""); setAssetTypeFilter(""); }}
+                                style={{ marginTop: "0.5rem" }}
+                              >
+                                Clear Filters
                               </button>
                             )}
                           </div>
                         </td>
                       </tr>
-                    ))}
-                    {filteredAssets.length === 0 && (
-                      <tr>
-                        <td colSpan="7" style={{ textAlign: "center", padding: "2.5rem", color: "var(--text-muted)" }}>
-                          No hardware devices match the selected filters.
-                        </td>
-                      </tr>
+                    ) : (
+                      filteredAssets.map(a => (
+                        <tr key={a.id || a.asset_id}>
+                          <td style={{ fontWeight: 600, color: "var(--primary)", fontFamily: "var(--font-mono)" }}>
+                            {a.asset_id}
+                          </td>
+                          <td style={{ fontWeight: 500 }}>{a.type}</td>
+                          <td>{a.brand} {a.model}</td>
+                          <td style={{ fontFamily: "var(--font-mono)", fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                            {a.serial_number}
+                          </td>
+                          <td>
+                            <span className={`badge-status ${a.status === 'AVAILABLE' ? 'open' : a.status === 'ASSIGNED' ? 'resolved' : 'closed'}`}>
+                              {a.status}
+                            </span>
+                          </td>
+                          <td style={{ fontWeight: 500 }}>{a.assigned_to || "In Depository"}</td>
+                          <td>
+                            <div style={{ display: "flex", gap: "0.4rem" }}>
+                              {currentUser.role !== "EMPLOYEE" && a.status === "AVAILABLE" && (
+                                <button className="table-btn" onClick={() => setShowAssignModal(a)}>
+                                  <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>assignment_ind</span>
+                                  <span>Assign</span>
+                                </button>
+                              )}
+                              {currentUser.role !== "EMPLOYEE" && a.status === "ASSIGNED" && (
+                                <button className="table-btn" onClick={async () => {
+                                  try {
+                                    const res = await fetch(`${API_BASE}/assets/${a.asset_id}/return`, {
+                                      method: "POST",
+                                      headers: { "Authorization": `Bearer ${token}` }
+                                    });
+                                    if (res.ok) {
+                                      addToast(`Returned asset ${a.asset_id} to inventory`, "success");
+                                      fetchData();
+                                    } else {
+                                      const err = await res.json().catch(() => null);
+                                      const msg = parseApiError(err, res.status, `Failed to return asset ${a.asset_id}`);
+                                      if (res.status === 401) handleLogout(msg);
+                                      else addToast(msg, "error");
+                                    }
+                                  } catch (e) {
+                                    addToast("Network failure. Could not reach server.", "error");
+                                  }
+                                }}>
+                                  <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>keyboard_return</span>
+                                  <span>Return</span>
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))
                     )}
                   </tbody>
                 </table>
@@ -2164,7 +2409,40 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
           {(activeTab === "sla" || activeTab === "reports" || activeTab === "sla-monitor") && (
             <div className="space-y-6">
               {/* SLA KPI Summary Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              
+              {fetchError && (
+                <div style={{
+                  padding: "0.85rem 1.25rem",
+                  background: "var(--status-critical-bg)",
+                  border: "1px solid var(--status-critical)",
+                  borderRadius: "var(--radius-md)",
+                  marginBottom: "1.25rem",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  color: "var(--status-critical)"
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>error</span>
+                    <span style={{ fontSize: "0.88rem", fontWeight: 500 }}>{fetchError}</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="table-btn"
+                    onClick={() => fetchData()}
+                    style={{
+                      borderColor: "var(--status-critical)",
+                      color: "var(--status-critical)",
+                      background: "transparent",
+                      fontWeight: 600
+                    }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: "15px" }}>refresh</span>
+                    <span>Retry</span>
+                  </button>
+                </div>
+              )}
+<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="bg-surface-container-lowest p-5 rounded-xl shadow-sm">
                   <div className="text-[11px] font-medium uppercase tracking-wider text-on-surface-variant font-label">
                     SLA Compliance Rate
@@ -2298,7 +2576,40 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
           {/* TAB 4: EMPLOYEE DIRECTORY */}
           {(activeTab === "employees" || activeTab === "users" || activeTab === "user-directory") && currentUser.role !== "EMPLOYEE" && (
             <div>
-              <div className="filter-bar">
+              
+              {fetchError && (
+                <div style={{
+                  padding: "0.85rem 1.25rem",
+                  background: "var(--status-critical-bg)",
+                  border: "1px solid var(--status-critical)",
+                  borderRadius: "var(--radius-md)",
+                  marginBottom: "1.25rem",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  color: "var(--status-critical)"
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>error</span>
+                    <span style={{ fontSize: "0.88rem", fontWeight: 500 }}>{fetchError}</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="table-btn"
+                    onClick={() => fetchData()}
+                    style={{
+                      borderColor: "var(--status-critical)",
+                      color: "var(--status-critical)",
+                      background: "transparent",
+                      fontWeight: 600
+                    }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: "15px" }}>refresh</span>
+                    <span>Retry</span>
+                  </button>
+                </div>
+              )}
+<div className="filter-bar">
                 <div className="search-input-wrap">
                   <span className="material-symbols-outlined">search</span>
                   <input
@@ -2361,51 +2672,78 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredUsers.map(u => (
-                      <tr key={u.id || u.user_id}>
-                        <td style={{ fontWeight: 600, color: "var(--primary)", fontFamily: "var(--font-mono)" }}>
-                          {u.user_id}
-                        </td>
-                        <td style={{ fontWeight: 500 }}>{u.name}</td>
-                        <td>{u.email}</td>
-                        <td>
-                          <span className={`badge-priority ${(u.role || "").toLowerCase() === 'admin' ? 'critical' : (u.role || "").toLowerCase() === 'support' ? 'high' : 'medium'}`}>
-                            {u.role}
-                          </span>
-                        </td>
-                        <td>
-                          <span className={`badge-status ${u.status === 'ACTIVE' ? 'resolved' : 'closed'}`}>
-                            {u.status}
-                          </span>
-                        </td>
-                        <td>
-                          {u.invitation_token ? (
-                            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                              <code style={{ fontSize: "0.75rem", fontFamily: "var(--font-mono)", background: "var(--bg-subtle)", padding: "0.2rem 0.4rem", borderRadius: "4px" }}>
-                                {u.invitation_token.slice(0, 16)}...
-                              </code>
-                              <button
-                                className="table-btn"
-                                onClick={() => {
-                                  navigator.clipboard.writeText(u.invitation_token);
-                                  addToast(`Copied token for ${u.name}`, "success");
-                                }}
-                              >
-                                Copy
-                              </button>
-                            </div>
-                          ) : (
-                            <span style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>Activated</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                    {filteredUsers.length === 0 && (
+                    {loading && usersList.length === 0 ? (
                       <tr>
-                        <td colSpan="6" style={{ textAlign: "center", padding: "2.5rem", color: "var(--text-muted)" }}>
-                          No employees match the selected filters.
+                        <td colSpan="6" style={{ textAlign: "center", padding: "3rem", color: "var(--text-muted)" }}>
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.75rem" }}>
+                            <span className="material-symbols-outlined apex-spinner" style={{ fontSize: "28px", color: "var(--primary)" }}>sync</span>
+                            <span style={{ fontSize: "0.9rem", fontWeight: 500 }}>Loading workforce accounts...</span>
+                          </div>
                         </td>
                       </tr>
+                    ) : filteredUsers.length === 0 ? (
+                      <tr>
+                        <td colSpan="6" style={{ textAlign: "center", padding: "3rem", color: "var(--text-muted)" }}>
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem" }}>
+                            <span className="material-symbols-outlined" style={{ fontSize: "32px", color: "var(--text-dim)" }}>badge</span>
+                            <span style={{ fontSize: "0.92rem", fontWeight: 500, color: "var(--text-secondary)" }}>
+                              {usersList.length === 0 ? "No workforce accounts enrolled in directory" : "No employees match the selected filters"}
+                            </span>
+                            {usersList.length > 0 && (userSearch || userRoleFilter) && (
+                              <button
+                                type="button"
+                                className="table-btn"
+                                onClick={() => { setUserSearch(""); setUserRoleFilter(""); }}
+                                style={{ marginTop: "0.5rem" }}
+                              >
+                                Clear Filters
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredUsers.map(u => (
+                        <tr key={u.id || u.user_id}>
+                          <td style={{ fontWeight: 600, color: "var(--primary)", fontFamily: "var(--font-mono)" }}>
+                            {u.user_id}
+                          </td>
+                          <td style={{ fontWeight: 500 }}>{u.name}</td>
+                          <td>{u.email}</td>
+                          <td>
+                            <span className={`badge-priority ${(u.role || "").toLowerCase() === 'admin' ? 'critical' : (u.role || "").toLowerCase() === 'support' ? 'high' : 'medium'}`}>
+                              {u.role}
+                            </span>
+                          </td>
+                          <td>
+                            <span className={`badge-status ${u.status === 'ACTIVE' ? 'resolved' : 'closed'}`}>
+                              {u.status}
+                            </span>
+                          </td>
+                          <td>
+                            {u.invitation_token ? (
+                              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                                <code style={{ fontSize: "0.75rem", fontFamily: "var(--font-mono)", background: "var(--bg-subtle)", padding: "0.2rem 0.4rem", borderRadius: "4px" }}>
+                                  {u.invitation_token.slice(0, 16)}...
+                                </code>
+                                <button
+                                  className="table-btn"
+                                  onClick={() => {
+                                    if (navigator.clipboard) {
+                                      navigator.clipboard.writeText(u.invitation_token);
+                                    }
+                                    addToast(`Copied token for ${u.name}`, "success");
+                                  }}
+                                >
+                                  Copy
+                                </button>
+                              </div>
+                            ) : (
+                              <span style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>Activated</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))
                     )}
                   </tbody>
                 </table>
@@ -2416,7 +2754,40 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
           {/* TAB 5: AUDIT LOGS & LIVE STREAM */}
           {(activeTab === "audit" || activeTab === "events" || activeTab === "settings-audit-logs" || activeTab === "audit-logs") && (
             <div className="space-y-6">
-              <div className="table-card">
+              
+              {fetchError && (
+                <div style={{
+                  padding: "0.85rem 1.25rem",
+                  background: "var(--status-critical-bg)",
+                  border: "1px solid var(--status-critical)",
+                  borderRadius: "var(--radius-md)",
+                  marginBottom: "1.25rem",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  color: "var(--status-critical)"
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>error</span>
+                    <span style={{ fontSize: "0.88rem", fontWeight: 500 }}>{fetchError}</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="table-btn"
+                    onClick={() => fetchData()}
+                    style={{
+                      borderColor: "var(--status-critical)",
+                      color: "var(--status-critical)",
+                      background: "transparent",
+                      fontWeight: 600
+                    }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: "15px" }}>refresh</span>
+                    <span>Retry</span>
+                  </button>
+                </div>
+              )}
+<div className="table-card">
                 <div className="table-header-box">
                   <div>
                     <div className="table-header-title">System Audit Ledger</div>
@@ -2444,30 +2815,45 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                     </tr>
                   </thead>
                   <tbody>
-                    {auditLogs.map((log, idx) => (
-                      <tr key={log.id || idx}>
-                        <td style={{ fontFamily: "var(--font-mono)", fontSize: "0.8rem", color: "var(--text-muted)", whiteSpace: "nowrap" }}>
-                          {log.timestamp ? new Date(log.timestamp).toLocaleString() : "Live"}
-                        </td>
-                        <td style={{ fontWeight: 600, color: "var(--primary)", fontFamily: "var(--font-mono)" }}>
-                          {log.user_id}
-                        </td>
-                        <td>
-                          <span className="badge-status open font-mono text-xs">
-                            {log.action}
-                          </span>
-                        </td>
-                        <td style={{ fontSize: "0.85rem", color: "var(--text-main)" }}>
-                          {log.details}
-                        </td>
-                      </tr>
-                    ))}
-                    {auditLogs.length === 0 && (
+                    {loading && auditLogs.length === 0 ? (
                       <tr>
-                        <td colSpan="4" style={{ textAlign: "center", padding: "2.5rem", color: "var(--text-muted)" }}>
-                          No audit events recorded yet.
+                        <td colSpan="4" style={{ textAlign: "center", padding: "3rem", color: "var(--text-muted)" }}>
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.75rem" }}>
+                            <span className="material-symbols-outlined apex-spinner" style={{ fontSize: "28px", color: "var(--primary)" }}>sync</span>
+                            <span style={{ fontSize: "0.9rem", fontWeight: 500 }}>Loading system audit ledger...</span>
+                          </div>
                         </td>
                       </tr>
+                    ) : auditLogs.length === 0 ? (
+                      <tr>
+                        <td colSpan="4" style={{ textAlign: "center", padding: "3rem", color: "var(--text-muted)" }}>
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem" }}>
+                            <span className="material-symbols-outlined" style={{ fontSize: "32px", color: "var(--text-dim)" }}>history</span>
+                            <span style={{ fontSize: "0.92rem", fontWeight: 500, color: "var(--text-secondary)" }}>
+                              No audit events recorded yet.
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      auditLogs.map((log, idx) => (
+                        <tr key={log.id || idx}>
+                          <td style={{ fontFamily: "var(--font-mono)", fontSize: "0.8rem", color: "var(--text-muted)", whiteSpace: "nowrap" }}>
+                            {log.timestamp ? new Date(log.timestamp).toLocaleString() : "Live"}
+                          </td>
+                          <td style={{ fontWeight: 600, color: "var(--primary)", fontFamily: "var(--font-mono)" }}>
+                            {log.user_id}
+                          </td>
+                          <td>
+                            <span className="badge-status open font-mono text-xs">
+                              {log.action}
+                            </span>
+                          </td>
+                          <td style={{ fontSize: "0.85rem", color: "var(--text-main)" }}>
+                            {log.details}
+                          </td>
+                        </tr>
+                      ))
                     )}
                   </tbody>
                 </table>
@@ -2508,64 +2894,16 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
       {/* REGISTER ASSET MODAL */}
       {showCreateAssetModal && (
-        <div className="modal-backdrop">
-          <div className="modal-surface">
-            <h2 className="modal-title">Register Hardware Asset</h2>
-            <p className="modal-desc">Add a new IT hardware device to the enterprise inventory.</p>
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              const f = e.target;
-              const payload = {
-                type: f.type.value,
-                brand: f.brand.value,
-                model: f.model.value,
-                serial_number: f.serial.value,
-                status: "AVAILABLE"
-              };
-              const res = await fetch(`${API_BASE}/assets`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-                body: JSON.stringify(payload)
-              });
-              if (res.ok) {
-                setShowCreateAssetModal(false);
-                fetchData();
-                addToast("Hardware asset registered successfully!", "success");
-              } else {
-                const err = await res.json();
-                addToast(err.detail || "Failed to register asset", "error");
-              }
-            }}>
-              <div className="form-field-group">
-                <label className="form-field-label">Asset Type</label>
-                <select name="type" className="apex-form-input" style={{ paddingLeft: "1rem" }} required>
-                  <option value="Laptop">Laptop Workstation</option>
-                  <option value="Monitor">External Monitor</option>
-                  <option value="Keyboard">Mechanical Keyboard</option>
-                  <option value="Server">Edge Rack Server</option>
-                </select>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.15rem" }}>
-                <div>
-                  <label className="form-field-label">Brand</label>
-                  <input name="brand" type="text" className="apex-form-input" style={{ paddingLeft: "1rem" }} placeholder="Dell / Apple" required />
-                </div>
-                <div>
-                  <label className="form-field-label">Model</label>
-                  <input name="model" type="text" className="apex-form-input" style={{ paddingLeft: "1rem" }} placeholder="Latitude / MacBook Pro" required />
-                </div>
-              </div>
-              <div className="form-field-group">
-                <label className="form-field-label">Serial Number</label>
-                <input name="serial" type="text" className="apex-form-input" style={{ paddingLeft: "1rem", fontFamily: "var(--font-mono)" }} placeholder="SN-XXXX-9999" required />
-              </div>
-              <div className="modal-actions-row">
-                <button type="button" className="btn-secondary-parchment" onClick={() => setShowCreateAssetModal(false)}>Cancel</button>
-                <button type="submit" className="btn-primary-terracotta">Register Device</button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <RegisterAssetModal
+          token={token}
+          onClose={() => setShowCreateAssetModal(false)}
+          addToast={addToast}
+          onSuccess={(newAsset) => {
+            setShowCreateAssetModal(false);
+            fetchData();
+            addToast(`Hardware asset ${newAsset.asset_id} registered successfully!`, "success");
+          }}
+        />
       )}
 
       {/* INVITE EMPLOYEE MODAL (ADMIN ONLY) */}
@@ -2574,40 +2912,73 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
           <div className="modal-surface">
             <h2 className="modal-title">Generate Employee Invitation</h2>
             <p className="modal-desc">Issues a cryptographically hashed single-use onboarding token.</p>
+
+            {inviteError && (
+              <div style={{
+                padding: "0.75rem 1rem",
+                background: "var(--status-critical-bg)",
+                border: "1px solid var(--status-critical)",
+                borderRadius: "var(--radius-md)",
+                marginBottom: "1.15rem",
+                color: "var(--status-critical)",
+                fontSize: "0.84rem",
+                display: "flex",
+                alignItems: "center",
+                gap: "0.5rem"
+              }}>
+                <span className="material-symbols-outlined" style={{ fontSize: "18px" }}>error</span>
+                <span>{inviteError}</span>
+              </div>
+            )}
+
             <form onSubmit={async (e) => {
               e.preventDefault();
+              setInviteError("");
               const f = e.target;
               const payload = {
-                name: f.name.value,
-                email: f.email.value,
+                name: f.name.value.trim(),
+                email: f.email.value.trim(),
                 role: f.role.value
               };
-              const res = await fetch(`${API_BASE}/users/invite`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-                body: JSON.stringify(payload)
-              });
-              if (res.ok) {
-                const data = await res.json();
-                setShowInviteModal(false);
-                fetchData();
-                navigator.clipboard.writeText(data.invitation_token);
-                addToast(`Token generated & copied to clipboard! (${data.invitation_token.slice(0, 16)}...)`, "success");
-              } else {
-                const err = await res.json();
-                addToast(err.detail || "Failed to invite employee", "error");
+              setIsSubmittingInvite(true);
+              try {
+                const res = await fetch(`${API_BASE}/users/invite`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+                  body: JSON.stringify(payload)
+                });
+                if (res.ok) {
+                  const data = await res.json();
+                  setShowInviteModal(false);
+                  fetchData();
+                  if (navigator.clipboard) {
+                    navigator.clipboard.writeText(data.invitation_token);
+                  }
+                  addToast(`Token generated & copied to clipboard! (${data.invitation_token.slice(0, 16)}...)`, "success");
+                } else {
+                  const err = await res.json().catch(() => null);
+                  const msg = parseApiError(err, res.status, "Failed to invite employee");
+                  setInviteError(msg);
+                  addToast(msg, "error");
+                }
+              } catch (netErr) {
+                const msg = "Network error: Could not reach server to invite employee.";
+                setInviteError(msg);
+                addToast(msg, "error");
+              } finally {
+                setIsSubmittingInvite(false);
               }
             }}>
               <div className="form-field-group">
-                <label className="form-field-label">Full Name</label>
+                <label className="form-field-label">Full Name *</label>
                 <input name="name" type="text" className="apex-form-input" style={{ paddingLeft: "1rem" }} placeholder="Aarav Verma" required />
               </div>
               <div className="form-field-group">
-                <label className="form-field-label">Work Email</label>
+                <label className="form-field-label">Work Email *</label>
                 <input name="email" type="email" className="apex-form-input" style={{ paddingLeft: "1rem" }} placeholder="aarav.verma@company.com" required />
               </div>
               <div className="form-field-group">
-                <label className="form-field-label">Role Privilege</label>
+                <label className="form-field-label">Role Privilege *</label>
                 <select name="role" className="apex-form-input" style={{ paddingLeft: "1rem" }} required>
                   <option value="EMPLOYEE">Employee (Standard Access)</option>
                   <option value="SUPPORT">IT Support (Ticket Resolution)</option>
@@ -2615,8 +2986,10 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                 </select>
               </div>
               <div className="modal-actions-row">
-                <button type="button" className="btn-secondary-parchment" onClick={() => setShowInviteModal(false)}>Cancel</button>
-                <button type="submit" className="btn-primary-terracotta">Generate Invitation Token</button>
+                <button type="button" className="btn-secondary-parchment" onClick={() => { setShowInviteModal(false); setInviteError(""); }} disabled={isSubmittingInvite}>Cancel</button>
+                <button type="submit" className="btn-primary-terracotta" disabled={isSubmittingInvite}>
+                  {isSubmittingInvite ? "Generating..." : "Generate Invitation Token"}
+                </button>
               </div>
             </form>
           </div>
@@ -2629,25 +3002,67 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
           <div className="modal-surface">
             <h2 className="modal-title">Resolve Ticket ({showResolveModal.ticket_id})</h2>
             <p className="modal-desc">Record resolution actions and close out SLA timers.</p>
+
+            {resolveModalError && (
+              <div style={{
+                padding: "0.75rem 1rem",
+                background: "var(--status-critical-bg)",
+                border: "1px solid var(--status-critical)",
+                borderRadius: "var(--radius-md)",
+                marginBottom: "1.15rem",
+                color: "var(--status-critical)",
+                fontSize: "0.84rem",
+                display: "flex",
+                alignItems: "center",
+                gap: "0.5rem"
+              }}>
+                <span className="material-symbols-outlined" style={{ fontSize: "18px" }}>error</span>
+                <span>{resolveModalError}</span>
+              </div>
+            )}
+
             <form onSubmit={async (e) => {
               e.preventDefault();
-              const notes = e.target.notes.value;
-              await fetch(`${API_BASE}/tickets/${showResolveModal.ticket_id}/resolve`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-                body: JSON.stringify({ resolution: notes })
-              });
-              setShowResolveModal(null);
-              fetchData();
-              addToast(`Resolved ticket ${showResolveModal.ticket_id}`, "success");
+              setResolveModalError("");
+              const notes = e.target.notes.value.trim();
+              if (!notes || notes.length < 5) {
+                setResolveModalError("Resolution notes must be at least 5 characters.");
+                return;
+              }
+              setIsSubmittingResolve(true);
+              try {
+                const res = await fetch(`${API_BASE}/tickets/${showResolveModal.ticket_id}/resolve`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+                  body: JSON.stringify({ resolution: notes })
+                });
+                if (res.ok) {
+                  setShowResolveModal(null);
+                  fetchData();
+                  addToast(`Resolved ticket ${showResolveModal.ticket_id}`, "success");
+                } else {
+                  const err = await res.json().catch(() => null);
+                  const msg = parseApiError(err, res.status, "Failed to resolve ticket");
+                  setResolveModalError(msg);
+                  addToast(msg, "error");
+                }
+              } catch (netErr) {
+                const msg = "Network failure: Could not reach server to resolve ticket.";
+                setResolveModalError(msg);
+                addToast(msg, "error");
+              } finally {
+                setIsSubmittingResolve(false);
+              }
             }}>
               <div className="form-field-group">
-                <label className="form-field-label">Resolution Summary</label>
+                <label className="form-field-label">Resolution Summary *</label>
                 <textarea name="notes" className="apex-form-input" style={{ height: "100px", padding: "0.75rem 1rem" }} placeholder="Detail steps taken to diagnose and resolve..." required minLength="5" />
               </div>
               <div className="modal-actions-row">
-                <button type="button" className="btn-secondary-parchment" onClick={() => setShowResolveModal(null)}>Cancel</button>
-                <button type="submit" className="btn-primary-terracotta">Confirm Resolution</button>
+                <button type="button" className="btn-secondary-parchment" onClick={() => { setShowResolveModal(null); setResolveModalError(""); }} disabled={isSubmittingResolve}>Cancel</button>
+                <button type="submit" className="btn-primary-terracotta" disabled={isSubmittingResolve}>
+                  {isSubmittingResolve ? "Confirming..." : "Confirm Resolution"}
+                </button>
               </div>
             </form>
           </div>
@@ -2662,9 +3077,34 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
             <p className="modal-desc">
               Assign this incident to an IT Support Engineer for investigation and resolution.
             </p>
+
+            {assignTicketError && (
+              <div style={{
+                padding: "0.75rem 1rem",
+                background: "var(--status-critical-bg)",
+                border: "1px solid var(--status-critical)",
+                borderRadius: "var(--radius-md)",
+                marginBottom: "1.15rem",
+                color: "var(--status-critical)",
+                fontSize: "0.84rem",
+                display: "flex",
+                alignItems: "center",
+                gap: "0.5rem"
+              }}>
+                <span className="material-symbols-outlined" style={{ fontSize: "18px" }}>error</span>
+                <span>{assignTicketError}</span>
+              </div>
+            )}
+
             <form onSubmit={async (e) => {
               e.preventDefault();
-              const assignedTo = e.target.assignedTo.value;
+              setAssignTicketError("");
+              const assignedTo = e.target.assignedTo?.value;
+              if (!assignedTo) {
+                setAssignTicketError("Please select an authorized IT Support specialist.");
+                return;
+              }
+              setIsSubmittingAssignTicket(true);
               try {
                 const res = await fetch(`${API_BASE}/tickets/${showAssignTicketModal.ticket_id}/assign`, {
                   method: "POST",
@@ -2676,11 +3116,17 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                   fetchData();
                   addToast(`Ticket ${showAssignTicketModal.ticket_id} assigned to ${assignedTo}!`, "success");
                 } else {
-                  const err = await res.json();
-                  addToast(err.detail || "Failed to assign ticket", "error");
+                  const err = await res.json().catch(() => null);
+                  const msg = parseApiError(err, res.status, "Failed to assign ticket");
+                  setAssignTicketError(msg);
+                  addToast(msg, "error");
                 }
               } catch (err) {
-                addToast("Error assigning ticket", "error");
+                const msg = "Network error: Could not reach server to assign ticket.";
+                setAssignTicketError(msg);
+                addToast(msg, "error");
+              } finally {
+                setIsSubmittingAssignTicket(false);
               }
             }}>
               <div className="form-field-group">
@@ -2689,7 +3135,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                   type="text"
                   className="apex-form-input"
                   style={{ background: "var(--bg-subtle)", cursor: "not-allowed", paddingLeft: "1rem" }}
-                  value={`${showAssignTicketModal.ticket_id} — ${showAssignTicketModal.title}`}
+                  value={`${showAssignTicketModal.ticket_id} - ${showAssignTicketModal.title}`}
                   readOnly
                 />
               </div>
@@ -2697,29 +3143,25 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
               <div className="form-field-group">
                 <label className="form-field-label">Select IT Support Engineer</label>
                 <select name="assignedTo" className="apex-form-input" style={{ paddingLeft: "1rem" }} required>
-                  {usersList.filter(u => u.role === "SUPPORT").length > 0 ? (
+                  {usersList.filter(u => u.role === "SUPPORT" || u.role === "ADMIN").length > 0 ? (
                     usersList
-                      .filter(u => u.role === "SUPPORT")
+                      .filter(u => u.role === "SUPPORT" || u.role === "ADMIN")
                       .map(u => (
                         <option key={u.user_id} value={u.user_id}>
-                          {u.user_id} — {u.name} (IT Support Specialist · {u.department || "IT Support"})
+                          {u.user_id} - {u.name} ({u.role} | {u.department || "IT Support"})
                         </option>
                       ))
                   ) : (
-                    <>
-                      <option value="IT-501">IT-501 — Priya Patel (IT Support Specialist)</option>
-                      <option value="IT-502">IT-502 — Amit Verma (IT Support Specialist)</option>
-                      <option value="IT-503">IT-503 — Karthik Raman (Infrastructure Support)</option>
-                      <option value="IT-504">IT-504 — Deepa Krishnan (Cloud Support)</option>
-                      <option value="IT-505">IT-505 — Sanjay Deshmukh (Hardware Operations)</option>
-                    </>
+                    <option value="" disabled>No IT Support engineers currently available</option>
                   )}
                 </select>
               </div>
 
               <div className="modal-actions-row">
-                <button type="button" className="btn-secondary-parchment" onClick={() => setShowAssignTicketModal(null)}>Cancel</button>
-                <button type="submit" className="btn-primary-terracotta">Assign Engineer</button>
+                <button type="button" className="btn-secondary-parchment" onClick={() => { setShowAssignTicketModal(null); setAssignTicketError(""); }} disabled={isSubmittingAssignTicket}>Cancel</button>
+                <button type="submit" className="btn-primary-terracotta" disabled={isSubmittingAssignTicket || usersList.filter(u => u.role === "SUPPORT" || u.role === "ADMIN").length === 0}>
+                  {isSubmittingAssignTicket ? "Assigning..." : "Assign Engineer"}
+                </button>
               </div>
             </form>
           </div>
@@ -2732,41 +3174,77 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
           <div className="modal-surface">
             <h2 className="modal-title">Assign Asset ({showAssignModal.asset_id})</h2>
             <p className="modal-desc">Grant custody of this hardware asset to an authorized employee.</p>
+
+            {assignAssetError && (
+              <div style={{
+                padding: "0.75rem 1rem",
+                background: "var(--status-critical-bg)",
+                border: "1px solid var(--status-critical)",
+                borderRadius: "var(--radius-md)",
+                marginBottom: "1.15rem",
+                color: "var(--status-critical)",
+                fontSize: "0.84rem",
+                display: "flex",
+                alignItems: "center",
+                gap: "0.5rem"
+              }}>
+                <span className="material-symbols-outlined" style={{ fontSize: "18px" }}>error</span>
+                <span>{assignAssetError}</span>
+              </div>
+            )}
+
             <form onSubmit={async (e) => {
               e.preventDefault();
-              const empId = e.target.empId.value;
-              await fetch(`${API_BASE}/assets/${showAssignModal.asset_id}/assign`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-                body: JSON.stringify({ employee_id: empId, notes: "Assigned via AssetDesk console" })
-              });
-              setShowAssignModal(null);
-              fetchData();
-              addToast(`Assigned ${showAssignModal.asset_id} to ${empId}`, "success");
+              setAssignAssetError("");
+              const empId = e.target.empId?.value;
+              if (!empId) {
+                setAssignAssetError("Please select an employee custodian.");
+                return;
+              }
+              setIsSubmittingAssignAsset(true);
+              try {
+                const res = await fetch(`${API_BASE}/assets/${showAssignModal.asset_id}/assign`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+                  body: JSON.stringify({ employee_id: empId, notes: "Assigned via AssetDesk console" })
+                });
+                if (res.ok) {
+                  setShowAssignModal(null);
+                  fetchData();
+                  addToast(`Assigned ${showAssignModal.asset_id} to ${empId}`, "success");
+                } else {
+                  const err = await res.json().catch(() => null);
+                  const msg = parseApiError(err, res.status, "Failed to assign asset");
+                  setAssignAssetError(msg);
+                  addToast(msg, "error");
+                }
+              } catch (netErr) {
+                const msg = "Network error: Could not reach server to assign asset.";
+                setAssignAssetError(msg);
+                addToast(msg, "error");
+              } finally {
+                setIsSubmittingAssignAsset(false);
+              }
             }}>
               <div className="form-field-group">
                 <label className="form-field-label">Employee Custodian</label>
-                <select name="empId" className="apex-form-input" style={{ paddingLeft: "1rem" }}>
+                <select name="empId" className="apex-form-input" style={{ paddingLeft: "1rem" }} required>
                   {usersList.length > 0 ? (
                     usersList.map(u => (
                       <option key={u.user_id} value={u.user_id}>
-                        {u.user_id} ({u.name} — {u.role})
+                        {u.user_id} ({u.name} - {u.role})
                       </option>
                     ))
                   ) : (
-                    <>
-                      <option value="EMP-101">EMP-101 (Aarav Verma)</option>
-                      <option value="EMP-102">EMP-102 (Ananya Iyer)</option>
-                      <option value="EMP-103">EMP-103 (Vikram Singh)</option>
-                      <option value="EMP-104">EMP-104 (Sneha Kulkarni)</option>
-                      <option value="EMP-105">EMP-105 (Rohan Gupta)</option>
-                    </>
+                    <option value="" disabled>No workforce employees currently loaded</option>
                   )}
                 </select>
               </div>
               <div className="modal-actions-row">
-                <button type="button" className="btn-secondary-parchment" onClick={() => setShowAssignModal(null)}>Cancel</button>
-                <button type="submit" className="btn-primary-terracotta">Authorize Custody</button>
+                <button type="button" className="btn-secondary-parchment" onClick={() => { setShowAssignModal(null); setAssignAssetError(""); }} disabled={isSubmittingAssignAsset}>Cancel</button>
+                <button type="submit" className="btn-primary-terracotta" disabled={isSubmittingAssignAsset || usersList.length === 0}>
+                  {isSubmittingAssignAsset ? "Authorizing..." : "Authorize Custody"}
+                </button>
               </div>
             </form>
           </div>
@@ -2822,10 +3300,270 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
   );
 }
 
+// Modal Component for Registering Hardware Assets (Day 1 Critical Fix)
+function RegisterAssetModal({ onClose, token, onSuccess, addToast }) {
+  const [form, setForm] = useState({
+    asset_id: "",
+    type: "Laptop",
+    brand: "",
+    model: "",
+    serial_number: ""
+  });
+  const [formErrors, setFormErrors] = useState({});
+  const [submitting, setSubmitting] = useState(false);
+  const [apiError, setApiError] = useState("");
+
+  const validate = () => {
+    const errs = {};
+    const aid = (form.asset_id || "").trim();
+    if (!aid) {
+      errs.asset_id = "Asset ID is required (e.g. LAP-1050).";
+    } else if (!/^[A-Za-z0-9_-]{3,30}$/.test(aid)) {
+      errs.asset_id = "Asset ID must be 3-30 characters (letters, numbers, hyphens).";
+    }
+
+    if (!form.type) {
+      errs.type = "Please select an asset type.";
+    }
+
+    if (!(form.brand || "").trim()) {
+      errs.brand = "Brand is required (e.g. Dell, Apple).";
+    }
+
+    if (!(form.model || "").trim()) {
+      errs.model = "Model is required (e.g. Latitude 5440).";
+    }
+
+    const sn = (form.serial_number || "").trim();
+    if (!sn) {
+      errs.serial_number = "Serial number is required.";
+    } else if (sn.length < 3) {
+      errs.serial_number = "Serial number must be at least 3 characters.";
+    }
+
+    return errs;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setApiError("");
+    const errs = validate();
+    if (Object.keys(errs).length > 0) {
+      setFormErrors(errs);
+      return;
+    }
+
+    setSubmitting(true);
+    const payload = {
+      asset_id: form.asset_id.trim().toUpperCase(),
+      type: form.type,
+      brand: form.brand.trim(),
+      model: form.model.trim(),
+      serial_number: form.serial_number.trim(),
+      status: "AVAILABLE"
+    };
+
+    try {
+      const res = await fetch(`${API_BASE}/assets`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.status === 201) {
+        const data = await res.json();
+        onSuccess(data);
+      } else {
+        const errData = await res.json().catch(() => null);
+        const errorMsg = parseApiError(errData, res.status, "Failed to register hardware asset.");
+        setApiError(errorMsg);
+        if (addToast) addToast(errorMsg, "error");
+      }
+    } catch (networkErr) {
+      const msg = "Network connection failed. Could not reach server to register device.";
+      setApiError(msg);
+      if (addToast) addToast(msg, "error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal-surface">
+        <h2 className="modal-title">Register Hardware Asset</h2>
+        <p className="modal-desc">Add a new IT hardware device to the enterprise inventory.</p>
+
+        {apiError && (
+          <div style={{
+            padding: "0.75rem 1rem",
+            background: "var(--status-critical-bg)",
+            border: "1px solid var(--status-critical)",
+            borderRadius: "var(--radius-md)",
+            marginBottom: "1.15rem",
+            color: "var(--status-critical)",
+            fontSize: "0.84rem",
+            display: "flex",
+            alignItems: "center",
+            gap: "0.5rem"
+          }}>
+            <span className="material-symbols-outlined" style={{ fontSize: "18px" }}>error</span>
+            <span>{apiError}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} noValidate>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.15rem" }}>
+            <div>
+              <label className="form-field-label">Asset ID *</label>
+              <input
+                name="asset_id"
+                type="text"
+                className="apex-form-input"
+                style={{ paddingLeft: "1rem", fontFamily: "var(--font-mono)" }}
+                placeholder="e.g. LAP-1050"
+                value={form.asset_id}
+                onChange={e => {
+                  setForm(prev => ({ ...prev, asset_id: e.target.value.toUpperCase() }));
+                  if (formErrors.asset_id) setFormErrors(prev => ({ ...prev, asset_id: null }));
+                }}
+                required
+              />
+              {formErrors.asset_id && (
+                <span style={{ color: "var(--status-critical)", fontSize: "0.78rem", marginTop: "0.3rem", display: "block" }}>
+                  {formErrors.asset_id}
+                </span>
+              )}
+            </div>
+
+            <div>
+              <label className="form-field-label">Asset Type *</label>
+              <select
+                name="type"
+                className="apex-form-input"
+                style={{ paddingLeft: "1rem" }}
+                value={form.type}
+                onChange={e => {
+                  setForm(prev => ({ ...prev, type: e.target.value }));
+                  if (formErrors.type) setFormErrors(prev => ({ ...prev, type: null }));
+                }}
+                required
+              >
+                <option value="Laptop">Laptop Workstation</option>
+                <option value="Monitor">External Monitor</option>
+                <option value="Keyboard">Mechanical Keyboard</option>
+                <option value="Mouse">Optical Mouse</option>
+                <option value="Printer">Network Laser Printer</option>
+                <option value="Server">Edge Rack Server</option>
+              </select>
+              {formErrors.type && (
+                <span style={{ color: "var(--status-critical)", fontSize: "0.78rem", marginTop: "0.3rem", display: "block" }}>
+                  {formErrors.type}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.15rem" }}>
+            <div>
+              <label className="form-field-label">Brand *</label>
+              <input
+                name="brand"
+                type="text"
+                className="apex-form-input"
+                style={{ paddingLeft: "1rem" }}
+                placeholder="Dell / Apple / Lenovo"
+                value={form.brand}
+                onChange={e => {
+                  setForm(prev => ({ ...prev, brand: e.target.value }));
+                  if (formErrors.brand) setFormErrors(prev => ({ ...prev, brand: null }));
+                }}
+                required
+              />
+              {formErrors.brand && (
+                <span style={{ color: "var(--status-critical)", fontSize: "0.78rem", marginTop: "0.3rem", display: "block" }}>
+                  {formErrors.brand}
+                </span>
+              )}
+            </div>
+
+            <div>
+              <label className="form-field-label">Model *</label>
+              <input
+                name="model"
+                type="text"
+                className="apex-form-input"
+                style={{ paddingLeft: "1rem" }}
+                placeholder="Latitude 5440 / MacBook Pro"
+                value={form.model}
+                onChange={e => {
+                  setForm(prev => ({ ...prev, model: e.target.value }));
+                  if (formErrors.model) setFormErrors(prev => ({ ...prev, model: null }));
+                }}
+                required
+              />
+              {formErrors.model && (
+                <span style={{ color: "var(--status-critical)", fontSize: "0.78rem", marginTop: "0.3rem", display: "block" }}>
+                  {formErrors.model}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="form-field-group">
+            <label className="form-field-label">Serial Number *</label>
+            <input
+              name="serial_number"
+              type="text"
+              className="apex-form-input"
+              style={{ paddingLeft: "1rem", fontFamily: "var(--font-mono)" }}
+              placeholder="e.g. SN-8921-9988"
+              value={form.serial_number}
+              onChange={e => {
+                setForm(prev => ({ ...prev, serial_number: e.target.value }));
+                if (formErrors.serial_number) setFormErrors(prev => ({ ...prev, serial_number: null }));
+              }}
+              required
+            />
+            {formErrors.serial_number && (
+              <span style={{ color: "var(--status-critical)", fontSize: "0.78rem", marginTop: "0.3rem", display: "block" }}>
+                {formErrors.serial_number}
+              </span>
+            )}
+          </div>
+
+          <div className="modal-actions-row">
+            <button
+              type="button"
+              className="btn-secondary-parchment"
+              onClick={onClose}
+              disabled={submitting}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="btn-primary-terracotta"
+              disabled={submitting}
+            >
+              {submitting ? "Registering Device..." : "Register Device"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // Modal Component for Creating Tickets with Live Classification Preview
-function CreateTicketModal({ onClose, token, onSuccess }) {
+function CreateTicketModal({ onClose, token, onSuccess, addToast }) {
   const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [apiError, setApiError] = useState("");
 
   // Live Rule-based Regex preview matching backend TicketClassifier
   const inferredCategory = useMemo(() => {
@@ -2847,11 +3585,9 @@ function CreateTicketModal({ onClose, token, onSuccess }) {
 
   const inferredPriority = useMemo(() => {
     const text = `${title} ${desc}`.toLowerCase();
-    // 1. CRITICAL: Total outages, security breaches, emergencies
     if (text.match(/emergency|outage|downtime|entire\s*(office|floor|team|company)|all\s*(users|systems)|production\s*(down|outage)|servers?\s*(down|dead)|system\s*down|security\s*breach|ransomware|malware|fire|smoke|spark|critical|sev[- ]?1/)) {
       return "CRITICAL";
     }
-    // 2. HIGH: Component crash, screen dead/not working, device down, account lockout, cannot work
     if (
       text.match(/(mother\s*boa?r?d|mobo|logic\s*board|cpu|hard\s*drive|ssd|ram)[\s\S]*?(crash|dead|fried|broken|failure)/) ||
       text.match(/(crash|dead|fried|broken|failure)[\s\S]*?(mother\s*boa?r?d|mobo|logic\s*board|cpu|hard\s*drive|ssd|ram)/) ||
@@ -2861,31 +3597,54 @@ function CreateTicketModal({ onClose, token, onSuccess }) {
     ) {
       return "HIGH";
     }
-    // 3. LOW: Inquiries, cosmetic, setup requests
     if (text.match(/inquiry|question|request|how\s+to|guidance|setup|suggestion|preference|cosmetic|scratch|ergonomic/)) {
       return "LOW";
     }
-    // 4. Default: MEDIUM
     return "MEDIUM";
   }, [title, desc]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setApiError("");
+
+    if (!title.trim() || title.trim().length < 3) {
+      setApiError("Ticket summary must be at least 3 characters.");
+      return;
+    }
+    if (!desc.trim() || desc.trim().length < 5) {
+      setApiError("Detailed symptoms must be at least 5 characters.");
+      return;
+    }
+
+    setSubmitting(true);
     const payload = {
-      title,
-      description: desc,
+      title: title.trim(),
+      description: desc.trim(),
       category: inferredCategory,
       priority: inferredPriority
     };
 
-    const res = await fetch(`${API_BASE}/tickets`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-      body: JSON.stringify(payload)
-    });
+    try {
+      const res = await fetch(`${API_BASE}/tickets`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify(payload)
+      });
 
-    if (res.ok) {
-      onSuccess();
+      if (res.status === 201) {
+        onSuccess();
+      } else {
+        const errData = await res.json().catch(() => null);
+        const msg = parseApiError(errData, res.status, "Failed to submit ticket.");
+        setApiError(msg);
+        if (addToast) addToast(msg, "error");
+      }
+    } catch (netErr) {
+      const msg = "Network error: Could not reach server to submit ticket.";
+      setApiError(msg);
+      if (addToast) addToast(msg, "error");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -2894,9 +3653,28 @@ function CreateTicketModal({ onClose, token, onSuccess }) {
       <div className="modal-surface">
         <h2 className="modal-title">Create Incident Ticket</h2>
         <p className="modal-desc">Submit a new incident request to the IT ServiceDesk queue.</p>
+
+        {apiError && (
+          <div style={{
+            padding: "0.75rem 1rem",
+            background: "var(--status-critical-bg)",
+            border: "1px solid var(--status-critical)",
+            borderRadius: "var(--radius-md)",
+            marginBottom: "1.15rem",
+            color: "var(--status-critical)",
+            fontSize: "0.84rem",
+            display: "flex",
+            alignItems: "center",
+            gap: "0.5rem"
+          }}>
+            <span className="material-symbols-outlined" style={{ fontSize: "18px" }}>error</span>
+            <span>{apiError}</span>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit}>
           <div className="form-field-group">
-            <label className="form-field-label">Incident Summary</label>
+            <label className="form-field-label">Incident Summary *</label>
             <input
               type="text"
               className="apex-form-input"
@@ -2910,7 +3688,7 @@ function CreateTicketModal({ onClose, token, onSuccess }) {
           </div>
 
           <div className="form-field-group">
-            <label className="form-field-label">Detailed Symptoms</label>
+            <label className="form-field-label">Detailed Symptoms *</label>
             <textarea
               className="apex-form-input"
               style={{ height: "90px", padding: "0.75rem 1rem" }}
@@ -2926,13 +3704,15 @@ function CreateTicketModal({ onClose, token, onSuccess }) {
           <div style={{ padding: "0.75rem 1rem", background: "var(--bg-subtle)", borderRadius: "var(--radius-md)", marginBottom: "1.25rem", fontSize: "0.82rem", display: "flex", alignItems: "center", gap: "0.75rem", border: "1px solid var(--border-light)" }}>
             <span style={{ fontWeight: 600, color: "var(--primary)" }}>AI Classifier:</span>
             <span>Category: <strong>{inferredCategory}</strong></span>
-            <span style={{ color: "#d5d2cb" }}>•</span>
+            <span style={{ color: "#d5d2cb" }}>|</span>
             <span>Priority: <strong style={{ color: inferredPriority === 'CRITICAL' ? 'var(--status-critical)' : 'inherit' }}>{inferredPriority}</strong></span>
           </div>
 
           <div className="modal-actions-row">
-            <button type="button" className="btn-secondary-parchment" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn-primary-terracotta">Submit to Queue</button>
+            <button type="button" className="btn-secondary-parchment" onClick={onClose} disabled={submitting}>Cancel</button>
+            <button type="submit" className="btn-primary-terracotta" disabled={submitting}>
+              {submitting ? "Submitting..." : "Submit to Queue"}
+            </button>
           </div>
         </form>
       </div>

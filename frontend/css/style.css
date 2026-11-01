@@ -2198,3 +2198,16 @@ html.dark header.fixed {
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+/* =====================================================================
+   Loading Spinners and UI States (Non-invasive additions)
+   ===================================================================== */
+@keyframes apex-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.apex-spinner {
+  display: inline-block;
+  animation: apex-spin 0.85s linear infinite;
+}
+
