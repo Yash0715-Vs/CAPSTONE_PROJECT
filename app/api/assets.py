@@ -27,6 +27,8 @@ router = APIRouter(prefix="/assets", tags=["Assets"])
 @router.get("", response_model=List[AssetResponse])
 def list_assets(
     status_filter: Optional[str] = Query(None, alias="status"),
+    type_filter: Optional[str] = Query(None, alias="type"),
+    search: Optional[str] = Query(None),
     assigned_to: Optional[str] = Query(None),
     session: Session = Depends(get_db),
     current_user: UserDB = Depends(get_current_user)
@@ -34,13 +36,19 @@ def list_assets(
     """
     Lists assets.
     Employees see only assets assigned to them.
-    IT Support and Admins can view all assets or filter by assignee.
+    IT Support and Admins can view all assets or filter by assignee, status, type, and keyword.
     """
     if current_user.role == "EMPLOYEE":
         # Enforce that employees can only view hardware assigned to themselves
         assigned_to = current_user.user_id
 
-    return AssetRepository.list_assets(session, status=status_filter, assigned_to=assigned_to)
+    return AssetRepository.list_assets(
+        session,
+        status=status_filter,
+        assigned_to=assigned_to,
+        asset_type=type_filter,
+        search=search
+    )
 
 
 @router.get("/{asset_id}", response_model=AssetResponse)
@@ -111,10 +119,20 @@ def update_asset(
     if not asset:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Asset '{asset_id}' not found.")
 
+    if update_in.type is not None:
+        asset.type = update_in.type
     if update_in.brand is not None:
         asset.brand = update_in.brand
     if update_in.model is not None:
         asset.model = update_in.model
+    if update_in.serial_number is not None and update_in.serial_number != asset.serial_number:
+        existing_serial = session.query(AssetDB).filter(AssetDB.serial_number == update_in.serial_number).first()
+        if existing_serial:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Serial number '{update_in.serial_number}' is already registered to asset '{existing_serial.asset_id}'."
+            )
+        asset.serial_number = update_in.serial_number
     if update_in.status is not None:
         asset.status = update_in.status
     if update_in.assigned_to is not None:

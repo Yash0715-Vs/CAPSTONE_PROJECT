@@ -12,6 +12,7 @@ class TicketBase(BaseModel):
     description: str = Field(..., min_length=5, json_schema_extra={"example": "System crashes with BSOD error code 0x0000001A during boot"})
     category: Optional[str] = Field(None, json_schema_extra={"example": "Hardware"}, description="If omitted, will be auto-classified")
     priority: Optional[str] = Field(None, json_schema_extra={"example": "HIGH"}, description="If omitted, will be auto-classified")
+    asset_id: Optional[str] = Field(None, json_schema_extra={"example": "LAP-1025"}, description="Associated hardware asset ID")
 
 
 class TicketCreate(TicketBase):
@@ -34,6 +35,18 @@ class TicketResolveRequest(BaseModel):
     resolution: str = Field(..., min_length=5, json_schema_extra={"example": "Replaced faulty RAM module; system tested stable."})
 
 
+class TicketHistoryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    ticket_id: str
+    changed_by: str
+    old_status: str
+    new_status: str
+    comment: Optional[str] = None
+    timestamp: Optional[datetime] = None
+
+
 class TicketResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -46,6 +59,7 @@ class TicketResponse(BaseModel):
     status: str
     created_by: str
     assigned_to: Optional[str] = None
+    asset_id: Optional[str] = None
     resolution: Optional[str] = None
     created_date: Optional[datetime] = None
     closed_date: Optional[datetime] = None

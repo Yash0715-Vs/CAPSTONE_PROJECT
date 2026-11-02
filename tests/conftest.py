@@ -24,6 +24,7 @@ from app.models.db_models import (
     TicketDB,
     TicketHistoryDB,
     ActivityLogDB,
+    EquipmentRequestDB,
 )
 
 TEST_DB_URL = "sqlite:///test_it_asset.db"
@@ -65,7 +66,7 @@ def setup_test_database():
 
     try:
         with orig_factory() as live_session:
-            for model in [UserDB, AssetDB, AssetAssignmentDB, TicketDB, TicketHistoryDB, ActivityLogDB]:
+            for model in [UserDB, AssetDB, AssetAssignmentDB, TicketDB, TicketHistoryDB, ActivityLogDB, EquipmentRequestDB]:
                 rows = live_session.query(model).all()
                 for row in rows:
                     live_session.expunge(row)

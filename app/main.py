@@ -32,6 +32,7 @@ from app.api import (
     assets_router,
     tickets_router,
     reports_router,
+    equipment_requests_router,
 )
 from app.utils.exceptions import ITAssetBaseException
 
@@ -109,6 +110,7 @@ app.include_router(users_router)
 app.include_router(assets_router)
 app.include_router(tickets_router)
 app.include_router(reports_router)
+app.include_router(equipment_requests_router)
 
 
 # =====================================================================

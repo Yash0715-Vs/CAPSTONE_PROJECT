@@ -184,14 +184,44 @@ def test_cannot_close_unresolved_ticket_as_employee(tokens):
     assert "before it is resolved" in close_res.json()["detail"].lower()
 
 
-def test_cannot_assign_non_support_user(tokens):
-    """Assigning a ticket to a standard employee is rejected."""
+def test_support_and_employee_cannot_assign_tickets(tokens):
+    """Only ADMIN can assign or reassign tickets; Support and Employee get 403."""
     support_headers = {"Authorization": f"Bearer {tokens['support']}"}
+    emp_headers = {"Authorization": f"Bearer {tokens['emp1']}"}
+    admin_headers = {"Authorization": f"Bearer {tokens['admin']}"}
 
     create_res = client.post(
         "/tickets",
-        json={"title": "Assign Check", "description": "Validating assignment target role"},
+        json={"title": "Assign Check", "description": "Validating assignment permissions"},
+        headers=admin_headers
+    )
+    ticket_id = create_res.json()["ticket_id"]
+
+    # Support receives 403 Forbidden
+    res_sup = client.post(
+        f"/tickets/{ticket_id}/assign",
+        json={"assigned_to": "IT-501"},
         headers=support_headers
+    )
+    assert res_sup.status_code == 403
+
+    # Employee receives 403 Forbidden
+    res_emp = client.post(
+        f"/tickets/{ticket_id}/assign",
+        json={"assigned_to": "IT-501"},
+        headers=emp_headers
+    )
+    assert res_emp.status_code == 403
+
+
+def test_cannot_assign_non_support_user(tokens):
+    """Admin cannot assign a ticket to a standard employee."""
+    admin_headers = {"Authorization": f"Bearer {tokens['admin']}"}
+
+    create_res = client.post(
+        "/tickets",
+        json={"title": "Assign Check Non Support", "description": "Validating assignment target role"},
+        headers=admin_headers
     )
     ticket_id = create_res.json()["ticket_id"]
 
@@ -199,7 +229,7 @@ def test_cannot_assign_non_support_user(tokens):
     assign_res = client.post(
         f"/tickets/{ticket_id}/assign",
         json={"assigned_to": "EMP-101"},
-        headers=support_headers
+        headers=admin_headers
     )
     assert assign_res.status_code == 400
     assert "only be assigned to support or admin" in assign_res.json()["detail"].lower()

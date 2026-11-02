@@ -65,13 +65,25 @@ class AssetRepository:
     def list_assets(
         session: Session,
         status: Optional[str] = None,
-        assigned_to: Optional[str] = None
+        assigned_to: Optional[str] = None,
+        asset_type: Optional[str] = None,
+        search: Optional[str] = None
     ) -> List[AssetDB]:
         query = session.query(AssetDB)
         if status:
             query = query.filter(AssetDB.status == status)
         if assigned_to:
             query = query.filter(AssetDB.assigned_to == assigned_to)
+        if asset_type:
+            query = query.filter(AssetDB.type == asset_type)
+        if search:
+            pattern = f"%{search}%"
+            query = query.filter(
+                (AssetDB.asset_id.ilike(pattern)) |
+                (AssetDB.brand.ilike(pattern)) |
+                (AssetDB.model.ilike(pattern)) |
+                (AssetDB.serial_number.ilike(pattern))
+            )
         return query.order_by(AssetDB.asset_id).all()
 
     @staticmethod

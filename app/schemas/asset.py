@@ -23,8 +23,10 @@ class AssetCreate(AssetBase):
 
 
 class AssetUpdate(BaseModel):
+    type: Optional[str] = None
     brand: Optional[str] = None
     model: Optional[str] = None
+    serial_number: Optional[str] = None
     status: Optional[str] = None
     assigned_to: Optional[str] = None
     specs_json: Optional[str] = None

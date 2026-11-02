@@ -18,16 +18,18 @@ from sqlalchemy.orm import Session
 
 from app.database.connection import get_db
 from app.database.repositories import TicketRepository, UserRepository, ActivityLogRepository
-from app.models.db_models import TicketDB, UserDB
+from app.models.db_models import TicketDB, UserDB, TicketHistoryDB, AssetDB
 from app.schemas.ticket import (
     TicketCreate,
     TicketUpdate,
     TicketResponse,
     TicketAssignRequest,
     TicketResolveRequest,
+    TicketHistoryResponse,
 )
 from app.services.auth_service import get_current_user, require_roles
 from app.services.ticket_classifier import TicketClassifier
+from app.services.assignment_service import auto_assign_ticket
 from app.services.websocket_manager import ws_manager
 
 router = APIRouter(prefix="/tickets", tags=["Tickets"])
@@ -96,6 +98,20 @@ def create_ticket(
         category = category or classification["category_name"]
         priority = priority or classification["priority_name"]
 
+    # Validate employee asset ownership if asset_id is provided
+    if ticket_in.asset_id:
+        asset_obj = session.query(AssetDB).filter(AssetDB.asset_id == ticket_in.asset_id).first()
+        if not asset_obj:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Asset '{ticket_in.asset_id}' not found."
+            )
+        if current_user.role == "EMPLOYEE" and asset_obj.assigned_to != current_user.user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Asset '{ticket_in.asset_id}' is not assigned to your account."
+            )
+
     # Generate robust next Ticket ID (e.g. INC-1056)
     last_ticket = session.query(TicketDB).order_by(TicketDB.id.desc()).first()
     next_num = (last_ticket.id + 1) if last_ticket else 1
@@ -112,12 +128,18 @@ def create_ticket(
         priority=priority,
         status="OPEN",
         created_by=current_user.user_id,
+        asset_id=ticket_in.asset_id,
         created_date=datetime.now(timezone.utc),
     )
     saved = TicketRepository.create(session, ticket)
     ActivityLogRepository.log(
         session, "TICKET_CREATED", current_user.user_id, f"Created {saved.ticket_id} ({category}/{priority})"
     )
+
+    # Automatic least-load assignment under admin-authorized system policy
+    auto_assign_ticket(session, saved.ticket_id)
+    session.flush()
+
     ws_manager.trigger_ticket_broadcast("TICKET_CREATED", saved.to_dict())
     return saved
 
@@ -158,9 +180,9 @@ def assign_ticket(
     ticket_id: str,
     assign_req: TicketAssignRequest,
     session: Session = Depends(get_db),
-    staff_user: UserDB = Depends(require_roles(["ADMIN", "SUPPORT"]))
+    admin_user: UserDB = Depends(require_roles(["ADMIN"]))  # Exclusively ADMIN per Monday specifications
 ):
-    """Assigns ticket to an IT Support specialist."""
+    """Assigns or reassigns ticket to an IT Support specialist (ADMIN only)."""
     ticket = TicketRepository.get_by_ticket_id(session, ticket_id)
     if not ticket:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Ticket '{ticket_id}' not found.")
@@ -189,8 +211,14 @@ def assign_ticket(
         session=session,
         ticket_id=ticket_id,
         new_status="ASSIGNED",
-        changed_by=staff_user.user_id,
-        comment=f"Assigned to {assign_req.assigned_to}"
+        changed_by=admin_user.user_id,
+        comment=f"Assigned to {assign_req.assigned_to} by Administrator"
+    )
+    ActivityLogRepository.log(
+        session,
+        "TICKET_ASSIGNED",
+        admin_user.user_id,
+        f"Admin {admin_user.user_id} assigned {ticket_id} to {assign_req.assigned_to}"
     )
     session.flush()
     ws_manager.trigger_ticket_broadcast("TICKET_ASSIGNED", ticket.to_dict())
@@ -280,5 +308,34 @@ def close_ticket(
     session.flush()
     ws_manager.trigger_ticket_broadcast("TICKET_CLOSED", ticket.to_dict())
     return ticket
+
+
+@router.get("/{ticket_id}/history", response_model=List[TicketHistoryResponse])
+def get_ticket_history(
+    ticket_id: str,
+    session: Session = Depends(get_db),
+    current_user: UserDB = Depends(get_current_user)
+):
+    """
+    Returns full, immutable chronological audit trail for a ticket.
+    Employees may only view history for tickets they created.
+    """
+    ticket = TicketRepository.get_by_ticket_id(session, ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Ticket '{ticket_id}' not found.")
+
+    if current_user.role == "EMPLOYEE" and ticket.created_by != current_user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are only authorized to view history for your own tickets."
+        )
+
+    records = (
+        session.query(TicketHistoryDB)
+        .filter(TicketHistoryDB.ticket_id == ticket_id)
+        .order_by(TicketHistoryDB.timestamp.asc(), TicketHistoryDB.id.asc())
+        .all()
+    )
+    return records
 
 

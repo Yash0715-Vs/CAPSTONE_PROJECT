@@ -146,6 +146,7 @@ class TicketDB(Base):
     status = Column(String(30), nullable=False, default="OPEN")  # OPEN, ASSIGNED, IN_PROGRESS, RESOLVED, CLOSED
     created_by = Column(String(50), ForeignKey("users.user_id"), nullable=False, index=True)
     assigned_to = Column(String(50), ForeignKey("users.user_id"), nullable=True, index=True)
+    asset_id = Column(String(50), ForeignKey("assets.asset_id"), nullable=True, index=True)
     resolution = Column(Text, nullable=True)
     created_date = Column(DateTime, default=datetime.utcnow, nullable=False)
     closed_date = Column(DateTime, nullable=True)
@@ -153,6 +154,7 @@ class TicketDB(Base):
     # Relationships
     creator = relationship("UserDB", back_populates="created_tickets", foreign_keys=[created_by])
     handler = relationship("UserDB", back_populates="assigned_tickets", foreign_keys=[assigned_to])
+    linked_asset = relationship("AssetDB", foreign_keys=[asset_id])
     history = relationship("TicketHistoryDB", back_populates="ticket", cascade="all, delete-orphan")
 
     def to_dict(self) -> Dict[str, Any]:
@@ -166,6 +168,7 @@ class TicketDB(Base):
             "status": self.status,
             "created_by": self.created_by,
             "assigned_to": self.assigned_to,
+            "asset_id": self.asset_id,
             "resolution": self.resolution,
             "created_date": self.created_date.isoformat() if self.created_date else None,
             "closed_date": self.closed_date.isoformat() if self.closed_date else None,
@@ -180,7 +183,7 @@ class TicketHistoryDB(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     ticket_id = Column(String(50), ForeignKey("tickets.ticket_id"), nullable=False, index=True)
-    changed_by = Column(String(50), ForeignKey("users.user_id"), nullable=False)
+    changed_by = Column(String(50), nullable=False)  # Can be a user_id or "SYSTEM" for auto-actions
     old_status = Column(String(30), nullable=False)
     new_status = Column(String(30), nullable=False)
     comment = Column(Text, nullable=True)
@@ -209,4 +212,41 @@ class ActivityLogDB(Base):
             "action": self.action,
             "details": self.details,
             "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+        }
+
+
+class EquipmentRequestDB(Base):
+    """
+    Equipment Request model for new hardware provisioning workflow.
+    Lifecycle: PENDING → APPROVED/REJECTED → PROVISIONED → VERIFIED → CLOSED
+    """
+    __tablename__ = "equipment_requests"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    request_id = Column(String(50), unique=True, nullable=False, index=True)
+    requested_by = Column(String(50), ForeignKey("users.user_id"), nullable=False, index=True)
+    equipment_type = Column(String(100), nullable=False)  # Laptop, Monitor, Keyboard, Mouse, Printer, Other
+    reason = Column(Text, nullable=False)
+    status = Column(String(30), nullable=False, default="PENDING")  # PENDING, APPROVED, REJECTED, PROVISIONED, VERIFIED, CLOSED
+    approved_by = Column(String(50), ForeignKey("users.user_id"), nullable=True)
+    provisioned_asset_id = Column(String(50), ForeignKey("assets.asset_id"), nullable=True)
+    admin_notes = Column(Text, nullable=True)
+    employee_notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "request_id": self.request_id,
+            "requested_by": self.requested_by,
+            "equipment_type": self.equipment_type,
+            "reason": self.reason,
+            "status": self.status,
+            "approved_by": self.approved_by,
+            "provisioned_asset_id": self.provisioned_asset_id,
+            "admin_notes": self.admin_notes,
+            "employee_notes": self.employee_notes,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
