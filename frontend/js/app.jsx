@@ -1880,16 +1880,16 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                       <div className="space-y-3">
                         {assets.map(a => (
-                          <div key={a.id || a.asset_id} className="p-3.5 rounded-lg border border-surface-container bg-surface-container-low/40 flex items-center justify-between">
+                          <div key={a.id || a.asset_id} className="equipment-card-item">
                             <div className="flex items-center gap-3">
-                              <div className="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-primary">
+                              <div className="equipment-card-icon">
                                 <span className="material-symbols-outlined text-[20px]">
                                   {a.type === 'Laptop' ? 'laptop_mac' : a.type === 'Monitor' ? 'desktop_windows' : a.type === 'Keyboard' ? 'keyboard' : 'devices'}
                                 </span>
                               </div>
                               <div>
-                                <div className="font-medium text-xs text-on-surface">{a.brand} {a.model}</div>
-                                <div className="text-[11px] font-mono text-on-surface-variant mt-0.5">SN: {a.serial_number}</div>
+                                <div className="equipment-card-title">{a.brand} {a.model}</div>
+                                <div className="equipment-card-subtitle font-mono">SN: {a.serial_number}</div>
                               </div>
                             </div>
                             <div className="text-right">

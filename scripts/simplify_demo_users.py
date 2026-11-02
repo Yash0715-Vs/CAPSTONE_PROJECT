@@ -156,3 +156,4 @@ if __name__ == "__main__":
         print("\n>>> USER SIMPLIFICATION SUCCEEDED WITH 100% BUSINESS RECORD INTEGRITY! <<<")
     else:
         print("\n>>> VERIFICATION FAILED <<<")
+
