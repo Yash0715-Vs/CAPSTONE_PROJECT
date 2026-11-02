@@ -412,7 +412,7 @@ function RegisterPage({ onRegisterSuccess, onSwitchToLogin, theme, onToggleTheme
 
   return (
     <div className="register-page-wrap">
-      {/* Background Dot Grid & Ambient Terracotta Glow */}
+      {/* Background Dot Grid & Ambient Deep Teal Glow */}
       <div className="register-bg-dots" />
       <div className="register-ambient-glow" />
 
@@ -2513,7 +2513,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                 <button
                   type="button"
-                  className="btn-primary-terracotta"
+                  className="btn-primary-teal"
                   onClick={() => setShowCreateModal(true)}
                   style={{ padding: "0.6rem 1.1rem", fontSize: "0.85rem", whiteSpace: "nowrap" }}
                 >
@@ -2741,7 +2741,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                 {currentUser && currentUser.role !== "EMPLOYEE" && (
                   <button
                     type="button"
-                    className="btn-primary-terracotta"
+                    className="btn-primary-teal"
                     onClick={() => setShowCreateAssetModal(true)}
                     style={{ padding: "0.6rem 1.1rem", fontSize: "0.85rem", whiteSpace: "nowrap" }}
                   >
@@ -2898,7 +2898,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                     {currentUser.role === 'EMPLOYEE' && (
                       <button
                         type="button"
-                        className="btn-primary-terracotta"
+                        className="btn-primary-teal"
                         onClick={() => setShowEquipmentModal(true)}
                         style={{ padding: "0.5rem 1rem", fontSize: "0.82rem" }}
                       >
@@ -2944,7 +2944,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                             {currentUser.role === 'EMPLOYEE' && (
                               <button
                                 type="button"
-                                className="btn-primary-terracotta"
+                                className="btn-primary-teal"
                                 onClick={() => setShowEquipmentModal(true)}
                                 style={{ marginTop: "0.75rem", padding: "0.5rem 1rem", fontSize: "0.82rem" }}
                               >
@@ -3361,7 +3361,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                 {currentUser.role === "ADMIN" && (
                   <button
                     type="button"
-                    className="btn-primary-terracotta"
+                    className="btn-primary-teal"
                     onClick={() => setShowInviteModal(true)}
                     style={{ padding: "0.6rem 1.1rem", fontSize: "0.85rem", whiteSpace: "nowrap" }}
                   >
@@ -3720,7 +3720,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
               </div>
               <div className="modal-actions-row">
                 <button type="button" className="btn-secondary-parchment" onClick={() => { setShowInviteModal(false); setInviteError(""); }} disabled={isSubmittingInvite}>Cancel</button>
-                <button type="submit" className="btn-primary-terracotta" disabled={isSubmittingInvite}>
+                <button type="submit" className="btn-primary-teal" disabled={isSubmittingInvite}>
                   {isSubmittingInvite ? "Generating..." : "Generate Invitation Token"}
                 </button>
               </div>
@@ -3793,7 +3793,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
               </div>
               <div className="modal-actions-row">
                 <button type="button" className="btn-secondary-parchment" onClick={() => { setShowResolveModal(null); setResolveModalError(""); }} disabled={isSubmittingResolve}>Cancel</button>
-                <button type="submit" className="btn-primary-terracotta" disabled={isSubmittingResolve}>
+                <button type="submit" className="btn-primary-teal" disabled={isSubmittingResolve}>
                   {isSubmittingResolve ? "Confirming..." : "Confirm Resolution"}
                 </button>
               </div>
@@ -3892,7 +3892,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
               <div className="modal-actions-row">
                 <button type="button" className="btn-secondary-parchment" onClick={() => { setShowAssignTicketModal(null); setAssignTicketError(""); }} disabled={isSubmittingAssignTicket}>Cancel</button>
-                <button type="submit" className="btn-primary-terracotta" disabled={isSubmittingAssignTicket || usersList.filter(u => u.role === "SUPPORT" || u.role === "ADMIN").length === 0}>
+                <button type="submit" className="btn-primary-teal" disabled={isSubmittingAssignTicket || usersList.filter(u => u.role === "SUPPORT" || u.role === "ADMIN").length === 0}>
                   {isSubmittingAssignTicket ? "Assigning..." : "Assign Engineer"}
                 </button>
               </div>
@@ -4037,7 +4037,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
               </div>
               <div className="modal-actions-row">
                 <button type="button" className="btn-secondary-parchment" onClick={() => { setShowAssignModal(null); setAssignAssetError(""); }} disabled={isSubmittingAssignAsset}>Cancel</button>
-                <button type="submit" className="btn-primary-terracotta" disabled={isSubmittingAssignAsset || usersList.length === 0}>
+                <button type="submit" className="btn-primary-teal" disabled={isSubmittingAssignAsset || usersList.length === 0}>
                   {isSubmittingAssignAsset ? "Authorizing..." : "Authorize Custody"}
                 </button>
               </div>
@@ -4341,7 +4341,7 @@ function RegisterAssetModal({ onClose, token, onSuccess, addToast }) {
             </button>
             <button
               type="submit"
-              className="btn-primary-terracotta"
+              className="btn-primary-teal"
               disabled={submitting}
             >
               {submitting ? "Registering Device..." : "Register Device"}
@@ -4540,7 +4540,7 @@ function CreateTicketModal({ onClose, token, onSuccess, addToast, userAssets = [
 
           <div className="modal-actions-row">
             <button type="button" className="btn-secondary-parchment" onClick={onClose} disabled={submitting}>Cancel</button>
-            <button type="submit" className="btn-primary-terracotta" disabled={submitting}>
+            <button type="submit" className="btn-primary-teal" disabled={submitting}>
               {submitting ? "Submitting..." : "Submit to Queue"}
             </button>
           </div>
@@ -4942,7 +4942,7 @@ function EquipmentRequestModal({ onClose, token, onSuccess, addToast }) {
 
           <div className="modal-actions-row">
             <button type="button" className="btn-secondary-parchment" onClick={onClose} disabled={submitting}>Cancel</button>
-            <button type="submit" className="btn-primary-terracotta" disabled={submitting}>
+            <button type="submit" className="btn-primary-teal" disabled={submitting}>
               {submitting ? "Submitting Request..." : "Submit Request"}
             </button>
           </div>
@@ -5050,7 +5050,7 @@ function EditAssetModal({ asset, token, onClose, onSuccess, addToast }) {
 
           <div className="modal-actions-row">
             <button type="button" className="btn-secondary-parchment" onClick={onClose} disabled={submitting}>Cancel</button>
-            <button type="submit" className="btn-primary-terracotta" disabled={submitting}>
+            <button type="submit" className="btn-primary-teal" disabled={submitting}>
               {submitting ? "Saving..." : "Save Asset Changes"}
             </button>
           </div>
@@ -5158,7 +5158,7 @@ function ProvisionEquipmentModal({ request, availableAssets = [], token, onClose
 
           <div className="modal-actions-row">
             <button type="button" className="btn-secondary-parchment" onClick={onClose} disabled={submitting}>Cancel</button>
-            <button type="submit" className="btn-primary-terracotta" disabled={submitting || !selectedAssetId}>
+            <button type="submit" className="btn-primary-teal" disabled={submitting || !selectedAssetId}>
               {submitting ? "Provisioning..." : "Confirm Provisioning"}
             </button>
           </div>
