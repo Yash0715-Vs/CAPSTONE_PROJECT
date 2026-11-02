@@ -10,15 +10,15 @@
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 
-  /* Apex Sentinel Terracotta & Burnt Copper Palette */
-  --primary: #c96442;
-  --primary-hover: #b85836;
-  --primary-active: #a84d2e;
-  --primary-dark: #9a4021;
-  --primary-light: #ffb59d;
-  --primary-soft: #fbeee8;
-  --primary-border: #f3d2c6;
-  --primary-glow: rgba(201, 100, 66, 0.22);
+  /* Apex Sentinel Deep Teal Brand Palette */
+  --primary: #0F766E;
+  --primary-hover: #115E59;
+  --primary-active: #0d524d;
+  --primary-dark: #134E4A;
+  --primary-light: #B7DAD4;
+  --primary-soft: #E6F4F1;
+  --primary-border: #B7DAD4;
+  --primary-glow: rgba(15, 118, 110, 0.22);
 
   /* Warm Parchment & Ivory Neutral Surfaces */
   --bg-canvas: #faf9f5;
@@ -36,11 +36,11 @@
   /* Borders & Dividers */
   --border-light: #e6e3dc;
   --border-subtle: #edeae4;
-  --border-focus: #c96442;
+  --border-focus: #0F766E;
   --border-dark: rgba(255, 255, 255, 0.12);
 
   /* Typography Colors */
-  --text-main: #141311;
+  --text-main: #292524;
   --text-secondary: #5c5953;
   --text-muted: #737069;
   --text-dim: #9c9890;
@@ -103,9 +103,9 @@ html.dark {
   --text-muted: #95928a;
   --text-dim: #706d66;
 
-  /* Terracotta primary variations in Dark Mode */
-  --primary-soft: rgba(201, 100, 66, 0.16);
-  --primary-border: rgba(201, 100, 66, 0.36);
+  /* Deep Teal primary variations in Dark Mode */
+  --primary-soft: rgba(15, 118, 110, 0.20);
+  --primary-border: rgba(183, 218, 212, 0.35);
 
   /* Status Colors background in Dark Mode */
   --status-active-bg: rgba(45, 106, 79, 0.22);
@@ -218,14 +218,14 @@ html.dark .navbar {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background-color: #a84d2e;
+  background-color: #0F766E;
 }
 .brand-ping-dot::after {
   content: '';
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  background-color: #a84d2e;
+  background-color: #0F766E;
   animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
   opacity: 0.75;
 }
@@ -487,7 +487,8 @@ html.dark .btn-nav-logout:hover {
   font-size: 1.35rem;
   flex-shrink: 0;
 }
-.kpi-icon-wrap.kpi-terracotta {
+.kpi-icon-wrap.kpi-terracotta,
+.kpi-icon-wrap.kpi-teal {
   background: var(--primary-soft);
   color: var(--primary);
   border: 1px solid var(--primary-border);
@@ -569,6 +570,7 @@ html.dark .btn-nav-logout:hover {
   gap: 0.75rem;
 }
 
+.btn-primary-teal,
 .btn-primary-terracotta {
   padding: 0.65rem 1.25rem;
   background-color: var(--primary);
@@ -584,10 +586,12 @@ html.dark .btn-nav-logout:hover {
   gap: 0.45rem;
   box-shadow: 0 4px 12px var(--primary-glow);
 }
+.btn-primary-teal:hover,
 .btn-primary-terracotta:hover {
   background-color: var(--primary-hover);
   transform: translateY(-1px);
 }
+.btn-primary-teal:active,
 .btn-primary-terracotta:active {
   background-color: var(--primary-active);
   transform: translateY(0);
@@ -868,7 +872,7 @@ html.dark .btn-nav-logout:hover {
   pointer-events: none;
 }
 
-/* Ambient Terracotta Glows */
+/* Ambient Deep Teal Glows */
 .ambient-glow-tl {
   position: absolute;
   top: 25%;
@@ -876,7 +880,7 @@ html.dark .btn-nav-logout:hover {
   width: 320px;
   height: 320px;
   border-radius: 50%;
-  background: rgba(201, 100, 66, 0.08);
+  background: rgba(15, 118, 110, 0.10);
   filter: blur(60px);
   pointer-events: none;
 }
@@ -887,7 +891,7 @@ html.dark .btn-nav-logout:hover {
   width: 280px;
   height: 280px;
   border-radius: 50%;
-  background: rgba(201, 100, 66, 0.06);
+  background: rgba(15, 118, 110, 0.08);
   filter: blur(60px);
   pointer-events: none;
 }
@@ -999,9 +1003,9 @@ html.dark .btn-nav-logout:hover {
 .security-box-icon {
   padding: 0.5rem;
   border-radius: var(--radius-md);
-  background: rgba(201, 100, 66, 0.2);
+  background: rgba(15, 118, 110, 0.2);
   color: var(--primary-light);
-  border: 1px solid rgba(201, 100, 66, 0.3);
+  border: 1px solid rgba(15, 118, 110, 0.35);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1307,7 +1311,7 @@ html.dark .btn-nav-logout:hover {
   background-color: var(--status-active);
 }
 
-/* Primary CTA Button (Terracotta Burnt Copper) */
+/* Primary CTA Button (Deep Teal) */
 .btn-submit-workspace {
   width: 100%;
   height: 44px;
@@ -1328,7 +1332,7 @@ html.dark .btn-nav-logout:hover {
 }
 .btn-submit-workspace:hover {
   background-color: var(--primary-hover);
-  box-shadow: 0 6px 18px rgba(201, 100, 66, 0.35);
+  box-shadow: 0 6px 18px rgba(15, 118, 110, 0.35);
   transform: translateY(-1px);
 }
 .btn-submit-workspace:active {
@@ -1526,7 +1530,7 @@ html.dark .btn-nav-logout:hover {
   inset: 0;
   pointer-events: none;
   opacity: 0.45;
-  background-image: radial-gradient(#dcc1b8 1px, transparent 1px);
+  background-image: radial-gradient(#B7DAD4 1px, transparent 1px);
   background-size: 28px 28px;
 }
 [data-theme="dark"] .register-bg-dots,
@@ -1543,7 +1547,7 @@ html.dark .register-bg-dots {
   width: 450px;
   height: 450px;
   border-radius: 50%;
-  background: rgba(201, 100, 66, 0.06);
+  background: rgba(15, 118, 110, 0.08);
   filter: blur(80px);
   pointer-events: none;
 }
@@ -1659,8 +1663,8 @@ html.dark .register-setup-card {
   display: flex;
   align-items: center;
   gap: 0.55rem;
-  background: var(--bg-subtle);
-  border: 1px solid var(--border-light);
+  background: var(--primary-soft);
+  border: 1px solid var(--primary-border);
   padding: 0.7rem 0.95rem;
   border-radius: var(--radius-md);
   margin-bottom: 1.5rem;
@@ -1674,7 +1678,7 @@ html.dark .register-setup-card {
 
 .register-preverified-banner span {
   font-size: 0.82rem;
-  color: var(--primary);
+  color: var(--primary-dark);
   font-weight: 500;
 }
 
@@ -2196,6 +2200,88 @@ html.dark aside.fixed {
 html.dark header.fixed {
   background-color: rgba(20, 19, 17, 0.85) !important;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* =====================================================================
+   Deep Teal Component Accents: Pagination, Controls & Dark Mode Contrast
+   ===================================================================== */
+.pagination .page-btn.active,
+.pagination .page-item.active,
+.page-link.active,
+.pagination-item.active {
+  background-color: var(--primary) !important;
+  color: #ffffff !important;
+  border-color: var(--primary) !important;
+  box-shadow: 0 2px 8px var(--primary-glow);
+}
+
+/* Form Controls & Checkboxes */
+input[type="checkbox"]:checked,
+input[type="radio"]:checked {
+  accent-color: var(--primary);
+}
+
+/* Dark Mode Deep Teal Text and Surfaces for WCAG AA/AAA Readability */
+html.dark .text-primary {
+  color: #2dd4bf !important;
+}
+html.dark .text-primary-container {
+  color: #5eead4 !important;
+}
+html.dark .border-primary {
+  border-color: #0F766E !important;
+}
+html.dark .bg-primary-fixed {
+  background-color: rgba(15, 118, 110, 0.22) !important;
+}
+html.dark .text-on-primary-fixed {
+  color: #B7DAD4 !important;
+}
+html.dark .bg-primary {
+  background-color: #0F766E !important;
+}
+html.dark .bg-primary-container {
+  background-color: #115E59 !important;
+}
+
+/* Universal Focus & Selection Accents */
+::selection {
+  background-color: var(--primary-light);
+  color: var(--primary-dark);
+}
+[data-theme="dark"] ::selection {
+  background-color: var(--primary);
+  color: #ffffff;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+/* Subtle Teal Scrollbars */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--primary-border);
+  border-radius: var(--radius-full);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: rgba(183, 218, 212, 0.25);
+}
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
 }
 
 /* =====================================================================

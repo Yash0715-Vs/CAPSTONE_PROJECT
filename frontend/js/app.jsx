@@ -412,7 +412,7 @@ function RegisterPage({ onRegisterSuccess, onSwitchToLogin, theme, onToggleTheme
 
   return (
     <div className="register-page-wrap">
-      {/* Background Dot Grid & Ambient Terracotta Glow */}
+      {/* Background Dot Grid & Ambient Deep Teal Glow */}
       <div className="register-bg-dots" />
       <div className="register-ambient-glow" />
 
@@ -1374,36 +1374,36 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
             <nav className="space-y-1">
               <button
                 type="button"
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors text-left cursor-pointer ${activeTab === 'dashboard' ? 'bg-surface-container-highest text-on-surface font-medium shadow-[0_1px_3px_rgba(0,0,0,0.03)]' : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'}`}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors text-left cursor-pointer ${activeTab === 'dashboard' ? 'bg-primary-fixed text-on-primary-fixed font-semibold border-l-2 border-primary shadow-[0_1px_3px_rgba(0,0,0,0.03)]' : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'}`}
                 onClick={() => setActiveTab('dashboard')}
               >
                 <div className="flex items-center gap-3">
-                  <span className="material-symbols-outlined text-[19px]">dashboard</span>
+                  <span className={`material-symbols-outlined text-[19px] ${activeTab === 'dashboard' ? 'text-primary' : ''}`}>dashboard</span>
                   <span>{currentUser.role === 'EMPLOYEE' ? 'My Workspace' : 'Dashboard'}</span>
                 </div>
               </button>
 
               <button
                 type="button"
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors text-left cursor-pointer ${activeTab === 'tickets' ? 'bg-surface-container-highest text-on-surface font-medium shadow-[0_1px_3px_rgba(0,0,0,0.03)]' : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'}`}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors text-left cursor-pointer ${activeTab === 'tickets' ? 'bg-primary-fixed text-on-primary-fixed font-semibold border-l-2 border-primary shadow-[0_1px_3px_rgba(0,0,0,0.03)]' : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'}`}
                 onClick={() => setActiveTab('tickets')}
               >
                 <div className="flex items-center gap-3">
-                  <span className="material-symbols-outlined text-[19px]">confirmation_number</span>
+                  <span className={`material-symbols-outlined text-[19px] ${activeTab === 'tickets' ? 'text-primary' : ''}`}>confirmation_number</span>
                   <span>{currentUser.role === 'EMPLOYEE' ? 'My Tickets' : 'Tickets'}</span>
                 </div>
-                <span className="px-1.5 py-0.5 text-[11px] font-medium rounded-full bg-surface-container text-on-surface font-mono">
+                <span className={`px-1.5 py-0.5 text-[11px] font-medium rounded-full font-mono ${activeTab === 'tickets' ? 'bg-primary/20 text-on-primary-fixed' : 'bg-surface-container text-on-surface'}`}>
                   {currentUser.role === 'EMPLOYEE' ? myOpenTickets : openTickets}
                 </span>
               </button>
 
               <button
                 type="button"
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors text-left cursor-pointer ${activeTab === 'assets' ? 'bg-surface-container-highest text-on-surface font-medium shadow-[0_1px_3px_rgba(0,0,0,0.03)]' : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'}`}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors text-left cursor-pointer ${activeTab === 'assets' ? 'bg-primary-fixed text-on-primary-fixed font-semibold border-l-2 border-primary shadow-[0_1px_3px_rgba(0,0,0,0.03)]' : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'}`}
                 onClick={() => setActiveTab('assets')}
               >
                 <div className="flex items-center gap-3">
-                  <span className="material-symbols-outlined text-[19px]">devices</span>
+                  <span className={`material-symbols-outlined text-[19px] ${activeTab === 'assets' ? 'text-primary' : ''}`}>devices</span>
                   <span>{currentUser.role === 'EMPLOYEE' ? 'My Equipment' : 'Assets'}</span>
                 </div>
                 <span className="px-1.5 py-0.5 text-[11px] font-medium rounded-full bg-surface-container text-on-surface-variant font-mono">
@@ -1414,11 +1414,11 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
               {currentUser && currentUser.role === 'ADMIN' && (
                 <button
                   type="button"
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors text-left cursor-pointer ${activeTab === 'employees' ? 'bg-surface-container-highest text-on-surface font-medium shadow-[0_1px_3px_rgba(0,0,0,0.03)]' : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'}`}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors text-left cursor-pointer ${activeTab === 'employees' ? 'bg-primary-fixed text-on-primary-fixed font-semibold border-l-2 border-primary shadow-[0_1px_3px_rgba(0,0,0,0.03)]' : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'}`}
                   onClick={() => setActiveTab('employees')}
                 >
                   <div className="flex items-center gap-3">
-                    <span className="material-symbols-outlined text-[19px]">badge</span>
+                    <span className={`material-symbols-outlined text-[19px] ${activeTab === 'employees' ? 'text-primary' : ''}`}>badge</span>
                     <span>Employees</span>
                   </div>
                   <span className="px-1.5 py-0.5 text-[11px] font-medium rounded-full bg-surface-container text-on-surface-variant font-mono">
@@ -1430,11 +1430,11 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
               {currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'SUPPORT') && (
                 <button
                   type="button"
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors text-left cursor-pointer ${activeTab === 'sla' ? 'bg-surface-container-highest text-on-surface font-medium shadow-[0_1px_3px_rgba(0,0,0,0.03)]' : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'}`}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors text-left cursor-pointer ${activeTab === 'sla' ? 'bg-primary-fixed text-on-primary-fixed font-semibold border-l-2 border-primary shadow-[0_1px_3px_rgba(0,0,0,0.03)]' : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'}`}
                   onClick={() => setActiveTab('sla')}
                 >
                   <div className="flex items-center gap-3">
-                    <span className="material-symbols-outlined text-[19px]">timelapse</span>
+                    <span className={`material-symbols-outlined text-[19px] ${activeTab === 'sla' ? 'text-primary' : ''}`}>timelapse</span>
                     <span>SLA &amp; Performance</span>
                   </div>
                   {breachedTicketsCount > 0 && (
@@ -1448,11 +1448,11 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
               {currentUser && currentUser.role === 'ADMIN' && (
                 <button
                   type="button"
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors text-left cursor-pointer ${activeTab === 'audit' ? 'bg-surface-container-highest text-on-surface font-medium shadow-[0_1px_3px_rgba(0,0,0,0.03)]' : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'}`}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors text-left cursor-pointer ${activeTab === 'audit' ? 'bg-primary-fixed text-on-primary-fixed font-semibold border-l-2 border-primary shadow-[0_1px_3px_rgba(0,0,0,0.03)]' : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'}`}
                   onClick={() => setActiveTab('audit')}
                 >
                   <div className="flex items-center gap-3">
-                    <span className="material-symbols-outlined text-[19px]">history</span>
+                    <span className={`material-symbols-outlined text-[19px] ${activeTab === 'audit' ? 'text-primary' : ''}`}>history</span>
                     <span>Audit Ledger</span>
                   </div>
                 </button>
@@ -1689,7 +1689,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                       <div className="flex items-center justify-between">
                         <span className="text-[11px] font-medium uppercase tracking-wider text-on-surface-variant font-label">Assigned Equipment</span>
                         <div className="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-primary">
-                          <span className="material-symbols-outlined text-[19px]">devices</span>
+                          <span className={`material-symbols-outlined text-[19px] ${activeTab === 'assets' ? 'text-primary' : ''}`}>devices</span>
                         </div>
                       </div>
                       <div className="mt-4">
