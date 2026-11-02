@@ -2668,16 +2668,6 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                                 </button>
                               )}
 
-                              {/* Audit Trail Button */}
-                              <button
-                                type="button"
-                                className="table-btn"
-                                onClick={() => setShowEquipmentHistoryModal(r)}
-                                title="View lifecycle audit history"
-                              >
-                                <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>history</span>
-                                <span>History</span>
-                              </button>
                             </div>
                           </td>
                         </tr>
@@ -3139,6 +3129,17 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                                   <span>Close</span>
                                 </button>
                               )}
+
+                              {/* Equipment Request Audit Trail */}
+                              <button
+                                type="button"
+                                className="table-btn"
+                                onClick={() => setShowEquipmentHistoryModal(r)}
+                                title="View Equipment Request Audit Trail"
+                              >
+                                <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>history</span>
+                                <span>History</span>
+                              </button>
                             </div>
                           </td>
                         </tr>
