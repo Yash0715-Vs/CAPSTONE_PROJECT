@@ -203,3 +203,32 @@ def test_cannot_assign_non_support_user(tokens):
     )
     assert assign_res.status_code == 400
     assert "only be assigned to support or admin" in assign_res.json()["detail"].lower()
+
+
+def test_audit_log_access_restricted_to_admin(tokens):
+    """
+    Day 2 Requirement: Validates that GET /reports/audit is strictly restricted to ADMIN.
+    Support and Employee roles must receive 403 Forbidden.
+    """
+    admin_headers = {"Authorization": f"Bearer {tokens['admin']}"}
+    support_headers = {"Authorization": f"Bearer {tokens['support']}"}
+    emp_headers = {"Authorization": f"Bearer {tokens['emp1']}"}
+
+    # 1. Unauthenticated -> 401
+    assert client.get("/reports/audit").status_code == 401
+
+    # 2. Employee -> 403
+    emp_res = client.get("/reports/audit", headers=emp_headers)
+    assert emp_res.status_code == 403
+    assert "access denied" in emp_res.json()["detail"].lower()
+
+    # 3. Support -> 403
+    sup_res = client.get("/reports/audit", headers=support_headers)
+    assert sup_res.status_code == 403
+    assert "access denied" in sup_res.json()["detail"].lower()
+
+    # 4. Admin -> 200
+    admin_res = client.get("/reports/audit", headers=admin_headers)
+    assert admin_res.status_code == 200
+    assert isinstance(admin_res.json(), list)
+

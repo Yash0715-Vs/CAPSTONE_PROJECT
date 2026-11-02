@@ -128,9 +128,9 @@ def get_sla_report(
 @router.get("/audit")
 def get_audit_trail(
     session: Session = Depends(get_db),
-    current_user: UserDB = Depends(get_current_user)
+    admin_user: UserDB = Depends(require_roles(["ADMIN"]))
 ) -> List[Dict[str, Any]]:
-    """Returns recent system activity logs from the database."""
+    """Returns recent system activity logs from the database (Restricted to Administrators only)."""
     logs = ActivityLogRepository.list_recent(session, limit=40)
     return [
         {

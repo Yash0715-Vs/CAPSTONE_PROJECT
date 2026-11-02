@@ -3,7 +3,7 @@
 // Theme: Warm Editorial Craft & Enterprise Security (Google Stitch)
 // =====================================================================
 
-const { useState, useEffect, useCallback, useMemo } = React;
+const { useState, useEffect, useCallback, useMemo, useRef } = React;
 
 const API_BASE = window.location.origin;
 const WS_URL = `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/ws/tickets`;
@@ -759,6 +759,13 @@ function App() {
   const [userRoleFilter, setUserRoleFilter] = useState("");
 
   // Real database metrics computed dynamically from actual records
+  const myOpenTickets = tickets.filter(t => t.status === "OPEN" || t.status === "IN_PROGRESS" || t.status === "ASSIGNED").length;
+  const myResolvedTickets = tickets.filter(t => t.status === "RESOLVED").length;
+  const myClosedTickets = tickets.filter(t => t.status === "CLOSED").length;
+  const myHighTickets = tickets.filter(t => (t.priority === "CRITICAL" || t.priority === "HIGH") && t.status !== "CLOSED").length;
+  const myTotalTickets = tickets.length;
+  const myAssignedTickets = tickets.filter(t => t.assigned_to === currentUser?.user_id && t.status !== "CLOSED").length;
+
   const totalAssets = assets.length;
   const assignedAssets = assets.filter(a => a.status === "ASSIGNED").length;
   const availableAssets = assets.filter(a => a.status === "AVAILABLE").length;
@@ -847,10 +854,14 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
     }
   };
 
-  // WebSocket State
+  // WebSocket State & References
   const [wsConnected, setWsConnected] = useState(false);
+  const [wsAuthenticated, setWsAuthenticated] = useState(false);
   const [liveEvents, setLiveEvents] = useState([]);
   const [toasts, setToasts] = useState([]);
+  const wsRef = useRef(null);
+  const pingTimerRef = useRef(null);
+  const reconnectTimerRef = useRef(null);
 
   // Data Loading & API Error State
   const [fetchError, setFetchError] = useState(null);
@@ -911,14 +922,39 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
   // Central Logout & Session Invalidation
   const handleLogout = useCallback((reason) => {
+    if (token) {
+      try {
+        fetch(`${API_BASE}/auth/logout`, {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${token}` }
+        }).catch(() => {});
+      } catch (e) {}
+    }
     localStorage.removeItem("it_token");
     localStorage.removeItem("it_user");
     setToken("");
     setCurrentUser(null);
+    setTickets([]);
+    setAssets([]);
+    setUsersList([]);
+    setAuditLogs([]);
+    setSlaReport(null);
+    setLiveEvents([]);
+    setWsConnected(false);
+    setWsAuthenticated(false);
+    setActiveTab("dashboard");
+    if (wsRef.current) {
+      try { wsRef.current.close(1000, "User logged out"); } catch (e) {}
+      wsRef.current = null;
+    }
+    if (pingTimerRef.current) clearInterval(pingTimerRef.current);
+    if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
     if (reason) {
       addToast(reason, "info");
+    } else {
+      addToast("Signed out successfully.", "info");
     }
-  }, [addToast]);
+  }, [token, addToast]);
 
   // Quick switch role inside dashboard
   const authenticateUser = async (userId) => {
@@ -934,6 +970,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
         setCurrentUser(data.user);
         localStorage.setItem("it_token", data.access_token);
         localStorage.setItem("it_user", JSON.stringify(data.user));
+        setActiveTab("dashboard");
         addToast(`Switched account to ${data.user.name} (${data.user.role})`, "success");
         return data.access_token;
       } else {
@@ -946,20 +983,38 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
     return token;
   };
 
-  // Verify saved token on load
+  // Verify saved token on load & sync fresh profile
   useEffect(() => {
-    if (token && currentUser) {
-      fetch(`${API_BASE}/auth/me`, {
-        headers: { "Authorization": `Bearer ${token}` }
-      })
-        .then(res => {
-          if (!res.ok) {
-            handleLogout("Session expired. Please sign in again.");
+    if (!token) return;
+    fetch(`${API_BASE}/auth/me`, {
+      headers: { "Authorization": `Bearer ${token}` }
+    })
+      .then(async res => {
+        if (res.status === 401 || res.status === 403) {
+          handleLogout("Session expired. Please sign in again.");
+        } else if (res.ok) {
+          const freshUser = await res.json().catch(() => null);
+          if (freshUser) {
+            setCurrentUser(freshUser);
+            try { localStorage.setItem("it_user", JSON.stringify(freshUser)); } catch (e) {}
           }
-        })
-        .catch(() => { });
+        }
+      })
+      .catch(err => {
+        console.warn("Could not verify session with server:", err);
+      });
+  }, [token, handleLogout]);
+
+  // Prevent unauthorized active tabs when switching roles
+  useEffect(() => {
+    if (currentUser) {
+      if (currentUser.role === "EMPLOYEE" && (activeTab === "employees" || activeTab === "users" || activeTab === "user-directory" || activeTab === "audit" || activeTab === "sla")) {
+        setActiveTab("dashboard");
+      } else if (currentUser.role === "SUPPORT" && (activeTab === "employees" || activeTab === "users" || activeTab === "user-directory" || activeTab === "audit")) {
+        setActiveTab("dashboard");
+      }
     }
-  }, [token, currentUser, handleLogout]);
+  }, [currentUser, activeTab]);
 
   // Fetch All Data in Parallel with Status Code Verification & Error Handling
   const fetchData = useCallback(async () => {
@@ -997,28 +1052,41 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
         })
         .then(data => setAssets(Array.isArray(data) ? data : []));
 
-      const pAudit = fetch(`${API_BASE}/reports/audit`, { headers })
-        .then(async r => {
-          if (r.status === 401) {
-            handleLogout("Session expired. Please sign in again.");
-            return [];
-          }
-          if (!r.ok) return [];
-          return r.json();
-        })
-        .then(data => setAuditLogs(Array.isArray(data) ? data : []));
+      // Audit logs are strictly restricted to ADMIN
+      let pAudit = Promise.resolve([]);
+      if (currentUser && currentUser.role === "ADMIN") {
+        pAudit = fetch(`${API_BASE}/reports/audit`, { headers })
+          .then(async r => {
+            if (r.status === 401) {
+              handleLogout("Session expired. Please sign in again.");
+              return [];
+            }
+            if (r.status === 403) return [];
+            if (!r.ok) return [];
+            return r.json();
+          })
+          .then(data => setAuditLogs(Array.isArray(data) ? data : []));
+      } else {
+        setAuditLogs([]);
+      }
 
-      const pSla = fetch(`${API_BASE}/reports/sla`, { headers })
-        .then(async r => {
-          if (r.status === 401) {
-            handleLogout("Session expired. Please sign in again.");
-            return null;
-          }
-          if (r.status === 403) return null; // Expected for standard employees
-          if (!r.ok) return null;
-          return r.json();
-        })
-        .then(data => setSlaReport(data));
+      // SLA report is restricted to staff (ADMIN & SUPPORT)
+      let pSla = Promise.resolve(null);
+      if (currentUser && currentUser.role !== "EMPLOYEE") {
+        pSla = fetch(`${API_BASE}/reports/sla`, { headers })
+          .then(async r => {
+            if (r.status === 401) {
+              handleLogout("Session expired. Please sign in again.");
+              return null;
+            }
+            if (r.status === 403) return null;
+            if (!r.ok) return null;
+            return r.json();
+          })
+          .then(data => setSlaReport(data));
+      } else {
+        setSlaReport(null);
+      }
 
       const staffPromises = [];
       if (currentUser && currentUser.role !== "EMPLOYEE") {
@@ -1029,10 +1097,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                 handleLogout("Session expired. Please sign in again.");
                 return [];
               }
-              if (!r.ok) {
-                const err = await r.json().catch(() => ({}));
-                throw new Error(parseApiError(err, r.status, "Failed to load employee directory."));
-              }
+              if (!r.ok) return [];
               return r.json();
             })
             .then(data => setUsersList(Array.isArray(data) ? data : [])),
@@ -1041,6 +1106,9 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
             .then(r => r.ok ? r.json() : null)
             .then(data => setTicketMetrics(data))
         );
+      } else {
+        setUsersList([]);
+        setTicketMetrics(null);
       }
 
       await Promise.all([pTickets, pAssets, pAudit, pSla, ...staffPromises]);
@@ -1056,35 +1124,120 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
     fetchData();
   }, [fetchData]);
 
-  // WebSocket Real-Time Connection
+  // WebSocket Real-Time Connection with JWT Auth & Heartbeat Protocol (Section 38)
   useEffect(() => {
-    let ws;
-    try {
-      ws = new WebSocket(WS_URL);
+    if (!token || !currentUser) {
+      if (wsRef.current) {
+        try { wsRef.current.close(1000, "User logged out"); } catch (e) {}
+        wsRef.current = null;
+      }
+      if (pingTimerRef.current) clearInterval(pingTimerRef.current);
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      setWsConnected(false);
+      setWsAuthenticated(false);
+      return;
+    }
+
+    let isDestroyed = false;
+    let reconnectDelay = 2000;
+
+    const connect = () => {
+      if (isDestroyed || !token) return;
+
+      // Prevent duplicate open/connecting sockets
+      if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
+        return;
+      }
+
+      // Connect with query token per Section 38 / app/main.py specification
+      const socketUrl = `${WS_URL}?token=${encodeURIComponent(token)}`;
+      let ws;
+      try {
+        ws = new WebSocket(socketUrl);
+        wsRef.current = ws;
+      } catch (err) {
+        setWsConnected(false);
+        setWsAuthenticated(false);
+        return;
+      }
+
       ws.onopen = () => {
+        if (isDestroyed) { ws.close(); return; }
         setWsConnected(true);
-        addToast("Real-Time Cluster Stream Active", "success");
+        reconnectDelay = 2000;
+
+        // Start heartbeat ping every 25 seconds
+        if (pingTimerRef.current) clearInterval(pingTimerRef.current);
+        pingTimerRef.current = setInterval(() => {
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send("PING");
+          }
+        }, 25000);
       };
+
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          setLiveEvents(prev => [data, ...prev.slice(0, 19)]);
-          if (data.event !== "PONG") {
-            addToast(`⚡ Event: ${data.message || data.event}`, "info");
+          if (data.event === "PONG") return;
+
+          if (data.event === "CONNECTED") {
+            if (data.authenticated) {
+              setWsAuthenticated(true);
+            } else {
+              // In-band fallback AUTH frame
+              ws.send(JSON.stringify({ action: "auth", token }));
+            }
+          } else if (data.event === "AUTH_SUCCESS") {
+            setWsAuthenticated(true);
+            addToast("Real-Time Event Stream Authenticated", "success");
+          } else if (data.event === "AUTH_FAILED") {
+            setWsAuthenticated(false);
+            addToast(`WebSocket auth failed: ${data.message}`, "error");
+          } else {
+            // Live ticket event broadcast
+            setLiveEvents(prev => [data, ...prev.slice(0, 24)]);
+            const ticket = data.ticket;
+            const evLabel = (data.event || "").replace("TICKET_", "");
+            addToast(`⚡ Incident ${ticket?.ticket_id || ""}: ${evLabel} (${ticket?.title || data.message || ""})`, "info");
             fetchData();
           }
-        } catch (e) { }
+        } catch (e) {
+          // ignore malformed message
+        }
       };
-      ws.onclose = () => setWsConnected(false);
-      ws.onerror = () => setWsConnected(false);
-    } catch (e) {
-      setWsConnected(false);
-    }
+
+      ws.onclose = (event) => {
+        setWsConnected(false);
+        setWsAuthenticated(false);
+        if (pingTimerRef.current) clearInterval(pingTimerRef.current);
+
+        // Reconnect with backoff if not closed voluntarily
+        if (!isDestroyed && token && event.code !== 1000) {
+          reconnectTimerRef.current = setTimeout(() => {
+            reconnectDelay = Math.min(reconnectDelay * 1.5, 20000);
+            connect();
+          }, reconnectDelay);
+        }
+      };
+
+      ws.onerror = () => {
+        setWsConnected(false);
+        setWsAuthenticated(false);
+      };
+    };
+
+    connect();
 
     return () => {
-      if (ws) ws.close();
+      isDestroyed = true;
+      if (pingTimerRef.current) clearInterval(pingTimerRef.current);
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      if (wsRef.current) {
+        try { wsRef.current.close(1000, "Component unmounted"); } catch (e) {}
+        wsRef.current = null;
+      }
     };
-  }, [fetchData, addToast]);
+  }, [token, currentUser, fetchData, addToast]);
 
   // Filtered Tickets (Case-Insensitive & Multi-Field Search)
   const filteredTickets = useMemo(() => {
@@ -1216,7 +1369,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
               >
                 <div className="flex items-center gap-3">
                   <span className="material-symbols-outlined text-[19px]">dashboard</span>
-                  <span>Dashboard</span>
+                  <span>{currentUser.role === 'EMPLOYEE' ? 'My Workspace' : 'Dashboard'}</span>
                 </div>
               </button>
 
@@ -1227,10 +1380,10 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
               >
                 <div className="flex items-center gap-3">
                   <span className="material-symbols-outlined text-[19px]">confirmation_number</span>
-                  <span>Tickets</span>
+                  <span>{currentUser.role === 'EMPLOYEE' ? 'My Tickets' : 'Tickets'}</span>
                 </div>
                 <span className="px-1.5 py-0.5 text-[11px] font-medium rounded-full bg-surface-container text-on-surface font-mono">
-                  {openTickets}
+                  {currentUser.role === 'EMPLOYEE' ? myOpenTickets : openTickets}
                 </span>
               </button>
 
@@ -1241,14 +1394,14 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
               >
                 <div className="flex items-center gap-3">
                   <span className="material-symbols-outlined text-[19px]">devices</span>
-                  <span>Assets</span>
+                  <span>{currentUser.role === 'EMPLOYEE' ? 'My Equipment' : 'Assets'}</span>
                 </div>
                 <span className="px-1.5 py-0.5 text-[11px] font-medium rounded-full bg-surface-container text-on-surface-variant font-mono">
-                  {totalAssets}
+                  {currentUser.role === 'EMPLOYEE' ? assets.length : totalAssets}
                 </span>
               </button>
 
-              {currentUser && currentUser.role !== 'EMPLOYEE' && (
+              {currentUser && currentUser.role === 'ADMIN' && (
                 <button
                   type="button"
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors text-left cursor-pointer ${activeTab === 'employees' ? 'bg-surface-container-highest text-on-surface font-medium shadow-[0_1px_3px_rgba(0,0,0,0.03)]' : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'}`}
@@ -1264,32 +1417,36 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                 </button>
               )}
 
-              <button
-                type="button"
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors text-left cursor-pointer ${activeTab === 'sla' ? 'bg-surface-container-highest text-on-surface font-medium shadow-[0_1px_3px_rgba(0,0,0,0.03)]' : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'}`}
-                onClick={() => setActiveTab('sla')}
-              >
-                <div className="flex items-center gap-3">
-                  <span className="material-symbols-outlined text-[19px]">timelapse</span>
-                  <span>SLA &amp; Performance</span>
-                </div>
-                {breachedTicketsCount > 0 && (
-                  <span className="px-1.5 py-0.5 text-[11px] font-medium rounded-full bg-error-container text-on-error-container font-mono">
-                    {breachedTicketsCount}
-                  </span>
-                )}
-              </button>
+              {currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'SUPPORT') && (
+                <button
+                  type="button"
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors text-left cursor-pointer ${activeTab === 'sla' ? 'bg-surface-container-highest text-on-surface font-medium shadow-[0_1px_3px_rgba(0,0,0,0.03)]' : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'}`}
+                  onClick={() => setActiveTab('sla')}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="material-symbols-outlined text-[19px]">timelapse</span>
+                    <span>SLA &amp; Performance</span>
+                  </div>
+                  {breachedTicketsCount > 0 && (
+                    <span className="px-1.5 py-0.5 text-[11px] font-medium rounded-full bg-error-container text-on-error-container font-mono">
+                      {breachedTicketsCount}
+                    </span>
+                  )}
+                </button>
+              )}
 
-              <button
-                type="button"
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors text-left cursor-pointer ${activeTab === 'audit' ? 'bg-surface-container-highest text-on-surface font-medium shadow-[0_1px_3px_rgba(0,0,0,0.03)]' : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'}`}
-                onClick={() => setActiveTab('audit')}
-              >
-                <div className="flex items-center gap-3">
-                  <span className="material-symbols-outlined text-[19px]">history</span>
-                  <span>Audit Ledger</span>
-                </div>
-              </button>
+              {currentUser && currentUser.role === 'ADMIN' && (
+                <button
+                  type="button"
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors text-left cursor-pointer ${activeTab === 'audit' ? 'bg-surface-container-highest text-on-surface font-medium shadow-[0_1px_3px_rgba(0,0,0,0.03)]' : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'}`}
+                  onClick={() => setActiveTab('audit')}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="material-symbols-outlined text-[19px]">history</span>
+                    <span>Audit Ledger</span>
+                  </div>
+                </button>
+              )}
             </nav>
           </div>
         </div>
@@ -1298,10 +1455,12 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
         <div className="p-4 space-y-3">
           <div className="px-3 py-2.5 rounded-lg bg-surface-container flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-tertiary"></span>
-              <span className="text-xs font-medium text-on-surface">Database Sync</span>
+              <span className={`w-2 h-2 rounded-full ${wsConnected && wsAuthenticated ? 'bg-tertiary' : wsConnected ? 'bg-amber-500' : 'bg-error'}`}></span>
+              <span className="text-xs font-medium text-on-surface">Real-Time Stream</span>
             </div>
-            <span className="text-[11px] font-medium text-tertiary font-mono">Live</span>
+            <span className={`text-[11px] font-medium font-mono ${wsConnected && wsAuthenticated ? 'text-tertiary' : wsConnected ? 'text-amber-500' : 'text-on-surface-variant'}`}>
+              {wsConnected && wsAuthenticated ? 'Live' : wsConnected ? 'Auth Pending' : 'Offline'}
+            </span>
           </div>
 
           <div className="flex items-center justify-between px-2 pt-1">
@@ -1317,19 +1476,13 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
               </div>
             </div>
             <button
-              className="text-on-surface-variant hover:text-error p-1 rounded transition-colors cursor-pointer"
-              type="button"
-              title="Sign Out"
-              onClick={() => {
-                localStorage.removeItem("it_token");
-                localStorage.removeItem("it_user");
-                setToken("");
-                setCurrentUser(null);
-                addToast("Signed out successfully", "info");
-              }}
-            >
-              <span className="material-symbols-outlined text-[18px]">logout</span>
-            </button>
+                className="text-on-surface-variant hover:text-error p-1 rounded transition-colors cursor-pointer"
+                type="button"
+                title="Sign Out"
+                onClick={() => handleLogout()}
+              >
+                <span className="material-symbols-outlined text-[18px]">logout</span>
+              </button>
           </div>
         </div>
       </aside>
@@ -1343,12 +1496,12 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
               <span className="hover:text-on-surface transition-colors cursor-pointer" onClick={() => setActiveTab('dashboard')}>Platform</span>
               <span className="material-symbols-outlined text-[14px]">chevron_right</span>
               <span className="font-medium text-on-surface">
-                {activeTab === 'dashboard' ? 'Operations Overview' :
-                 activeTab === 'tickets' ? 'Support Incident Tickets' :
-                 activeTab === 'assets' ? 'Hardware Asset Fleet' :
-                 activeTab === 'employees' ? 'Enrolled Employee Directory' :
-                 activeTab === 'sla' ? 'SLA & MTTR Performance' : 'System Audit Ledger'}
-              </span>
+                  {activeTab === 'dashboard' ? (currentUser.role === 'EMPLOYEE' ? 'My Employee Workspace' : currentUser.role === 'SUPPORT' ? 'ServiceDesk Operations Hub' : 'Operations Overview') :
+                   activeTab === 'tickets' ? (currentUser.role === 'EMPLOYEE' ? 'My Support Incident Tickets' : 'Support Incident Tickets') :
+                   activeTab === 'assets' ? (currentUser.role === 'EMPLOYEE' ? 'My Assigned Equipment' : 'Hardware Asset Fleet') :
+                   activeTab === 'employees' ? 'Enrolled Employee Directory' :
+                   activeTab === 'sla' ? 'SLA & MTTR Performance' : 'System Audit Ledger'}
+                </span>
             </div>
             <div className="hidden md:flex items-center bg-surface-container-low px-3 py-1.5 rounded-lg w-80 text-on-surface-variant focus-within:ring-1 focus-within:ring-primary focus-within:bg-surface-container-lowest transition-all">
               <span className="material-symbols-outlined text-[17px] mr-2 text-on-surface-variant">search</span>
@@ -1412,7 +1565,8 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
             </button>
             <div
               className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-on-primary font-semibold text-xs cursor-pointer shadow-sm"
-              title={`Logged in as ${userName} (${userRole})`}
+              title={`Logged in as ${userName} (${userRole}) - Click to switch role`}
+              onClick={() => setShowLoginModal(true)}
             >
               {userInitial}
             </div>
@@ -1424,34 +1578,53 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
           {/* TAB: DASHBOARD / OVERVIEW */}
           {(activeTab === 'dashboard' || activeTab === 'overview-admin') && (
             <div className="flex flex-col w-full pb-16 space-y-8">
-              {/* Executive Context Bar & Title Area */}
+              {/* Context Bar & Title Area */}
               <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 pt-2">
                 <div className="space-y-2">
                   <div className="flex items-center gap-3">
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container text-on-surface-variant font-mono text-[11px] font-medium tracking-wide">
-                      <span className="w-1.5 h-1.5 rounded-full bg-tertiary animate-pulse"></span>
-                      Live Database Connected
+                      <span className={`w-1.5 h-1.5 rounded-full ${wsConnected && wsAuthenticated ? "bg-tertiary animate-pulse" : "bg-amber-500"}`}></span>
+                      {wsConnected && wsAuthenticated ? "Live Stream Authenticated" : "Live Database Connected"}
                     </span>
-                    <span className="text-xs text-on-surface-variant font-mono">Real-Time Enterprise Gateway</span>
+                    <span className="text-xs text-on-surface-variant font-mono">
+                      {currentUser.role === 'ADMIN' ? 'Administrator Gateway' : currentUser.role === 'SUPPORT' ? 'IT ServiceDesk Console' : 'Personal Employee Portal'}
+                    </span>
                   </div>
                   <h1 className="font-headline text-3xl lg:text-4xl text-on-surface tracking-tight font-normal">
-                    Operations &amp; Infrastructure Overview
+                    {currentUser.role === 'EMPLOYEE' ? `Welcome, ${userName}` : currentUser.role === 'SUPPORT' ? 'ServiceDesk Operations Hub' : 'Operations & Infrastructure Overview'}
                   </h1>
                   <p className="text-sm text-on-surface-variant max-w-2xl font-body leading-relaxed">
-                    Centralized visibility across hardware fleet custody, workforce support queues, and real-time SLA metrics.
+                    {currentUser.role === 'EMPLOYEE'
+                      ? 'Track your active incident requests, review custody of assigned company equipment, and submit support tickets.'
+                      : currentUser.role === 'SUPPORT'
+                      ? 'Operational incident queue triage, SLA breach management, and hardware fleet depository status.'
+                      : 'Centralized visibility across hardware fleet custody, workforce support queues, and real-time SLA metrics.'}
                   </p>
                 </div>
 
                 {/* Action Controls */}
                 <div className="flex flex-wrap items-center gap-2.5 self-start lg:self-end">
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-surface-container-low hover:bg-surface-container-highest text-on-surface text-xs font-medium transition-colors shadow-sm cursor-pointer"
-                    onClick={handleExportReport}
-                  >
-                    <span className="material-symbols-outlined text-[17px] text-secondary">file_download</span>
-                    <span>Export Operations Report</span>
-                  </button>
+                  {currentUser.role !== 'EMPLOYEE' && (
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-surface-container-low hover:bg-surface-container-highest text-on-surface text-xs font-medium transition-colors shadow-sm cursor-pointer"
+                      onClick={handleExportReport}
+                    >
+                      <span className="material-symbols-outlined text-[17px] text-secondary">file_download</span>
+                      <span>Export Operations Report</span>
+                    </button>
+                  )}
+
+                  {currentUser.role === 'ADMIN' && (
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-surface-container-low hover:bg-surface-container-highest text-on-surface text-xs font-medium transition-colors shadow-sm cursor-pointer"
+                      onClick={() => setShowCreateAssetModal(true)}
+                    >
+                      <span className="material-symbols-outlined text-[17px] text-primary">add_box</span>
+                      <span>Register Asset</span>
+                    </button>
+                  )}
 
                   <button
                     type="button"
@@ -1464,524 +1637,744 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                 </div>
               </div>
 
-              {/* Executive KPI Summary Cards (6-Grid, All Real Numbers) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-                {/* KPI 1: IT Assets */}
-                <div className="bg-surface-container-lowest p-4 rounded-xl shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-medium uppercase tracking-wider text-on-surface-variant font-label">Total IT Assets</span>
-                    <div className="w-7 h-7 rounded-lg bg-surface-container flex items-center justify-center text-primary">
-                      <span className="material-symbols-outlined text-[17px]">laptop_mac</span>
-                    </div>
-                  </div>
-                  <div className="mt-3">
-                    <div className="text-2xl font-headline font-medium text-on-surface">
-                      {totalAssets.toLocaleString()}
-                    </div>
-                    <div className="mt-1 flex items-center gap-1 text-[11px] font-medium text-tertiary">
-                      <span>{assignedAssets} Assigned • {availableAssets} In Stock</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* KPI 2: Total Workforce */}
-                <div className="bg-surface-container-lowest p-4 rounded-xl shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-medium uppercase tracking-wider text-on-surface-variant font-label">Enrolled Users</span>
-                    <div className="w-7 h-7 rounded-lg bg-surface-container flex items-center justify-center text-secondary">
-                      <span className="material-symbols-outlined text-[17px]">badge</span>
-                    </div>
-                  </div>
-                  <div className="mt-3">
-                    <div className="text-2xl font-headline font-medium text-on-surface">
-                      {totalUsers.toLocaleString()}
-                    </div>
-                    <div className="mt-1 flex items-center gap-1 text-[11px] text-on-surface-variant">
-                      <span>{adminUsers} Admin • {supportUsers} Support • {employeeUsers} Staff</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* KPI 3: Total Tickets */}
-                <div className="bg-surface-container-lowest p-4 rounded-xl shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-medium uppercase tracking-wider text-on-surface-variant font-label">Total Tickets</span>
-                    <div className="w-7 h-7 rounded-lg bg-surface-container flex items-center justify-center text-primary">
-                      <span className="material-symbols-outlined text-[17px]">confirmation_number</span>
-                    </div>
-                  </div>
-                  <div className="mt-3">
-                    <div className="text-2xl font-headline font-medium text-on-surface">
-                      {totalTickets.toLocaleString()}
-                    </div>
-                    <div className="mt-1 flex items-center gap-1 text-[11px] font-medium text-tertiary">
-                      <span>{openTickets} Open • {resolvedAndClosed} Resolved/Closed</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* KPI 4: Open Tickets */}
-                <div className="bg-surface-container-lowest p-4 rounded-xl shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-medium uppercase tracking-wider text-on-surface-variant font-label">Open Support Queue</span>
-                    <div className="w-7 h-7 rounded-lg bg-surface-container flex items-center justify-center text-secondary">
-                      <span className="material-symbols-outlined text-[17px]">hourglass_top</span>
-                    </div>
-                  </div>
-                  <div className="mt-3">
-                    <div className="text-2xl font-headline font-medium text-on-surface">
-                      {openTickets.toLocaleString()}
-                    </div>
-                    <div className="mt-1 flex items-center gap-1 text-[11px] font-medium text-error">
-                      <span className="w-1.5 h-1.5 rounded-full bg-error"></span>
-                      <span>{inProgressTickets} in progress • {criticalTickets} critical</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* KPI 5: SLA Compliance */}
-                <div className="bg-surface-container-lowest p-4 rounded-xl shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-medium uppercase tracking-wider text-on-surface-variant font-label">SLA Compliance</span>
-                    <div className="w-7 h-7 rounded-lg bg-surface-container flex items-center justify-center text-tertiary">
-                      <span className="material-symbols-outlined text-[17px]">timer</span>
-                    </div>
-                  </div>
-                  <div className="mt-3">
-                    <div className="text-2xl font-headline font-medium text-tertiary">
-                      {complianceRate}%
-                    </div>
-                    <div className="mt-1 flex items-center gap-1 text-[11px] text-on-surface-variant">
-                      <span>{totalTickets - breachedTicketsCount} On-Time • {breachedTicketsCount} Breached</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* KPI 6: Available Hardware */}
-                <div className="bg-surface-container-lowest p-4 rounded-xl shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-medium uppercase tracking-wider text-on-surface-variant font-label">Available Hardware</span>
-                    <div className="w-7 h-7 rounded-lg bg-surface-container flex items-center justify-center text-primary">
-                      <span className="material-symbols-outlined text-[17px]">inventory_2</span>
-                    </div>
-                  </div>
-                  <div className="mt-3">
-                    <div className="text-2xl font-headline font-medium text-on-surface">
-                      {availableAssets.toLocaleString()}
-                    </div>
-                    <div className="mt-1 flex items-center gap-1 text-[11px] text-on-surface-variant">
-                      <span>{underRepairAssets} in repair • {retiredAssets} retired</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Analytics & Real Distribution Section (2 Columns) */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-                {/* Column 1: Ticket Category Distribution (7 Cols) */}
-                <div className="lg:col-span-7 bg-surface-container-lowest p-6 rounded-xl shadow-sm flex flex-col justify-between">
-                  <div>
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4">
-                      <div>
-                        <h2 className="font-headline text-xl text-on-surface font-normal">Ticket Distribution by Category</h2>
-                        <p className="text-xs text-on-surface-variant mt-0.5">Categorized breakdown of all {totalTickets} support tickets</p>
-                      </div>
-                      <span className="text-xs font-mono font-medium text-primary bg-primary/10 px-2.5 py-1 rounded-full">
-                        {totalTickets} Total Tickets
-                      </span>
-                    </div>
-
-                    {/* Category Breakdown Bars */}
-                    <div className="space-y-4 pt-2">
-                      {/* Hardware */}
-                      <div>
-                        <div className="flex justify-between text-xs mb-1.5">
-                          <span className="font-medium text-on-surface flex items-center gap-2">
-                            <span className="w-2.5 h-2.5 rounded-full bg-primary"></span>
-                            Hardware Incidents
-                          </span>
-                          <span className="font-mono text-on-surface-variant">
-                            {hardwareTickets} tickets ({totalTickets > 0 ? ((hardwareTickets / totalTickets) * 100).toFixed(1) : 0}%)
-                          </span>
-                        </div>
-                        <div className="w-full bg-surface-container h-2 rounded-full overflow-hidden">
-                          <div
-                            className="bg-primary h-full rounded-full transition-all duration-500"
-                            style={{ width: `${totalTickets > 0 ? (hardwareTickets / totalTickets) * 100 : 0}%` }}
-                          />
+              {/* -------------------- ROLE 1: EMPLOYEE DASHBOARD -------------------- */}
+              {currentUser.role === 'EMPLOYEE' && (
+                <div className="space-y-8">
+                  {/* 4 Personal KPI Cards */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {/* Card 1: My Open Tickets */}
+                    <div className="bg-surface-container-lowest p-5 rounded-xl shadow-sm flex flex-col justify-between">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-medium uppercase tracking-wider text-on-surface-variant font-label">My Open Tickets</span>
+                        <div className="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-primary">
+                          <span className="material-symbols-outlined text-[19px]">inbox</span>
                         </div>
                       </div>
+                      <div className="mt-4">
+                        <div className="text-3xl font-headline font-medium text-on-surface">{myOpenTickets}</div>
+                        <span className="text-xs text-on-surface-variant mt-1 block">
+                          {myHighTickets > 0 ? `${myHighTickets} high priority request(s)` : 'All normal priority'}
+                        </span>
+                      </div>
+                    </div>
 
-                      {/* Network */}
-                      <div>
-                        <div className="flex justify-between text-xs mb-1.5">
-                          <span className="font-medium text-on-surface flex items-center gap-2">
-                            <span className="w-2.5 h-2.5 rounded-full bg-secondary"></span>
-                            Network &amp; Connectivity
-                          </span>
-                          <span className="font-mono text-on-surface-variant">
-                            {networkTickets} tickets ({totalTickets > 0 ? ((networkTickets / totalTickets) * 100).toFixed(1) : 0}%)
-                          </span>
-                        </div>
-                        <div className="w-full bg-surface-container h-2 rounded-full overflow-hidden">
-                          <div
-                            className="bg-secondary h-full rounded-full transition-all duration-500"
-                            style={{ width: `${totalTickets > 0 ? (networkTickets / totalTickets) * 100 : 0}%` }}
-                          />
+                    {/* Card 2: My Resolved Tickets */}
+                    <div className="bg-surface-container-lowest p-5 rounded-xl shadow-sm flex flex-col justify-between">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-medium uppercase tracking-wider text-on-surface-variant font-label">My Resolved Tickets</span>
+                        <div className="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-tertiary">
+                          <span className="material-symbols-outlined text-[19px]">check_circle</span>
                         </div>
                       </div>
+                      <div className="mt-4">
+                        <div className="text-3xl font-headline font-medium text-on-surface">{myResolvedTickets}</div>
+                        <span className="text-xs text-on-surface-variant mt-1 block">
+                          {myClosedTickets} confirmed closed
+                        </span>
+                      </div>
+                    </div>
 
-                      {/* Software */}
-                      <div>
-                        <div className="flex justify-between text-xs mb-1.5">
-                          <span className="font-medium text-on-surface flex items-center gap-2">
-                            <span className="w-2.5 h-2.5 rounded-full bg-primary-container"></span>
-                            Software &amp; OS Applications
-                          </span>
-                          <span className="font-mono text-on-surface-variant">
-                            {softwareTickets} tickets ({totalTickets > 0 ? ((softwareTickets / totalTickets) * 100).toFixed(1) : 0}%)
-                          </span>
-                        </div>
-                        <div className="w-full bg-surface-container h-2 rounded-full overflow-hidden">
-                          <div
-                            className="bg-primary-container h-full rounded-full transition-all duration-500"
-                            style={{ width: `${totalTickets > 0 ? (softwareTickets / totalTickets) * 100 : 0}%` }}
-                          />
+                    {/* Card 3: My Assigned Equipment */}
+                    <div className="bg-surface-container-lowest p-5 rounded-xl shadow-sm flex flex-col justify-between">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-medium uppercase tracking-wider text-on-surface-variant font-label">Assigned Equipment</span>
+                        <div className="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-primary">
+                          <span className="material-symbols-outlined text-[19px]">devices</span>
                         </div>
                       </div>
+                      <div className="mt-4">
+                        <div className="text-3xl font-headline font-medium text-on-surface">{assets.length}</div>
+                        <span className="text-xs text-on-surface-variant mt-1 block truncate">
+                          {assets.length > 0 ? assets.map(a => a.type).slice(0, 2).join(", ") : 'No hardware assigned'}
+                        </span>
+                      </div>
+                    </div>
 
-                      {/* Access */}
-                      <div>
-                        <div className="flex justify-between text-xs mb-1.5">
-                          <span className="font-medium text-on-surface flex items-center gap-2">
-                            <span className="w-2.5 h-2.5 rounded-full bg-tertiary"></span>
-                            Access &amp; Security Permissions
-                          </span>
-                          <span className="font-mono text-on-surface-variant">
-                            {accessTickets} tickets ({totalTickets > 0 ? ((accessTickets / totalTickets) * 100).toFixed(1) : 0}%)
-                          </span>
-                        </div>
-                        <div className="w-full bg-surface-container h-2 rounded-full overflow-hidden">
-                          <div
-                            className="bg-tertiary h-full rounded-full transition-all duration-500"
-                            style={{ width: `${totalTickets > 0 ? (accessTickets / totalTickets) * 100 : 0}%` }}
-                          />
+                    {/* Card 4: Total Requests Submitted */}
+                    <div className="bg-surface-container-lowest p-5 rounded-xl shadow-sm flex flex-col justify-between">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-medium uppercase tracking-wider text-on-surface-variant font-label">Personal Ticket History</span>
+                        <div className="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-secondary">
+                          <span className="material-symbols-outlined text-[19px]">history</span>
                         </div>
                       </div>
+                      <div className="mt-4">
+                        <div className="text-3xl font-headline font-medium text-on-surface">{myTotalTickets}</div>
+                        <span className="text-xs text-on-surface-variant mt-1 block">Lifetime incident count</span>
+                      </div>
+                    </div>
+                  </div>
 
-                      {/* Other / Operations */}
-                      {otherTickets > 0 && (
+                  {/* Employee Content Split: My Incidents (7 Cols) & My Equipment (5 Cols) */}
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                    {/* Left: My Active Tickets */}
+                    <div className="lg:col-span-7 bg-surface-container-lowest p-6 rounded-xl shadow-sm">
+                      <div className="flex items-center justify-between pb-4">
+                        <div>
+                          <h2 className="font-headline text-xl text-on-surface font-normal">My Support Incident Requests</h2>
+                          <p className="text-xs text-on-surface-variant mt-0.5">Tickets submitted by you for IT assistance</p>
+                        </div>
+                        <span className="px-2 py-0.5 rounded-full bg-surface-container text-on-surface text-[11px] font-medium font-mono">
+                          {myOpenTickets} Open / In Progress
+                        </span>
+                      </div>
+
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead>
+                            <tr className="text-[10px] font-semibold tracking-wider uppercase text-on-surface-variant font-label bg-surface-container-low">
+                              <th className="py-2.5 px-3 rounded-l-md">Ticket ID</th>
+                              <th className="py-2.5 px-3">Subject / Title</th>
+                              <th className="py-2.5 px-3">Category</th>
+                              <th className="py-2.5 px-3">Status</th>
+                              <th className="py-2.5 px-3 rounded-r-md text-right">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-surface-container-low">
+                            {tickets.slice(0, 6).map(t => (
+                              <tr key={t.id || t.ticket_id} className="hover:bg-surface-container-low transition-colors">
+                                <td className="py-3 px-3 font-mono font-medium text-primary">#{t.ticket_id}</td>
+                                <td className="py-3 px-3 min-w-[180px]">
+                                  <div className="font-medium text-on-surface truncate max-w-xs">{t.title}</div>
+                                  <div className="text-[11px] text-on-surface-variant truncate max-w-xs">{t.description}</div>
+                                </td>
+                                <td className="py-3 px-3">
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-surface-container text-on-surface">{t.category}</span>
+                                </td>
+                                <td className="py-3 px-3">
+                                  <span className={`badge-status ${(t.status || "").toLowerCase().replace('_', '-')}`}>{t.status}</span>
+                                </td>
+                                <td className="py-3 px-3 text-right">
+                                  {t.status === "RESOLVED" && (
+                                    <button
+                                      type="button"
+                                      className="table-btn"
+                                      style={{ borderColor: "var(--primary)", color: "var(--primary)" }}
+                                      onClick={async () => {
+                                        try {
+                                          const res = await fetch(`${API_BASE}/tickets/${t.ticket_id}/close`, {
+                                            method: "POST",
+                                            headers: { "Authorization": `Bearer ${token}` }
+                                          });
+                                          if (res.ok) {
+                                            addToast(`Confirmed and closed ticket ${t.ticket_id}`, "success");
+                                            fetchData();
+                                          } else {
+                                            const err = await res.json().catch(() => null);
+                                            addToast(parseApiError(err, res.status, "Failed to close ticket"), "error");
+                                          }
+                                        } catch (e) {
+                                          addToast("Network error closing ticket.", "error");
+                                        }
+                                      }}
+                                    >
+                                      Confirm &amp; Close
+                                    </button>
+                                  )}
+                                  {t.status !== "RESOLVED" && (
+                                    <span className="text-[11px] text-on-surface-variant font-mono">{t.assigned_to ? `Assigned (${t.assigned_to})` : 'Queued'}</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                            {tickets.length === 0 && (
+                              <tr>
+                                <td colSpan="5" className="py-8 text-center text-on-surface-variant">
+                                  You have not submitted any incident tickets yet.
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      <div className="mt-4 pt-3 flex items-center justify-between border-t border-surface-container-highest/40">
+                        <span className="text-xs text-on-surface-variant font-body">Showing {Math.min(6, tickets.length)} of {tickets.length} personal tickets</span>
+                        <button
+                          type="button"
+                          className="text-xs font-medium text-primary hover:text-primary-container flex items-center gap-1 transition-colors cursor-pointer"
+                          onClick={() => setActiveTab('tickets')}
+                        >
+                          <span>View All My Tickets</span>
+                          <span className="material-symbols-outlined text-[15px]">arrow_forward</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Right: My Assigned Hardware Equipment */}
+                    <div className="lg:col-span-5 bg-surface-container-lowest p-6 rounded-xl shadow-sm">
+                      <div className="flex items-center justify-between pb-4">
+                        <div>
+                          <h2 className="font-headline text-xl text-on-surface font-normal">My Assigned Equipment</h2>
+                          <p className="text-xs text-on-surface-variant mt-0.5">Company devices currently in your custody</p>
+                        </div>
+                        <span className="text-xs font-mono text-on-surface-variant">{assets.length} Devices</span>
+                      </div>
+
+                      <div className="space-y-3">
+                        {assets.map(a => (
+                          <div key={a.id || a.asset_id} className="p-3.5 rounded-lg border border-surface-container bg-surface-container-low/40 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-primary">
+                                <span className="material-symbols-outlined text-[20px]">
+                                  {a.type === 'Laptop' ? 'laptop_mac' : a.type === 'Monitor' ? 'desktop_windows' : a.type === 'Keyboard' ? 'keyboard' : 'devices'}
+                                </span>
+                              </div>
+                              <div>
+                                <div className="font-medium text-xs text-on-surface">{a.brand} {a.model}</div>
+                                <div className="text-[11px] font-mono text-on-surface-variant mt-0.5">SN: {a.serial_number}</div>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <span className="font-mono text-xs font-semibold text-primary block">#{a.asset_id}</span>
+                              <span className="badge-status open text-[10px] uppercase font-mono mt-0.5 inline-block">Assigned</span>
+                            </div>
+                          </div>
+                        ))}
+                        {assets.length === 0 && (
+                          <div className="py-8 text-center text-on-surface-variant text-xs">
+                            No hardware assets are currently assigned to your account.
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="mt-4 pt-3 flex items-center justify-between border-t border-surface-container-highest/40">
+                        <span className="text-xs text-on-surface-variant font-body">Equipment custody record</span>
+                        <button
+                          type="button"
+                          className="text-xs font-medium text-primary hover:text-primary-container flex items-center gap-1 transition-colors cursor-pointer"
+                          onClick={() => setActiveTab('assets')}
+                        >
+                          <span>View Equipment Fleet</span>
+                          <span className="material-symbols-outlined text-[15px]">arrow_forward</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* -------------------- ROLE 2: SUPPORT DASHBOARD -------------------- */}
+              {currentUser.role === 'SUPPORT' && (
+                <div className="space-y-8">
+                  {/* 6 Operational KPI Cards */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+                    {/* KPI 1: Active Queue */}
+                    <div className="bg-surface-container-lowest p-4 rounded-xl shadow-sm flex flex-col justify-between">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-medium uppercase tracking-wider text-on-surface-variant font-label">Queue Active</span>
+                        <div className="w-7 h-7 rounded-lg bg-surface-container flex items-center justify-center text-primary">
+                          <span className="material-symbols-outlined text-[17px]">assignment</span>
+                        </div>
+                      </div>
+                      <div className="mt-3">
+                        <div className="text-2xl font-headline font-medium text-on-surface">{openTickets + inProgressTickets}</div>
+                        <span className="text-[11px] text-on-surface-variant mt-0.5 block">{openTickets} open, {inProgressTickets} active</span>
+                      </div>
+                    </div>
+
+                    {/* KPI 2: My Assigned */}
+                    <div className="bg-surface-container-lowest p-4 rounded-xl shadow-sm flex flex-col justify-between">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-medium uppercase tracking-wider text-on-surface-variant font-label">My Assigned</span>
+                        <div className="w-7 h-7 rounded-lg bg-surface-container flex items-center justify-center text-primary">
+                          <span className="material-symbols-outlined text-[17px]">person</span>
+                        </div>
+                      </div>
+                      <div className="mt-3">
+                        <div className="text-2xl font-headline font-medium text-on-surface">{myAssignedTickets}</div>
+                        <span className="text-[11px] text-on-surface-variant mt-0.5 block">Assigned directly to you</span>
+                      </div>
+                    </div>
+
+                    {/* KPI 3: High / Critical Escalations */}
+                    <div className="bg-surface-container-lowest p-4 rounded-xl shadow-sm flex flex-col justify-between">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-medium uppercase tracking-wider text-on-surface-variant font-label">High / Critical</span>
+                        <div className="w-7 h-7 rounded-lg bg-error-container/60 flex items-center justify-center text-on-error-container">
+                          <span className="material-symbols-outlined text-[17px]">warning</span>
+                        </div>
+                      </div>
+                      <div className="mt-3">
+                        <div className="text-2xl font-headline font-medium text-on-surface">{criticalTickets + highTickets}</div>
+                        <span className="text-[11px] text-on-surface-variant mt-0.5 block">{criticalTickets} critical, {highTickets} high</span>
+                      </div>
+                    </div>
+
+                    {/* KPI 4: Resolved Incidents */}
+                    <div className="bg-surface-container-lowest p-4 rounded-xl shadow-sm flex flex-col justify-between">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-medium uppercase tracking-wider text-on-surface-variant font-label">Resolved Incidents</span>
+                        <div className="w-7 h-7 rounded-lg bg-surface-container flex items-center justify-center text-tertiary">
+                          <span className="material-symbols-outlined text-[17px]">check_circle</span>
+                        </div>
+                      </div>
+                      <div className="mt-3">
+                        <div className="text-2xl font-headline font-medium text-on-surface">{resolvedTickets}</div>
+                        <span className="text-[11px] text-on-surface-variant mt-0.5 block">{closedTickets} confirmed closed</span>
+                      </div>
+                    </div>
+
+                    {/* KPI 5: SLA Compliance */}
+                    <div className="bg-surface-container-lowest p-4 rounded-xl shadow-sm flex flex-col justify-between">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-medium uppercase tracking-wider text-on-surface-variant font-label">SLA Compliance</span>
+                        <div className="w-7 h-7 rounded-lg bg-surface-container flex items-center justify-center text-tertiary">
+                          <span className="material-symbols-outlined text-[17px]">timelapse</span>
+                        </div>
+                      </div>
+                      <div className="mt-3">
+                        <div className="text-2xl font-headline font-medium text-on-surface">{complianceRate}%</div>
+                        <span className="text-[11px] text-on-surface-variant mt-0.5 block">{breachedTicketsCount} active breaches</span>
+                      </div>
+                    </div>
+
+                    {/* KPI 6: Available in Depository */}
+                    <div className="bg-surface-container-lowest p-4 rounded-xl shadow-sm flex flex-col justify-between">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-medium uppercase tracking-wider text-on-surface-variant font-label">In Depository</span>
+                        <div className="w-7 h-7 rounded-lg bg-surface-container flex items-center justify-center text-secondary">
+                          <span className="material-symbols-outlined text-[17px]">inventory_2</span>
+                        </div>
+                      </div>
+                      <div className="mt-3">
+                        <div className="text-2xl font-headline font-medium text-on-surface">{availableAssets}</div>
+                        <span className="text-[11px] text-on-surface-variant mt-0.5 block">out of {totalAssets} total fleet</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Priority Triage Queue (7 Cols) & Hardware Depository Status (5 Cols) */}
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                    {/* Left: Operational Queue */}
+                    <div className="lg:col-span-7 bg-surface-container-lowest p-6 rounded-xl shadow-sm">
+                      <div className="flex items-center justify-between pb-4">
+                        <div>
+                          <h2 className="font-headline text-xl text-on-surface font-normal">Active Operational Triage Queue</h2>
+                          <p className="text-xs text-on-surface-variant mt-0.5">Incidents requiring assignment or diagnosis</p>
+                        </div>
+                        <span className="px-2 py-0.5 rounded-full bg-error-container text-on-error-container text-[11px] font-medium font-mono">
+                          {criticalTickets + highTickets} High / Critical
+                        </span>
+                      </div>
+
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead>
+                            <tr className="text-[10px] font-semibold tracking-wider uppercase text-on-surface-variant font-label bg-surface-container-low">
+                              <th className="py-2.5 px-3 rounded-l-md">Ticket ID</th>
+                              <th className="py-2.5 px-3">Subject / Title</th>
+                              <th className="py-2.5 px-3">Priority</th>
+                              <th className="py-2.5 px-3">Status</th>
+                              <th className="py-2.5 px-3 rounded-r-md text-right">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-surface-container-low">
+                            {tickets
+                              .filter(t => t.status !== "RESOLVED" && t.status !== "CLOSED")
+                              .slice(0, 6)
+                              .map(t => (
+                                <tr key={t.id || t.ticket_id} className="hover:bg-surface-container-low transition-colors">
+                                  <td className="py-3 px-3 font-mono font-medium text-primary">#{t.ticket_id}</td>
+                                  <td className="py-3 px-3 min-w-[180px]">
+                                    <div className="font-medium text-on-surface truncate max-w-xs">{t.title}</div>
+                                    <div className="text-[11px] text-on-surface-variant truncate max-w-xs">By {t.created_by} · {t.description}</div>
+                                  </td>
+                                  <td className="py-3 px-3">
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${t.priority === 'CRITICAL' ? 'bg-error-container text-on-error-container' : t.priority === 'HIGH' ? 'bg-primary-fixed text-on-primary-fixed' : 'bg-surface-container text-on-surface'}`}>
+                                      {t.priority}
+                                    </span>
+                                  </td>
+                                  <td className="py-3 px-3">
+                                    <span className={`badge-status ${(t.status || "").toLowerCase().replace('_', '-')}`}>{t.status}</span>
+                                  </td>
+                                  <td className="py-3 px-3 text-right">
+                                    <div className="flex justify-end gap-1.5">
+                                      <button type="button" className="table-btn" onClick={() => setShowAssignTicketModal(t)}>Assign</button>
+                                      <button type="button" className="table-btn" onClick={() => setShowResolveModal(t)}>Resolve</button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      <div className="mt-4 pt-3 flex items-center justify-between border-t border-surface-container-highest/40">
+                        <span className="text-xs text-on-surface-variant font-body">Operational ticket triage</span>
+                        <button
+                          type="button"
+                          className="text-xs font-medium text-primary hover:text-primary-container flex items-center gap-1 transition-colors cursor-pointer"
+                          onClick={() => setActiveTab('tickets')}
+                        >
+                          <span>Open Full Queue ({totalTickets})</span>
+                          <span className="material-symbols-outlined text-[15px]">arrow_forward</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Right: Depository Fleet Status */}
+                    <div className="lg:col-span-5 bg-surface-container-lowest p-6 rounded-xl shadow-sm">
+                      <div className="flex items-center justify-between pb-3">
+                        <div>
+                          <h2 className="font-headline text-xl text-on-surface font-normal">Hardware Fleet Status</h2>
+                          <p className="text-xs text-on-surface-variant mt-0.5">Depository &amp; deployment breakdown</p>
+                        </div>
+                        <span className="text-xs font-mono text-on-surface-variant">{totalAssets} Units</span>
+                      </div>
+
+                      <div className="space-y-4 pt-2">
                         <div>
                           <div className="flex justify-between text-xs mb-1.5">
                             <span className="font-medium text-on-surface flex items-center gap-2">
-                              <span className="w-2.5 h-2.5 rounded-full bg-secondary-fixed-dim"></span>
-                              Other / General Operations
+                              <span className="w-2.5 h-2.5 rounded-full bg-primary"></span>
+                              Assigned to Personnel
                             </span>
-                            <span className="font-mono text-on-surface-variant">
-                              {otherTickets} tickets ({totalTickets > 0 ? ((otherTickets / totalTickets) * 100).toFixed(1) : 0}%)
-                            </span>
+                            <span className="font-mono text-on-surface-variant">{assignedAssets} ({totalAssets > 0 ? ((assignedAssets/totalAssets)*100).toFixed(0) : 0}%)</span>
                           </div>
                           <div className="w-full bg-surface-container h-2 rounded-full overflow-hidden">
-                            <div
-                              className="bg-secondary-fixed-dim h-full rounded-full transition-all duration-500"
-                              style={{ width: `${totalTickets > 0 ? (otherTickets / totalTickets) * 100 : 0}%` }}
-                            />
+                            <div className="bg-primary h-full rounded-full" style={{ width: `${totalAssets > 0 ? (assignedAssets/totalAssets)*100 : 0}%` }} />
                           </div>
                         </div>
-                      )}
-                    </div>
-                  </div>
 
-                  {/* Summary Bar */}
-                  <div className="pt-5 mt-4 border-t border-surface-container flex flex-wrap items-center justify-between gap-3 text-xs text-on-surface-variant">
-                    <span className="font-mono">Open Queue: <strong className="text-on-surface">{openTickets}</strong></span>
-                    <span className="font-mono">In Progress: <strong className="text-on-surface">{inProgressTickets}</strong></span>
-                    <span className="font-mono">Resolved: <strong className="text-tertiary">{resolvedTickets}</strong></span>
-                    <span className="font-mono">Closed: <strong className="text-on-surface">{closedTickets}</strong></span>
+                        <div>
+                          <div className="flex justify-between text-xs mb-1.5">
+                            <span className="font-medium text-on-surface flex items-center gap-2">
+                              <span className="w-2.5 h-2.5 rounded-full bg-tertiary"></span>
+                              Available in Depository
+                            </span>
+                            <span className="font-mono text-on-surface-variant">{availableAssets} ({totalAssets > 0 ? ((availableAssets/totalAssets)*100).toFixed(0) : 0}%)</span>
+                          </div>
+                          <div className="w-full bg-surface-container h-2 rounded-full overflow-hidden">
+                            <div className="bg-tertiary h-full rounded-full" style={{ width: `${totalAssets > 0 ? (availableAssets/totalAssets)*100 : 0}%` }} />
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="flex justify-between text-xs mb-1.5">
+                            <span className="font-medium text-on-surface flex items-center gap-2">
+                              <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+                              Maintenance &amp; Diagnostics
+                            </span>
+                            <span className="font-mono text-on-surface-variant">{underRepairAssets}</span>
+                          </div>
+                          <div className="w-full bg-surface-container h-2 rounded-full overflow-hidden">
+                            <div className="bg-amber-500 h-full rounded-full" style={{ width: `${totalAssets > 0 ? (underRepairAssets/totalAssets)*100 : 0}%` }} />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-6 pt-3 flex items-center justify-between border-t border-surface-container-highest/40">
+                        <span className="text-xs text-on-surface-variant font-body">Hardware inventory management</span>
+                        <button
+                          type="button"
+                          className="text-xs font-medium text-primary hover:text-primary-container flex items-center gap-1 transition-colors cursor-pointer"
+                          onClick={() => setActiveTab('assets')}
+                        >
+                          <span>Manage Fleet Inventory</span>
+                          <span className="material-symbols-outlined text-[15px]">arrow_forward</span>
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
+              )}
 
-                {/* Column 2: Hardware Fleet Status (5 Cols) */}
-                <div className="lg:col-span-5 bg-surface-container-lowest p-6 rounded-xl shadow-sm flex flex-col justify-between">
-                  <div>
-                    <div className="flex items-center justify-between pb-3">
-                      <div>
-                        <h2 className="font-headline text-xl text-on-surface font-normal">Hardware Fleet Status</h2>
-                        <p className="text-xs text-on-surface-variant mt-0.5">Custody across {totalAssets} physical inventory items</p>
+              {/* -------------------- ROLE 3: ADMIN DASHBOARD -------------------- */}
+              {currentUser.role === 'ADMIN' && (
+                <div className="space-y-8">
+                  {/* 8 Executive KPI Summary Cards */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-3">
+                    {/* KPI 1: IT Assets */}
+                    <div className="bg-surface-container-lowest p-3.5 rounded-xl shadow-sm flex flex-col justify-between">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-medium uppercase tracking-wider text-on-surface-variant font-label">Total Assets</span>
+                        <span className="material-symbols-outlined text-[16px] text-primary">devices</span>
                       </div>
-                      <span className="text-xs font-mono text-on-surface-variant">{totalAssets} Units</span>
+                      <div className="mt-2.5">
+                        <div className="text-2xl font-headline font-medium text-on-surface">{totalAssets}</div>
+                        <span className="text-[10px] text-on-surface-variant block mt-0.5">{assignedAssets} assigned</span>
+                      </div>
                     </div>
 
-                    {/* Status List */}
-                    <div className="space-y-4 pt-2">
-                      <div>
-                        <div className="flex justify-between text-xs mb-1.5">
-                          <span className="font-medium text-on-surface flex items-center gap-2">
-                            <span className="w-2.5 h-2.5 rounded-full bg-primary"></span>
-                            Assigned to Personnel
-                          </span>
-                          <span className="font-mono text-on-surface-variant">
-                            {assignedAssets} units ({totalAssets > 0 ? ((assignedAssets / totalAssets) * 100).toFixed(1) : 0}%)
-                          </span>
+                    {/* KPI 2: Total Employees */}
+                    <div className="bg-surface-container-lowest p-3.5 rounded-xl shadow-sm flex flex-col justify-between">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-medium uppercase tracking-wider text-on-surface-variant font-label">Total Users</span>
+                        <span className="material-symbols-outlined text-[16px] text-primary">badge</span>
+                      </div>
+                      <div className="mt-2.5">
+                        <div className="text-2xl font-headline font-medium text-on-surface">{totalUsers}</div>
+                        <span className="text-[10px] text-on-surface-variant block mt-0.5">{adminUsers} admins, {supportUsers} staff</span>
+                      </div>
+                    </div>
+
+                    {/* KPI 3: Total Tickets */}
+                    <div className="bg-surface-container-lowest p-3.5 rounded-xl shadow-sm flex flex-col justify-between">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-medium uppercase tracking-wider text-on-surface-variant font-label">Total Tickets</span>
+                        <span className="material-symbols-outlined text-[16px] text-secondary">confirmation_number</span>
+                      </div>
+                      <div className="mt-2.5">
+                        <div className="text-2xl font-headline font-medium text-on-surface">{totalTickets}</div>
+                        <span className="text-[10px] text-on-surface-variant block mt-0.5">All lifecycles</span>
+                      </div>
+                    </div>
+
+                    {/* KPI 4: Open Tickets */}
+                    <div className="bg-surface-container-lowest p-3.5 rounded-xl shadow-sm flex flex-col justify-between">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-medium uppercase tracking-wider text-on-surface-variant font-label">Open Tickets</span>
+                        <span className="material-symbols-outlined text-[16px] text-primary">inbox</span>
+                      </div>
+                      <div className="mt-2.5">
+                        <div className="text-2xl font-headline font-medium text-on-surface">{openTickets}</div>
+                        <span className="text-[10px] text-on-surface-variant block mt-0.5">{inProgressTickets} in progress</span>
+                      </div>
+                    </div>
+
+                    {/* KPI 5: Resolved Tickets */}
+                    <div className="bg-surface-container-lowest p-3.5 rounded-xl shadow-sm flex flex-col justify-between">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-medium uppercase tracking-wider text-on-surface-variant font-label">Resolved</span>
+                        <span className="material-symbols-outlined text-[16px] text-tertiary">check_circle</span>
+                      </div>
+                      <div className="mt-2.5">
+                        <div className="text-2xl font-headline font-medium text-on-surface">{resolvedTickets}</div>
+                        <span className="text-[10px] text-on-surface-variant block mt-0.5">{closedTickets} closed</span>
+                      </div>
+                    </div>
+
+                    {/* KPI 6: High-Priority */}
+                    <div className="bg-surface-container-lowest p-3.5 rounded-xl shadow-sm flex flex-col justify-between">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-medium uppercase tracking-wider text-on-surface-variant font-label">High Priority</span>
+                        <span className="material-symbols-outlined text-[16px] text-on-error-container">warning</span>
+                      </div>
+                      <div className="mt-2.5">
+                        <div className="text-2xl font-headline font-medium text-on-surface">{criticalTickets + highTickets}</div>
+                        <span className="text-[10px] text-on-surface-variant block mt-0.5">{criticalTickets} critical, {highTickets} high</span>
+                      </div>
+                    </div>
+
+                    {/* KPI 7: SLA Compliance */}
+                    <div className="bg-surface-container-lowest p-3.5 rounded-xl shadow-sm flex flex-col justify-between">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-medium uppercase tracking-wider text-on-surface-variant font-label">SLA Compliance</span>
+                        <span className="material-symbols-outlined text-[16px] text-tertiary">timelapse</span>
+                      </div>
+                      <div className="mt-2.5">
+                        <div className="text-2xl font-headline font-medium text-on-surface">{complianceRate}%</div>
+                        <span className="text-[10px] text-on-surface-variant block mt-0.5">Target &gt;= 95%</span>
+                      </div>
+                    </div>
+
+                    {/* KPI 8: Active SLA Breaches */}
+                    <div className="bg-surface-container-lowest p-3.5 rounded-xl shadow-sm flex flex-col justify-between">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-medium uppercase tracking-wider text-on-surface-variant font-label">SLA Breaches</span>
+                        <span className="material-symbols-outlined text-[16px] text-error">notification_important</span>
+                      </div>
+                      <div className="mt-2.5">
+                        <div className="text-2xl font-headline font-medium text-error">{breachedTicketsCount}</div>
+                        <span className="text-[10px] text-on-surface-variant block mt-0.5">Active breaches</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Incident Distribution (7 Cols) & Hardware Fleet Status (5 Cols) */}
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                    {/* Left: Incident Breakdown */}
+                    <div className="lg:col-span-7 bg-surface-container-lowest p-6 rounded-xl shadow-sm">
+                      <div className="flex items-center justify-between pb-3">
+                        <div>
+                          <h2 className="font-headline text-xl text-on-surface font-normal">Incident Category Distribution</h2>
+                          <p className="text-xs text-on-surface-variant mt-0.5">Categorization across {totalTickets} recorded incidents</p>
                         </div>
-                        <div className="w-full bg-surface-container h-2 rounded-full overflow-hidden">
-                          <div
-                            className="bg-primary h-full rounded-full transition-all duration-500"
-                            style={{ width: `${totalAssets > 0 ? (assignedAssets / totalAssets) * 100 : 0}%` }}
-                          />
-                        </div>
+                        <span className="text-xs font-mono text-on-surface-variant">{totalTickets} Incidents</span>
                       </div>
 
-                      <div>
-                        <div className="flex justify-between text-xs mb-1.5">
-                          <span className="font-medium text-on-surface flex items-center gap-2">
-                            <span className="w-2.5 h-2.5 rounded-full bg-tertiary"></span>
-                            Available in Depository
-                          </span>
-                          <span className="font-mono text-on-surface-variant">
-                            {availableAssets} units ({totalAssets > 0 ? ((availableAssets / totalAssets) * 100).toFixed(1) : 0}%)
-                          </span>
+                      <div className="space-y-3.5 pt-2">
+                        <div>
+                          <div className="flex justify-between text-xs mb-1">
+                            <span className="font-medium text-on-surface">Hardware Incidents</span>
+                            <span className="font-mono text-on-surface-variant">{hardwareTickets} ({totalTickets > 0 ? ((hardwareTickets/totalTickets)*100).toFixed(0) : 0}%)</span>
+                          </div>
+                          <div className="w-full bg-surface-container h-2 rounded-full overflow-hidden">
+                            <div className="bg-primary h-full rounded-full" style={{ width: `${totalTickets > 0 ? (hardwareTickets/totalTickets)*100 : 0}%` }} />
+                          </div>
                         </div>
-                        <div className="w-full bg-surface-container h-2 rounded-full overflow-hidden">
-                          <div
-                            className="bg-tertiary h-full rounded-full transition-all duration-500"
-                            style={{ width: `${totalAssets > 0 ? (availableAssets / totalAssets) * 100 : 0}%` }}
-                          />
+
+                        <div>
+                          <div className="flex justify-between text-xs mb-1">
+                            <span className="font-medium text-on-surface">Network &amp; Connectivity</span>
+                            <span className="font-mono text-on-surface-variant">{networkTickets} ({totalTickets > 0 ? ((networkTickets/totalTickets)*100).toFixed(0) : 0}%)</span>
+                          </div>
+                          <div className="w-full bg-surface-container h-2 rounded-full overflow-hidden">
+                            <div className="bg-secondary h-full rounded-full" style={{ width: `${totalTickets > 0 ? (networkTickets/totalTickets)*100 : 0}%` }} />
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="flex justify-between text-xs mb-1">
+                            <span className="font-medium text-on-surface">Software &amp; OS Applications</span>
+                            <span className="font-mono text-on-surface-variant">{softwareTickets} ({totalTickets > 0 ? ((softwareTickets/totalTickets)*100).toFixed(0) : 0}%)</span>
+                          </div>
+                          <div className="w-full bg-surface-container h-2 rounded-full overflow-hidden">
+                            <div className="bg-primary-container h-full rounded-full" style={{ width: `${totalTickets > 0 ? (softwareTickets/totalTickets)*100 : 0}%` }} />
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="flex justify-between text-xs mb-1">
+                            <span className="font-medium text-on-surface">Access &amp; Permissions</span>
+                            <span className="font-mono text-on-surface-variant">{accessTickets} ({totalTickets > 0 ? ((accessTickets/totalTickets)*100).toFixed(0) : 0}%)</span>
+                          </div>
+                          <div className="w-full bg-surface-container h-2 rounded-full overflow-hidden">
+                            <div className="bg-tertiary h-full rounded-full" style={{ width: `${totalTickets > 0 ? (accessTickets/totalTickets)*100 : 0}%` }} />
+                          </div>
                         </div>
                       </div>
+                    </div>
 
-                      <div>
-                        <div className="flex justify-between text-xs mb-1.5">
-                          <span className="font-medium text-on-surface flex items-center gap-2">
-                            <span className="w-2.5 h-2.5 rounded-full bg-error"></span>
-                            Under Maintenance / Repair
-                          </span>
-                          <span className="font-mono text-on-surface-variant">
-                            {underRepairAssets} units ({totalAssets > 0 ? ((underRepairAssets / totalAssets) * 100).toFixed(1) : 0}%)
-                          </span>
+                    {/* Right: Hardware Fleet Status */}
+                    <div className="lg:col-span-5 bg-surface-container-lowest p-6 rounded-xl shadow-sm">
+                      <div className="flex items-center justify-between pb-3">
+                        <div>
+                          <h2 className="font-headline text-xl text-on-surface font-normal">Hardware Fleet Status</h2>
+                          <p className="text-xs text-on-surface-variant mt-0.5">Physical device custody distribution</p>
                         </div>
-                        <div className="w-full bg-surface-container h-2 rounded-full overflow-hidden">
-                          <div
-                            className="bg-error h-full rounded-full transition-all duration-500"
-                            style={{ width: `${totalAssets > 0 ? (underRepairAssets / totalAssets) * 100 : 0}%` }}
-                          />
-                        </div>
+                        <span className="text-xs font-mono text-on-surface-variant">{totalAssets} Units</span>
                       </div>
 
-                      <div>
-                        <div className="flex justify-between text-xs mb-1.5">
-                          <span className="font-medium text-on-surface flex items-center gap-2">
-                            <span className="w-2.5 h-2.5 rounded-full bg-secondary"></span>
-                            Retired / Deprovisioned
-                          </span>
-                          <span className="font-mono text-on-surface-variant">
-                            {retiredAssets} units ({totalAssets > 0 ? ((retiredAssets / totalAssets) * 100).toFixed(1) : 0}%)
-                          </span>
+                      <div className="space-y-4 pt-2">
+                        <div>
+                          <div className="flex justify-between text-xs mb-1.5">
+                            <span className="font-medium text-on-surface flex items-center gap-2">
+                              <span className="w-2.5 h-2.5 rounded-full bg-primary"></span>
+                              Assigned to Personnel
+                            </span>
+                            <span className="font-mono text-on-surface-variant">{assignedAssets} ({totalAssets > 0 ? ((assignedAssets/totalAssets)*100).toFixed(0) : 0}%)</span>
+                          </div>
+                          <div className="w-full bg-surface-container h-2 rounded-full overflow-hidden">
+                            <div className="bg-primary h-full rounded-full" style={{ width: `${totalAssets > 0 ? (assignedAssets/totalAssets)*100 : 0}%` }} />
+                          </div>
                         </div>
-                        <div className="w-full bg-surface-container h-2 rounded-full overflow-hidden">
-                          <div
-                            className="bg-secondary h-full rounded-full transition-all duration-500"
-                            style={{ width: `${totalAssets > 0 ? (retiredAssets / totalAssets) * 100 : 0}%` }}
-                          />
+
+                        <div>
+                          <div className="flex justify-between text-xs mb-1.5">
+                            <span className="font-medium text-on-surface flex items-center gap-2">
+                              <span className="w-2.5 h-2.5 rounded-full bg-tertiary"></span>
+                              Available in Depository
+                            </span>
+                            <span className="font-mono text-on-surface-variant">{availableAssets} ({totalAssets > 0 ? ((availableAssets/totalAssets)*100).toFixed(0) : 0}%)</span>
+                          </div>
+                          <div className="w-full bg-surface-container h-2 rounded-full overflow-hidden">
+                            <div className="bg-tertiary h-full rounded-full" style={{ width: `${totalAssets > 0 ? (availableAssets/totalAssets)*100 : 0}%` }} />
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="flex justify-between text-xs mb-1.5">
+                            <span className="font-medium text-on-surface flex items-center gap-2">
+                              <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+                              Maintenance &amp; Diagnostics
+                            </span>
+                            <span className="font-mono text-on-surface-variant">{underRepairAssets}</span>
+                          </div>
+                          <div className="w-full bg-surface-container h-2 rounded-full overflow-hidden">
+                            <div className="bg-amber-500 h-full rounded-full" style={{ width: `${totalAssets > 0 ? (underRepairAssets/totalAssets)*100 : 0}%` }} />
+                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  {/* Fleet Utilization Card */}
-                  <div className="mt-5 p-3.5 rounded-lg bg-surface-container flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                        <span className="material-symbols-outlined text-[20px]">devices</span>
-                      </div>
-                      <div>
-                        <div className="flex items-baseline gap-1.5">
-                          <span className="text-lg font-headline font-semibold text-on-surface">
-                            {totalAssets > 0 ? ((assignedAssets / totalAssets) * 100).toFixed(1) : 0}%
-                          </span>
-                          <span className="text-[11px] text-on-surface-variant">Fleet Utilization</span>
+                  {/* Priority Support Queue & System Audit Trail */}
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                    {/* Left: Priority Support Queue */}
+                    <div className="lg:col-span-7 bg-surface-container-lowest p-6 rounded-xl shadow-sm">
+                      <div className="flex items-center justify-between pb-4">
+                        <div>
+                          <h2 className="font-headline text-xl text-on-surface font-normal">Priority Support Queue</h2>
+                          <p className="text-xs text-on-surface-variant mt-0.5">Active support incidents requiring operational attention</p>
                         </div>
-                        <p className="text-[11px] text-on-surface-variant">{assignedAssets} of {totalAssets} devices assigned</p>
+                        <span className="px-2 py-0.5 rounded-full bg-error-container text-on-error-container text-[11px] font-medium font-mono">
+                          {criticalTickets + highTickets} High / Critical
+                        </span>
                       </div>
-                    </div>
-                    <button
-                      type="button"
-                      className="px-3 py-1.5 rounded-md bg-surface-container-highest hover:bg-surface-container-low text-xs font-medium text-on-surface transition-colors cursor-pointer"
-                      onClick={() => setActiveTab('assets')}
-                    >
-                      View Fleet
-                    </button>
-                  </div>
-                </div>
-              </div>
 
-              {/* Priority Incident Queue & System Audit Trail (2 Columns) */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                {/* Column 1: Priority Support Queue (7 Cols) */}
-                <div className="lg:col-span-7 bg-surface-container-lowest p-6 rounded-xl shadow-sm">
-                  <div className="flex items-center justify-between pb-4">
-                    <div>
-                      <h2 className="font-headline text-xl text-on-surface font-normal">Priority Incident Queue</h2>
-                      <p className="text-xs text-on-surface-variant mt-0.5">Active support incidents requiring operational attention</p>
-                    </div>
-                    <span className="px-2 py-0.5 rounded-full bg-error-container text-on-error-container text-[11px] font-medium font-mono">
-                      {criticalTickets + highTickets} High / Critical
-                    </span>
-                  </div>
-
-                  {/* Real Tickets Table */}
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs">
-                      <thead>
-                        <tr className="text-[10px] font-semibold tracking-wider uppercase text-on-surface-variant font-label bg-surface-container-low">
-                          <th className="py-2.5 px-3 rounded-l-md">Ticket ID</th>
-                          <th className="py-2.5 px-3">Subject / Title</th>
-                          <th className="py-2.5 px-3">Category</th>
-                          <th className="py-2.5 px-3">Priority</th>
-                          <th className="py-2.5 px-3">Status</th>
-                          <th className="py-2.5 px-3 rounded-r-md text-right">Assignee</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-surface-container-low">
-                        {tickets
-                          .filter(t => t.status !== "RESOLVED" && t.status !== "CLOSED")
-                          .sort((a, b) => {
-                            const pRank = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
-                            return (pRank[b.priority] || 0) - (pRank[a.priority] || 0);
-                          })
-                          .slice(0, 5)
-                          .map(t => (
-                            <tr key={t.id || t.ticket_id} className="hover:bg-surface-container-low transition-colors group">
-                              <td className="py-3 px-3 font-mono font-medium text-primary">
-                                #{t.ticket_id}
-                              </td>
-                              <td className="py-3 px-3 min-w-[200px]">
-                                <div className="font-medium text-on-surface truncate max-w-xs">{t.title}</div>
-                                <div className="text-[11px] text-on-surface-variant truncate max-w-xs">{t.description}</div>
-                              </td>
-                              <td className="py-3 px-3">
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-surface-container text-on-surface">
-                                  {t.category}
-                                </span>
-                              </td>
-                              <td className="py-3 px-3">
-                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
-                                  t.priority === 'CRITICAL' ? 'bg-error-container text-on-error-container' :
-                                  t.priority === 'HIGH' ? 'bg-primary-fixed text-on-primary-fixed' :
-                                  t.priority === 'MEDIUM' ? 'bg-secondary-fixed text-on-secondary-fixed' :
-                                  'bg-surface-container text-on-surface'
-                                }`}>
-                                  {t.priority}
-                                </span>
-                              </td>
-                              <td className="py-3 px-3">
-                                <span className={`badge-status ${t.status === 'OPEN' ? 'open' : t.status === 'IN_PROGRESS' ? 'open' : 'resolved'}`}>
-                                  {t.status}
-                                </span>
-                              </td>
-                              <td className="py-3 px-3 text-right font-mono text-[11px] text-on-surface-variant">
-                                {t.assigned_to || "Unassigned"}
-                              </td>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead>
+                            <tr className="text-[10px] font-semibold tracking-wider uppercase text-on-surface-variant font-label bg-surface-container-low">
+                              <th className="py-2.5 px-3 rounded-l-md">Ticket ID</th>
+                              <th className="py-2.5 px-3">Subject / Title</th>
+                              <th className="py-2.5 px-3">Priority</th>
+                              <th className="py-2.5 px-3">Status</th>
+                              <th className="py-2.5 px-3 rounded-r-md text-right">Assignee</th>
                             </tr>
-                          ))}
-                        {tickets.filter(t => t.status !== "RESOLVED" && t.status !== "CLOSED").length === 0 && (
-                          <tr>
-                            <td colSpan="6" className="py-6 text-center text-on-surface-variant">
-                              No open high-priority incidents currently active.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div className="mt-4 pt-3 flex items-center justify-between border-t border-surface-container-highest/40">
-                    <span className="text-xs text-on-surface-variant font-body">
-                      Showing active tickets from {totalTickets} total
-                    </span>
-                    <button
-                      type="button"
-                      className="text-xs font-medium text-primary hover:text-primary-container flex items-center gap-1 transition-colors cursor-pointer"
-                      onClick={() => setActiveTab('tickets')}
-                    >
-                      <span>View All {totalTickets} Tickets</span>
-                      <span className="material-symbols-outlined text-[15px]">arrow_forward</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Column 2: System Audit Trail (5 Cols) */}
-                <div className="lg:col-span-5 bg-surface-container-lowest p-6 rounded-xl shadow-sm flex flex-col justify-between">
-                  <div>
-                    <div className="flex items-center justify-between pb-4">
-                      <div>
-                        <h2 className="font-headline text-xl text-on-surface font-normal">System Audit Trail</h2>
-                        <p className="text-xs text-on-surface-variant mt-0.5">Chronological record of recent administrative and security actions</p>
+                          </thead>
+                          <tbody className="divide-y divide-surface-container-low">
+                            {tickets
+                              .filter(t => t.status !== "RESOLVED" && t.status !== "CLOSED")
+                              .slice(0, 5)
+                              .map(t => (
+                                <tr key={t.id || t.ticket_id} className="hover:bg-surface-container-low transition-colors">
+                                  <td className="py-3 px-3 font-mono font-medium text-primary">#{t.ticket_id}</td>
+                                  <td className="py-3 px-3 min-w-[180px]">
+                                    <div className="font-medium text-on-surface truncate max-w-xs">{t.title}</div>
+                                    <div className="text-[11px] text-on-surface-variant truncate max-w-xs">{t.description}</div>
+                                  </td>
+                                  <td className="py-3 px-3">
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${t.priority === 'CRITICAL' ? 'bg-error-container text-on-error-container' : t.priority === 'HIGH' ? 'bg-primary-fixed text-on-primary-fixed' : 'bg-surface-container text-on-surface'}`}>
+                                      {t.priority}
+                                    </span>
+                                  </td>
+                                  <td className="py-3 px-3">
+                                    <span className={`badge-status ${(t.status || "").toLowerCase().replace('_', '-')}`}>{t.status}</span>
+                                  </td>
+                                  <td className="py-3 px-3 text-right font-mono text-[11px] text-on-surface-variant">{t.assigned_to || "Unassigned"}</td>
+                                </tr>
+                              ))}
+                          </tbody>
+                        </table>
                       </div>
-                      <span className="w-2 h-2 rounded-full bg-tertiary animate-pulse"></span>
                     </div>
 
-                    {/* Audit List */}
-                    <div className="space-y-3.5 pt-1">
-                      {auditLogs.slice(0, 5).map((log, idx) => (
-                        <div key={log.id || idx} className="flex gap-3 items-start">
-                          <div className="w-8 h-8 rounded-full bg-surface-container-high flex-shrink-0 flex items-center justify-center text-primary">
-                            <span className="material-symbols-outlined text-[16px]">
-                              {log.action.includes('USER') ? 'person' : log.action.includes('ASSET') ? 'devices' : 'confirmation_number'}
+                    {/* Right: System Audit Trail (Admin Only) */}
+                    <div className="lg:col-span-5 bg-surface-container-lowest p-6 rounded-xl shadow-sm">
+                      <div className="flex items-center justify-between pb-4">
+                        <div>
+                          <h2 className="font-headline text-xl text-on-surface font-normal">System Audit Trail</h2>
+                          <p className="text-xs text-on-surface-variant mt-0.5">Chronological record of recent administrative and security actions</p>
+                        </div>
+                        <span className="text-[11px] font-mono text-tertiary">Real-time</span>
+                      </div>
+
+                      <div className="space-y-3">
+                        {auditLogs.slice(0, 5).map((log, idx) => (
+                          <div key={log.id || idx} className="p-3 rounded-lg bg-surface-container-low/50 border border-surface-container text-xs flex items-center justify-between">
+                            <div>
+                              <div className="font-medium text-on-surface flex items-center gap-1.5">
+                                <span className="font-mono text-primary font-semibold">{log.user_id}</span>
+                                <span>{log.action}</span>
+                              </div>
+                              <div className="text-[11px] text-on-surface-variant mt-0.5">{log.details}</div>
+                            </div>
+                            <span className="text-[10px] font-mono text-on-surface-variant whitespace-nowrap">
+                              {log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : 'Live'}
                             </span>
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-baseline justify-between gap-2">
-                              <p className="text-xs font-medium text-on-surface truncate">{log.action}</p>
-                              <span className="text-[10px] font-mono text-on-surface-variant">
-                                {log.timestamp ? new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Live'}
-                              </span>
-                            </div>
-                            <p className="text-[11px] text-on-surface-variant truncate">{log.details}</p>
-                            <span className="text-[10px] font-mono text-secondary">Actor: {log.user_id}</span>
-                          </div>
-                        </div>
-                      ))}
-                      {auditLogs.length === 0 && (
-                        <div className="text-center py-6 text-xs text-on-surface-variant">
-                          Loading audit records from database...
-                        </div>
-                      )}
+                        ))}
+                        {auditLogs.length === 0 && (
+                          <div className="py-6 text-center text-on-surface-variant text-xs">No audit logs recorded yet.</div>
+                        )}
+                      </div>
                     </div>
                   </div>
-
-                  {/* Audit Footer Action */}
-                  <div className="mt-6 pt-3">
-                    <button
-                      className="w-full py-2 px-3 rounded-lg bg-surface-container text-xs font-medium text-on-surface hover:bg-surface-container-high transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-                      type="button"
-                      onClick={() => setActiveTab('audit')}
-                    >
-                      <span className="material-symbols-outlined text-[16px]">history</span>
-                      <span>View Full Audit Ledger ({auditLogs.length} events)</span>
-                    </button>
-                  </div>
                 </div>
-              </div>
-
-              {/* Simple Sober Operational Status Bar */}
-              <div className="bg-surface-container-low p-4 rounded-xl shadow-sm flex flex-col md:flex-row items-center justify-between gap-4 text-xs border border-surface-container-highest/40">
-                <div className="flex flex-wrap items-center gap-6 text-on-surface-variant">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-tertiary"></span>
-                    <span className="font-medium text-on-surface">Database Status:</span>
-                    <span className="font-mono text-tertiary">Live Synchronized</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-primary"></span>
-                    <span className="font-medium text-on-surface">Active Records:</span>
-                    <span className="font-mono text-on-surface">{totalAssets} Assets • {totalUsers} Users • {totalTickets} Tickets</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 text-[11px] text-on-surface-variant font-mono">
-                  <span>AssetDesk Operations Platform</span>
-                </div>
-              </div>
+              )}
             </div>
           )}
 
@@ -2072,7 +2465,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
               <div className="table-card">
                 <div className="table-header-box">
                   <div>
-                    <div className="table-header-title">Enterprise Incident Queue</div>
+                    <div className="table-header-title">{currentUser.role === 'EMPLOYEE' ? 'My Support Incident Requests' : 'Enterprise Incident Queue'}</div>
                     <div style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginTop: "0.15rem" }}>
                       Showing {filteredTickets.length} of {tickets.length} total tickets from database ({openTickets} Open, {inProgressTickets} In Progress, {resolvedTickets} Resolved, {closedTickets} Closed)
                     </div>
@@ -2286,7 +2679,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
               <div className="table-card">
                 <div className="table-header-box">
                   <div>
-                    <div className="table-header-title">Enterprise Hardware Fleet</div>
+                    <div className="table-header-title">{currentUser.role === 'EMPLOYEE' ? 'My Assigned Hardware Equipment' : 'Enterprise Hardware Fleet'}</div>
                     <div style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginTop: "0.15rem" }}>
                       Showing {filteredAssets.length} of {assets.length} tracked devices in database ({assignedAssets} Assigned, {availableAssets} In Stock, {underRepairAssets} In Repair, {retiredAssets} Retired)
                     </div>
@@ -2406,7 +2799,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
           )}
 
           {/* TAB 3: SLA & PERFORMANCE */}
-          {(activeTab === "sla" || activeTab === "reports" || activeTab === "sla-monitor") && (
+          {(activeTab === "sla" || activeTab === "reports" || activeTab === "sla-monitor") && currentUser && (currentUser.role === "ADMIN" || currentUser.role === "SUPPORT") && (
             <div className="space-y-6">
               {/* SLA KPI Summary Cards */}
               
@@ -2574,7 +2967,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
           )}
 
           {/* TAB 4: EMPLOYEE DIRECTORY */}
-          {(activeTab === "employees" || activeTab === "users" || activeTab === "user-directory") && currentUser.role !== "EMPLOYEE" && (
+          {(activeTab === "employees" || activeTab === "users" || activeTab === "user-directory") && currentUser && currentUser.role === "ADMIN" && (
             <div>
               
               {fetchError && (
@@ -2752,7 +3145,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
           )}
 
           {/* TAB 5: AUDIT LOGS & LIVE STREAM */}
-          {(activeTab === "audit" || activeTab === "events" || activeTab === "settings-audit-logs" || activeTab === "audit-logs") && (
+          {(activeTab === "audit" || activeTab === "events" || activeTab === "settings-audit-logs" || activeTab === "audit-logs") && currentUser && currentUser.role === "ADMIN" && (
             <div className="space-y-6">
               
               {fetchError && (
