@@ -15,6 +15,7 @@ SNAP_EMP_EQ = os.path.join(ARTIFACT_DIR, "monday_employee_equipment_requests.png
 SNAP_ADMIN_EQ = os.path.join(ARTIFACT_DIR, "monday_admin_equipment_queue.png")
 SNAP_TICKET_HIST = os.path.join(ARTIFACT_DIR, "monday_ticket_history_modal.png")
 SNAP_SUPPORT = os.path.join(ARTIFACT_DIR, "monday_support_tickets_view.png")
+SNAP_EQ_HIST = os.path.join(ARTIFACT_DIR, "monday_equipment_history_modal.png")
 
 async def run_verification():
     print("--- STARTING MONDAY DELIVERABLES BROWSER E2E VERIFICATION ---")
@@ -221,8 +222,8 @@ async def run_verification():
             print("[ACTION] Navigating to Tickets tab and opening Ticket History...")
             await eval_js("""
             (() => {
-                const btns = Array.from(document.querySelectorAll('button'));
-                const tktTab = btns.find(b => b.innerText.includes('Tickets'));
+                const asideBtns = Array.from(document.querySelectorAll('aside button'));
+                const tktTab = asideBtns.find(b => b.innerText.includes('Tickets'));
                 if (tktTab) tktTab.click();
             })()
             """)
@@ -231,9 +232,8 @@ async def run_verification():
             # Click History on the first ticket
             await eval_js("""
             (() => {
-                const btns = Array.from(document.querySelectorAll('button'));
-                const histBtn = btns.find(b => b.innerText.trim() === 'History');
-                if (histBtn) histBtn.click();
+                const histBtns = Array.from(document.querySelectorAll('button')).filter(b => b.innerText.includes('History'));
+                if (histBtns.length > 0) histBtns[0].click();
             })()
             """)
             await asyncio.sleep(2)
@@ -307,3 +307,4 @@ async def run_verification():
 
 if __name__ == "__main__":
     asyncio.run(run_verification())
+

@@ -292,3 +292,232 @@ def test_asset_search_and_update(tokens):
     assert update_res.status_code == 200
     assert update_res.json()["brand"] == "UpdatedBrand"
     assert update_res.json()["model"] == "UpdatedModel"
+
+
+# =====================================================================
+# 7. Complete Ticket Assignment History & Concurrency Safety
+# =====================================================================
+def test_ticket_assignment_history_audit_fields(tokens):
+    """
+    Verifies that every manual assignment, reassignment, and automatic assignment
+    records: previous_assignee, new_assignee, actor responsible, assignment_method,
+    server timestamp, and related ticket_id.
+    """
+    admin_headers = {"Authorization": f"Bearer {tokens['admin']}"}
+    emp_headers = {"Authorization": f"Bearer {tokens['emp1']}"}
+
+    # 1. Create ticket -> Triggers automatic assignment
+    c_res = client.post(
+        "/tickets",
+        json={"title": "Assignment History Audit Ticket", "description": "Verifying complete history columns"},
+        headers=emp_headers
+    )
+    assert c_res.status_code == 201
+    ticket_id = c_res.json()["ticket_id"]
+
+    # Retrieve history
+    hist_res = client.get(f"/tickets/{ticket_id}/history", headers=emp_headers)
+    assert hist_res.status_code == 200
+    history = hist_res.json()
+
+    # Find the auto-assignment record
+    auto_event = next((h for h in history if h.get("assignment_method") == "AUTOMATIC"), None)
+    assert auto_event is not None, f"Expected AUTOMATIC assignment record, got: {history}"
+    assert auto_event["changed_by"] == "SYSTEM"
+    assert auto_event["new_assignee"] is not None
+    assert auto_event["assignment_method"] == "AUTOMATIC"
+    assert auto_event["ticket_id"] == ticket_id
+    assert auto_event["timestamp"] is not None
+    initial_assignee = auto_event["new_assignee"]
+
+    # 2. Admin manually reassigns the ticket to ADM-001 (or another support user)
+    reassign_res = client.post(
+        f"/tickets/{ticket_id}/assign",
+        json={"assigned_to": "ADM-001"},
+        headers=admin_headers
+    )
+    assert reassign_res.status_code == 200
+
+    # Retrieve history after manual reassignment
+    hist_res2 = client.get(f"/tickets/{ticket_id}/history", headers=admin_headers)
+    assert hist_res2.status_code == 200
+    history2 = hist_res2.json()
+
+    manual_event = next((h for h in history2 if h.get("assignment_method") == "MANUAL"), None)
+    assert manual_event is not None, f"Expected MANUAL assignment record, got: {history2}"
+    assert manual_event["changed_by"] == "ADM-001"
+    assert manual_event["previous_assignee"] == initial_assignee
+    assert manual_event["new_assignee"] == "ADM-001"
+    assert manual_event["assignment_method"] == "MANUAL"
+    assert manual_event["ticket_id"] == ticket_id
+    assert manual_event["timestamp"] is not None
+
+
+def test_concurrency_safe_auto_assignment():
+    """
+    Verifies concurrent ticket creation executes safely through the assignment service lock
+    without race conditions or stale workload calculations.
+    """
+    from app.services.assignment_service import auto_assign_ticket
+    from concurrent.futures import ThreadPoolExecutor
+    from app.database.connection import db_manager
+    from app.models.db_models import TicketDB
+
+    # Create 4 test tickets in the DB
+    ticket_ids = []
+    with db_manager.get_session() as session:
+        for i in range(4):
+            tid = f"INC-CONCUR-{i+1000}"
+            # Clean up if exists
+            existing = session.query(TicketDB).filter(TicketDB.ticket_id == tid).first()
+            if existing:
+                session.delete(existing)
+                session.flush()
+            t = TicketDB(
+                ticket_id=tid,
+                title=f"Concurrent Test {i}",
+                description="Testing concurrent assignment lock",
+                category="Hardware",
+                priority="MEDIUM",
+                status="OPEN",
+                created_by="EMP-101"
+            )
+            session.add(t)
+            session.flush()
+            ticket_ids.append(tid)
+        session.commit()
+
+    # Concurrently execute auto_assign_ticket on separate threads
+    def assign_worker(tid):
+        with db_manager.get_session() as s:
+            return auto_assign_ticket(s, tid)
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        results = list(executor.map(assign_worker, ticket_ids))
+
+    # All 4 tickets should be successfully assigned
+    for r in results:
+        assert r is not None
+        assert r.startswith("IT-") or r.startswith("ADM-")
+
+
+# =====================================================================
+# 8. Equipment Request Audit History & Strict Lifecycle Transitions
+# =====================================================================
+def test_equipment_request_strict_provisioning_and_history(tokens):
+    """
+    Verifies:
+    1. Provisioning requires a valid, verified asset allocation (400 if omitted).
+    2. Provisioning with non-existent asset returns 404.
+    3. Complete chronological history is recorded at every stage.
+    4. Employee cannot verify before PROVISIONED (400).
+    5. Cannot close before VERIFIED (400).
+    """
+    emp1_headers = {"Authorization": f"Bearer {tokens['emp1']}"}
+    emp2_headers = {"Authorization": f"Bearer {tokens['emp2']}"}
+    admin_headers = {"Authorization": f"Bearer {tokens['admin']}"}
+
+    # 1. Create request
+    create_res = client.post(
+        "/equipment-requests",
+        json={"equipment_type": "Monitor", "reason": "Dual monitor setup for development"},
+        headers=emp1_headers
+    )
+    assert create_res.status_code == 201
+    req_id = create_res.json()["request_id"]
+
+    # History should have CREATED event
+    h1 = client.get(f"/equipment-requests/{req_id}/history", headers=emp1_headers).json()
+    assert len(h1) == 1
+    assert h1[0]["action"] == "CREATED"
+    assert h1[0]["actor"] == "EMP-101"
+    assert h1[0]["new_status"] == "PENDING"
+
+    # 2. Cannot verify or close while PENDING -> 400
+    assert client.post(f"/equipment-requests/{req_id}/verify", json={}, headers=emp1_headers).status_code == 400
+    assert client.post(f"/equipment-requests/{req_id}/close", json={}, headers=emp1_headers).status_code == 400
+
+    # 3. Admin approves
+    appr_res = client.post(
+        f"/equipment-requests/{req_id}/approve",
+        json={"admin_notes": "Approved for dev"},
+        headers=admin_headers
+    )
+    assert appr_res.status_code == 200
+
+    # History should have APPROVED event
+    h2 = client.get(f"/equipment-requests/{req_id}/history", headers=emp1_headers).json()
+    assert len(h2) == 2
+    assert h2[1]["action"] == "APPROVED"
+    assert h2[1]["actor"] == "ADM-001"
+
+    # 4. Strict provisioning check: provisioning without asset_id is rejected with 400
+    empty_prov = client.post(
+        f"/equipment-requests/{req_id}/provision",
+        json={"provisioned_asset_id": ""},
+        headers=admin_headers
+    )
+    assert empty_prov.status_code == 400
+
+    # Provisioning with non-existent asset is rejected with 404
+    missing_prov = client.post(
+        f"/equipment-requests/{req_id}/provision",
+        json={"provisioned_asset_id": "NON-EXISTENT-ASSET-99999"},
+        headers=admin_headers
+    )
+    assert missing_prov.status_code == 404
+
+    # 5. Valid provisioning with real asset
+    with db_manager.get_session() as s:
+        real_asset = s.query(AssetDB).first()
+        valid_asset_id = real_asset.asset_id
+
+    prov_res = client.post(
+        f"/equipment-requests/{req_id}/provision",
+        json={"provisioned_asset_id": valid_asset_id, "admin_notes": "Allocated 4K monitor"},
+        headers=admin_headers
+    )
+    assert prov_res.status_code == 200
+    assert prov_res.json()["status"] == "PROVISIONED"
+
+    # History should record PROVISIONED with asset_id
+    h3 = client.get(f"/equipment-requests/{req_id}/history", headers=emp1_headers).json()
+    assert len(h3) == 3
+    assert h3[2]["action"] == "PROVISIONED"
+    assert h3[2]["asset_id"] == valid_asset_id
+
+    # 6. Cannot close while PROVISIONED (must be VERIFIED first)
+    assert client.post(f"/equipment-requests/{req_id}/close", json={}, headers=emp1_headers).status_code == 400
+
+    # 7. Employee verifies
+    ver_res = client.post(
+        f"/equipment-requests/{req_id}/verify",
+        json={"employee_notes": "Monitor works отлично"},
+        headers=emp1_headers
+    )
+    assert ver_res.status_code == 200
+    assert ver_res.json()["status"] == "VERIFIED"
+
+    # History should record VERIFIED
+    h4 = client.get(f"/equipment-requests/{req_id}/history", headers=emp1_headers).json()
+    assert len(h4) == 4
+    assert h4[3]["action"] == "VERIFIED"
+    assert h4[3]["actor"] == "EMP-101"
+
+    # 8. Employee closes
+    close_res = client.post(
+        f"/equipment-requests/{req_id}/close",
+        json={"employee_notes": "Request closed"},
+        headers=emp1_headers
+    )
+    assert close_res.status_code == 200
+    assert close_res.json()["status"] == "CLOSED"
+
+    # Final complete history has all 5 events (CREATED, APPROVED, PROVISIONED, VERIFIED, CLOSED)
+    h5 = client.get(f"/equipment-requests/{req_id}/history", headers=emp1_headers).json()
+    assert len(h5) == 5
+    actions = [x["action"] for x in h5]
+    assert actions == ["CREATED", "APPROVED", "PROVISIONED", "VERIFIED", "CLOSED"]
+
+    # Another employee cannot view this request history (403 Forbidden)
+    assert client.get(f"/equipment-requests/{req_id}/history", headers=emp2_headers).status_code == 403

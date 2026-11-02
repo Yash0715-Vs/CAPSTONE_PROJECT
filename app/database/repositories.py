@@ -185,7 +185,10 @@ class TicketRepository:
         ticket_id: str,
         new_status: str,
         changed_by: str,
-        comment: Optional[str] = None
+        comment: Optional[str] = None,
+        previous_assignee: Optional[str] = None,
+        new_assignee: Optional[str] = None,
+        assignment_method: Optional[str] = None,
     ) -> TicketDB:
         ticket = TicketRepository.get_by_ticket_id(session, ticket_id)
         if not ticket:
@@ -202,6 +205,9 @@ class TicketRepository:
             changed_by=changed_by,
             old_status=old_status,
             new_status=new_status,
+            previous_assignee=previous_assignee,
+            new_assignee=new_assignee,
+            assignment_method=assignment_method,
             comment=comment or f"Status changed to {new_status}",
             timestamp=datetime.now(timezone.utc)
         )

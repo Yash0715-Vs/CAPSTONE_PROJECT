@@ -178,19 +178,37 @@ class TicketDB(Base):
 class TicketHistoryDB(Base):
     """
     SQLAlchemy ORM Model for `ticket_history` audit trail.
+    Tracks every status transition, manual assignment, and automatic assignment.
     """
     __tablename__ = "ticket_history"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     ticket_id = Column(String(50), ForeignKey("tickets.ticket_id"), nullable=False, index=True)
-    changed_by = Column(String(50), nullable=False)  # Can be a user_id or "SYSTEM" for auto-actions
+    changed_by = Column(String(50), nullable=False)  # User ID or "SYSTEM"
     old_status = Column(String(30), nullable=False)
     new_status = Column(String(30), nullable=False)
+    previous_assignee = Column(String(50), nullable=True)
+    new_assignee = Column(String(50), nullable=True)
+    assignment_method = Column(String(20), nullable=True)  # "MANUAL" or "AUTOMATIC"
     comment = Column(Text, nullable=True)
     timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     # Relationship
     ticket = relationship("TicketDB", back_populates="history")
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "ticket_id": self.ticket_id,
+            "changed_by": self.changed_by,
+            "old_status": self.old_status,
+            "new_status": self.new_status,
+            "previous_assignee": self.previous_assignee,
+            "new_assignee": self.new_assignee,
+            "assignment_method": self.assignment_method,
+            "comment": self.comment,
+            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+        }
 
 
 class ActivityLogDB(Base):
@@ -235,6 +253,14 @@ class EquipmentRequestDB(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
+    # Audit Trail Relationship
+    history = relationship(
+        "EquipmentRequestHistoryDB",
+        back_populates="request",
+        cascade="all, delete-orphan",
+        order_by="EquipmentRequestHistoryDB.timestamp.asc()"
+    )
+
     def to_dict(self):
         return {
             "id": self.id,
@@ -250,3 +276,37 @@ class EquipmentRequestDB(Base):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
+
+class EquipmentRequestHistoryDB(Base):
+    """
+    SQLAlchemy ORM Model for `equipment_request_history` audit trail.
+    Tracks every lifecycle action: CREATED, APPROVED, REJECTED, PROVISIONED, VERIFIED, CLOSED.
+    """
+    __tablename__ = "equipment_request_history"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    request_id = Column(String(50), ForeignKey("equipment_requests.request_id"), nullable=False, index=True)
+    actor = Column(String(50), nullable=False)  # User ID who executed action
+    action = Column(String(50), nullable=False)  # CREATED, APPROVED, REJECTED, PROVISIONED, VERIFIED, CLOSED
+    old_status = Column(String(30), nullable=True)
+    new_status = Column(String(30), nullable=False)
+    asset_id = Column(String(50), nullable=True)
+    notes = Column(Text, nullable=True)
+    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # Relationship
+    request = relationship("EquipmentRequestDB", back_populates="history")
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "request_id": self.request_id,
+            "actor": self.actor,
+            "action": self.action,
+            "old_status": self.old_status,
+            "new_status": self.new_status,
+            "asset_id": self.asset_id,
+            "notes": self.notes,
+            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+        }
+

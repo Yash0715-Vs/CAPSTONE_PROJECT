@@ -1,13 +1,19 @@
 """
 Equipment Request API Endpoints.
 
-Lifecycle:
-1. EMPLOYEE submits: POST /equipment-requests (Status: PENDING)
-2. ADMIN approves:   POST /equipment-requests/{id}/approve (Status: APPROVED)
-   OR rejects:       POST /equipment-requests/{id}/reject (Status: REJECTED)
-3. ADMIN provisions: POST /equipment-requests/{id}/provision (Status: PROVISIONED, links asset_id)
-4. EMPLOYEE verifies:POST /equipment-requests/{id}/verify (Status: VERIFIED, confirms receipt)
-5. EMPLOYEE/ADMIN:   POST /equipment-requests/{id}/close (Status: CLOSED)
+Meets Monday Technical Requirements & Audit Specifications:
+Lifecycle State Machine:
+1. EMPLOYEE submits:  POST /equipment-requests (Status: PENDING)
+2. ADMIN approves:    POST /equipment-requests/{id}/approve (Status: APPROVED)
+   OR rejects:        POST /equipment-requests/{id}/reject (Status: REJECTED)
+3. ADMIN provisions:  POST /equipment-requests/{id}/provision (Status: PROVISIONED, requires valid, active asset)
+4. EMPLOYEE verifies: POST /equipment-requests/{id}/verify (Status: VERIFIED, confirms hardware receipt)
+5. EMPLOYEE/ADMIN:    POST /equipment-requests/{id}/close (Status: CLOSED, follows verification)
+
+Audit History:
+- Every lifecycle stage persistently records an audit row in EquipmentRequestHistoryDB
+- Recording actor, action, old_status, new_status, asset_id, notes, and server timestamp
+- GET /equipment-requests/{id}/history exposes the complete chronological trail
 """
 
 from typing import List, Optional
@@ -19,7 +25,7 @@ from pydantic import BaseModel, Field
 
 from app.database.connection import get_db
 from app.database.repositories import ActivityLogRepository
-from app.models.db_models import EquipmentRequestDB, AssetDB, UserDB
+from app.models.db_models import EquipmentRequestDB, EquipmentRequestHistoryDB, AssetDB, UserDB
 from app.services.auth_service import get_current_user, require_roles
 
 router = APIRouter(prefix="/equipment-requests", tags=["Equipment Requests"])
@@ -71,16 +77,31 @@ def create_equipment_request(
         next_num += 1
         request_id = f"EQR-{1000 + next_num}"
 
+    now = datetime.now(timezone.utc)
     req = EquipmentRequestDB(
         request_id=request_id,
         requested_by=current_user.user_id,
         equipment_type=req_in.equipment_type,
         reason=req_in.reason,
         status="PENDING",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=now,
+        updated_at=now,
     )
     session.add(req)
+    session.flush()
+
+    # Persistent audit history record
+    hist = EquipmentRequestHistoryDB(
+        request_id=request_id,
+        actor=current_user.user_id,
+        action="CREATED",
+        old_status=None,
+        new_status="PENDING",
+        asset_id=None,
+        notes=req_in.reason,
+        timestamp=now
+    )
+    session.add(hist)
     session.flush()
 
     ActivityLogRepository.log(
@@ -129,6 +150,37 @@ def get_equipment_request(
     return req.to_dict()
 
 
+@router.get("/{request_id}/history")
+def get_equipment_request_history(
+    request_id: str,
+    session: Session = Depends(get_db),
+    current_user: UserDB = Depends(get_current_user)
+):
+    """
+    Returns full chronological audit trail for an equipment request.
+    Employees may only view audit history of their own requests; Admins/Support can inspect all.
+    """
+    req = session.query(EquipmentRequestDB).filter(EquipmentRequestDB.request_id == request_id).first()
+    if not req:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Equipment request '{request_id}' not found."
+        )
+    if current_user.role == "EMPLOYEE" and req.requested_by != current_user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are only authorized to view audit history of your own equipment requests."
+        )
+
+    history = (
+        session.query(EquipmentRequestHistoryDB)
+        .filter(EquipmentRequestHistoryDB.request_id == request_id)
+        .order_by(EquipmentRequestHistoryDB.timestamp.asc())
+        .all()
+    )
+    return [h.to_dict() for h in history]
+
+
 @router.post("/{request_id}/approve")
 def approve_equipment_request(
     request_id: str,
@@ -149,11 +201,26 @@ def approve_equipment_request(
             detail=f"Cannot approve request in '{req.status}' status (must be PENDING)."
         )
 
+    old_status = req.status
+    now = datetime.now(timezone.utc)
     req.status = "APPROVED"
     req.approved_by = admin.user_id
     if action.admin_notes:
         req.admin_notes = action.admin_notes
-    req.updated_at = datetime.now(timezone.utc)
+    req.updated_at = now
+    session.flush()
+
+    hist = EquipmentRequestHistoryDB(
+        request_id=request_id,
+        actor=admin.user_id,
+        action="APPROVED",
+        old_status=old_status,
+        new_status="APPROVED",
+        asset_id=None,
+        notes=action.admin_notes or f"Approved by Admin {admin.user_id}",
+        timestamp=now
+    )
+    session.add(hist)
     session.flush()
 
     ActivityLogRepository.log(
@@ -182,14 +249,29 @@ def reject_equipment_request(
     if req.status not in ("PENDING", "APPROVED"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot reject request in '{req.status}' status."
+            detail=f"Cannot reject request in '{req.status}' status (only PENDING or APPROVED requests can be rejected)."
         )
 
+    old_status = req.status
+    now = datetime.now(timezone.utc)
     req.status = "REJECTED"
     req.approved_by = admin.user_id
     if action.admin_notes:
         req.admin_notes = action.admin_notes
-    req.updated_at = datetime.now(timezone.utc)
+    req.updated_at = now
+    session.flush()
+
+    hist = EquipmentRequestHistoryDB(
+        request_id=request_id,
+        actor=admin.user_id,
+        action="REJECTED",
+        old_status=old_status,
+        new_status="REJECTED",
+        asset_id=None,
+        notes=action.admin_notes or f"Rejected by Admin {admin.user_id}",
+        timestamp=now
+    )
+    session.add(hist)
     session.flush()
 
     ActivityLogRepository.log(
@@ -208,7 +290,10 @@ def provision_equipment_request(
     session: Session = Depends(get_db),
     admin: UserDB = Depends(require_roles(["ADMIN"]))
 ):
-    """Admin provisions hardware for an approved request, associating an asset."""
+    """
+    Admin provisions hardware for an approved request, associating a valid verified asset.
+    Strictly prohibits transitioning to PROVISIONED without a valid asset.
+    """
     req = session.query(EquipmentRequestDB).filter(EquipmentRequestDB.request_id == request_id).first()
     if not req:
         raise HTTPException(
@@ -221,26 +306,54 @@ def provision_equipment_request(
             detail=f"Cannot provision request in '{req.status}' status (must be APPROVED first)."
         )
 
-    if action.provisioned_asset_id:
-        asset = session.query(AssetDB).filter(AssetDB.asset_id == action.provisioned_asset_id).first()
-        if not asset:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Asset '{action.provisioned_asset_id}' not found."
-            )
-        req.provisioned_asset_id = action.provisioned_asset_id
+    # Strictly require valid provisioned_asset_id
+    if not action.provisioned_asset_id or not action.provisioned_asset_id.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A valid provisioned_asset_id is required to provision equipment. Cannot mark PROVISIONED without hardware allocation."
+        )
 
+    clean_asset_id = action.provisioned_asset_id.strip()
+    asset = session.query(AssetDB).filter(AssetDB.asset_id == clean_asset_id).first()
+    if not asset:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Asset '{clean_asset_id}' not found in asset inventory."
+        )
+
+    if asset.status in ("DECOMMISSIONED", "RETIRED"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Asset '{clean_asset_id}' has status '{asset.status}' and cannot be provisioned to employees."
+        )
+
+    old_status = req.status
+    now = datetime.now(timezone.utc)
+    req.provisioned_asset_id = clean_asset_id
     req.status = "PROVISIONED"
     if action.admin_notes:
         req.admin_notes = (req.admin_notes or "") + f" | Provision notes: {action.admin_notes}"
-    req.updated_at = datetime.now(timezone.utc)
+    req.updated_at = now
+    session.flush()
+
+    hist = EquipmentRequestHistoryDB(
+        request_id=request_id,
+        actor=admin.user_id,
+        action="PROVISIONED",
+        old_status=old_status,
+        new_status="PROVISIONED",
+        asset_id=clean_asset_id,
+        notes=action.admin_notes or f"Provisioned with asset {clean_asset_id} ({asset.name})",
+        timestamp=now
+    )
+    session.add(hist)
     session.flush()
 
     ActivityLogRepository.log(
         session,
         "EQUIPMENT_REQUEST_PROVISIONED",
         admin.user_id,
-        f"Admin {admin.user_id} provisioned {request_id} with asset {action.provisioned_asset_id or 'N/A'}"
+        f"Admin {admin.user_id} provisioned {request_id} with asset {clean_asset_id}"
     )
     return req.to_dict()
 
@@ -270,10 +383,25 @@ def verify_equipment_request(
             detail=f"Cannot verify request in '{req.status}' status (must be PROVISIONED)."
         )
 
+    old_status = req.status
+    now = datetime.now(timezone.utc)
     req.status = "VERIFIED"
     if action.employee_notes:
         req.employee_notes = action.employee_notes
-    req.updated_at = datetime.now(timezone.utc)
+    req.updated_at = now
+    session.flush()
+
+    hist = EquipmentRequestHistoryDB(
+        request_id=request_id,
+        actor=current_user.user_id,
+        action="VERIFIED",
+        old_status=old_status,
+        new_status="VERIFIED",
+        asset_id=req.provisioned_asset_id,
+        notes=action.employee_notes or "Hardware receipt verified by employee",
+        timestamp=now
+    )
+    session.add(hist)
     session.flush()
 
     ActivityLogRepository.log(
@@ -292,28 +420,55 @@ def close_equipment_request(
     session: Session = Depends(get_db),
     current_user: UserDB = Depends(get_current_user)
 ):
-    """Closes an equipment request following verification."""
+    """
+    Closes an equipment request following verification.
+    Only the requesting employee or an Administrator can close the request.
+    Strictly requires request status to be VERIFIED.
+    """
     req = session.query(EquipmentRequestDB).filter(EquipmentRequestDB.request_id == request_id).first()
     if not req:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Equipment request '{request_id}' not found."
         )
+
+    # RBAC check: only requesting employee or Admin
     if current_user.role == "EMPLOYEE" and req.requested_by != current_user.user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You are only authorized to close your own equipment requests."
         )
+    elif current_user.role not in ("EMPLOYEE", "ADMIN"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the requesting employee or an Administrator is authorized to close equipment requests."
+        )
+
     if req.status != "VERIFIED":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot close request in '{req.status}' status (must be VERIFIED)."
+            detail=f"Cannot close request in '{req.status}' status (request must be VERIFIED by employee before closure)."
         )
 
+    old_status = req.status
+    now = datetime.now(timezone.utc)
     req.status = "CLOSED"
     if action.employee_notes:
         req.employee_notes = (req.employee_notes or "") + f" | Close: {action.employee_notes}"
-    req.updated_at = datetime.now(timezone.utc)
+    req.updated_at = now
+    session.flush()
+
+    hist = EquipmentRequestHistoryDB(
+        request_id=request_id,
+        actor=current_user.user_id,
+        action="CLOSED",
+        old_status=old_status,
+        new_status="CLOSED",
+        asset_id=req.provisioned_asset_id,
+        notes=action.employee_notes or f"Closed by {current_user.user_id} ({current_user.role})",
+        timestamp=now
+    )
+    session.add(hist)
     session.flush()
 
     ActivityLogRepository.log(

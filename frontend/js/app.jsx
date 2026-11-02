@@ -412,7 +412,7 @@ function RegisterPage({ onRegisterSuccess, onSwitchToLogin, theme, onToggleTheme
 
   return (
     <div className="register-page-wrap">
-      {/* Background Dot Grid & Ambient Deep Teal Glow */}
+      {/* Background Dot Grid & Ambient Terracotta Glow */}
       <div className="register-bg-dots" />
       <div className="register-ambient-glow" />
 
@@ -899,6 +899,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
   const [equipmentRequests, setEquipmentRequests] = useState([]);
   const [showEquipmentModal, setShowEquipmentModal] = useState(false);
   const [showTicketHistoryModal, setShowTicketHistoryModal] = useState(null);
+  const [showEquipmentHistoryModal, setShowEquipmentHistoryModal] = useState(null);
   const [showEditAssetModal, setShowEditAssetModal] = useState(null);
   const [showProvisionModal, setShowProvisionModal] = useState(null);
 
@@ -2651,6 +2652,17 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                                   <span>Close</span>
                                 </button>
                               )}
+
+                              {/* Audit Trail Button */}
+                              <button
+                                type="button"
+                                className="table-btn"
+                                onClick={() => setShowEquipmentHistoryModal(r)}
+                                title="View lifecycle audit history"
+                              >
+                                <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>history</span>
+                                <span>History</span>
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -3898,6 +3910,14 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
         />
       )}
 
+      {showEquipmentHistoryModal && (
+        <EquipmentHistoryModal
+          request={showEquipmentHistoryModal}
+          token={token}
+          onClose={() => setShowEquipmentHistoryModal(null)}
+        />
+      )}
+
       {/* EQUIPMENT REQUEST MODAL */}
       {showEquipmentModal && (
         <EquipmentRequestModal
@@ -4656,9 +4676,173 @@ function TicketHistoryModal({ ticket, token, onClose }) {
                     </span>
                   </div>
 
+                  {h.assignment_method && (
+                    <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginTop: "0.3rem", paddingLeft: "0.2rem", fontSize: "0.78rem" }}>
+                      <span style={{
+                        padding: "0.15rem 0.5rem",
+                        borderRadius: "var(--radius-sm)",
+                        background: h.assignment_method === "AUTOMATIC" ? "var(--primary-soft)" : "var(--bg-subtle)",
+                        color: h.assignment_method === "AUTOMATIC" ? "var(--primary)" : "var(--text-main)",
+                        border: "1px solid " + (h.assignment_method === "AUTOMATIC" ? "var(--primary-border)" : "var(--border-light)"),
+                        fontWeight: 600,
+                        fontFamily: "var(--font-mono)"
+                      }}>
+                        {h.assignment_method === "AUTOMATIC" ? "⚡ AUTOMATIC" : "👤 MANUAL"}
+                      </span>
+                      <span style={{ color: "var(--text-secondary)", fontFamily: "var(--font-mono)" }}>
+                        {h.previous_assignee ? `${h.previous_assignee} → ${h.new_assignee}` : `Assigned to: ${h.new_assignee}`}
+                      </span>
+                    </div>
+                  )}
+
                   {h.comment && (
-                    <div style={{ fontSize: "0.84rem", color: "var(--text-secondary)", marginTop: "0.2rem", paddingLeft: "0.2rem" }}>
+                    <div style={{ fontSize: "0.84rem", color: "var(--text-secondary)", marginTop: "0.25rem", paddingLeft: "0.2rem" }}>
                       {h.comment}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="modal-actions-row" style={{ marginTop: "1.25rem" }}>
+          <button type="button" className="btn-secondary-parchment" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================================
+// Equipment Request Audit History Modal
+// =====================================================================
+function EquipmentHistoryModal({ request, token, onClose }) {
+  const [history, setHistory] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!request) return;
+    setLoading(true);
+    fetch(`${API_BASE}/equipment-requests/${request.request_id}/history`, {
+      headers: { "Authorization": `Bearer ${token}` }
+    })
+      .then(async r => {
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({}));
+          throw new Error(err.detail || "Failed to load audit history.");
+        }
+        return r.json();
+      })
+      .then(data => setHistory(Array.isArray(data) ? data : []))
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [request, token]);
+
+  if (!request) return null;
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal-surface" style={{ maxWidth: "620px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "0.5rem" }}>
+          <div>
+            <h2 className="modal-title">Equipment Request Audit Trail</h2>
+            <p className="modal-desc" style={{ marginBottom: 0 }}>
+              Immutable audit ledger for <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600, color: "var(--primary)" }}>{request.request_id}</span> ({request.equipment_type})
+            </p>
+          </div>
+          <button type="button" className="table-btn" onClick={onClose} style={{ padding: "0.25rem 0.5rem" }}>
+            <span className="material-symbols-outlined" style={{ fontSize: "16px" }}>close</span>
+          </button>
+        </div>
+
+        <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.25rem", flexWrap: "wrap", fontSize: "0.82rem" }}>
+          <span className="badge-status" style={{ background: "var(--bg-subtle)", color: "var(--text-main)" }}>Requested by: {request.requested_by}</span>
+          <span className={`badge-status ${(request.status || "").toLowerCase().replace('_', '-')}`}>Current: {request.status}</span>
+          {request.provisioned_asset_id && (
+            <span className="badge-status" style={{ background: "var(--primary-soft)", color: "var(--primary)" }}>Asset: {request.provisioned_asset_id}</span>
+          )}
+        </div>
+
+        {error && (
+          <div style={{ padding: "0.75rem 1rem", background: "var(--status-critical-bg)", border: "1px solid var(--status-critical)", borderRadius: "var(--radius-md)", marginBottom: "1rem", color: "var(--status-critical)", fontSize: "0.84rem" }}>
+            {error}
+          </div>
+        )}
+
+        <div style={{ maxHeight: "360px", overflowY: "auto", paddingRight: "0.5rem" }}>
+          {loading ? (
+            <div style={{ textAlign: "center", padding: "2rem", color: "var(--text-muted)" }}>
+              <span className="material-symbols-outlined apex-spinner" style={{ fontSize: "24px", color: "var(--primary)" }}>sync</span>
+              <p style={{ marginTop: "0.5rem", fontSize: "0.85rem" }}>Retrieving audit ledger...</p>
+            </div>
+          ) : history.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "2rem", color: "var(--text-muted)", fontSize: "0.85rem" }}>
+              No recorded history events found for this request.
+            </div>
+          ) : (
+            <div style={{ position: "relative", paddingLeft: "1.5rem", borderLeft: "2px solid var(--border-light)" }}>
+              {history.map((h, i) => (
+                <div key={h.id || i} style={{ marginBottom: "1.25rem", position: "relative" }}>
+                  <div style={{
+                    position: "absolute",
+                    left: "-1.9rem",
+                    top: "0.25rem",
+                    width: "12px",
+                    height: "12px",
+                    borderRadius: "50%",
+                    background: "var(--primary)",
+                    border: "2px solid var(--bg-canvas)"
+                  }} />
+
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.25rem" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                      <span style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "0.25rem",
+                        background: "var(--bg-subtle)",
+                        color: "var(--text-main)",
+                        padding: "0.15rem 0.5rem",
+                        borderRadius: "var(--radius-sm)",
+                        fontSize: "0.75rem",
+                        fontWeight: 600,
+                        fontFamily: "var(--font-mono)"
+                      }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: "13px" }}>person</span>
+                        {h.actor}
+                      </span>
+                      <span style={{
+                        padding: "0.15rem 0.5rem",
+                        borderRadius: "var(--radius-sm)",
+                        background: "var(--primary-soft)",
+                        color: "var(--primary)",
+                        border: "1px solid var(--primary-border)",
+                        fontSize: "0.75rem",
+                        fontWeight: 600,
+                        fontFamily: "var(--font-mono)"
+                      }}>
+                        {h.action}
+                      </span>
+                      <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
+                        {h.old_status ? `${h.old_status} → ${h.new_status}` : `→ ${h.new_status}`}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+                      {h.timestamp ? new Date(h.timestamp).toLocaleString() : ""}
+                    </span>
+                  </div>
+
+                  {h.asset_id && (
+                    <div style={{ fontSize: "0.8rem", color: "var(--primary)", fontFamily: "var(--font-mono)", marginTop: "0.2rem" }}>
+                      Allocated Asset: {h.asset_id}
+                    </div>
+                  )}
+
+                  {h.notes && (
+                    <div style={{ fontSize: "0.84rem", color: "var(--text-secondary)", marginTop: "0.2rem", paddingLeft: "0.2rem" }}>
+                      {h.notes}
                     </div>
                   )}
                 </div>

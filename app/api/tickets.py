@@ -206,13 +206,17 @@ def assign_ticket(
             detail=f"User '{assign_req.assigned_to}' has role '{support_user.role}'. Tickets can only be assigned to SUPPORT or ADMIN staff."
         )
 
+    previous_assignee = ticket.assigned_to
     ticket.assigned_to = assign_req.assigned_to
     TicketRepository.update_status(
         session=session,
         ticket_id=ticket_id,
         new_status="ASSIGNED",
         changed_by=admin_user.user_id,
-        comment=f"Assigned to {assign_req.assigned_to} by Administrator"
+        comment=f"Assigned to {assign_req.assigned_to} by Administrator",
+        previous_assignee=previous_assignee,
+        new_assignee=assign_req.assigned_to,
+        assignment_method="MANUAL"
     )
     ActivityLogRepository.log(
         session,

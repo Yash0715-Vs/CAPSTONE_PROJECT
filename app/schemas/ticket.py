@@ -43,6 +43,9 @@ class TicketHistoryResponse(BaseModel):
     changed_by: str
     old_status: str
     new_status: str
+    previous_assignee: Optional[str] = None
+    new_assignee: Optional[str] = None
+    assignment_method: Optional[str] = None
     comment: Optional[str] = None
     timestamp: Optional[datetime] = None
 
