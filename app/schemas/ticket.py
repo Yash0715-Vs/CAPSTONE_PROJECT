@@ -3,8 +3,8 @@ Pydantic Validation Schemas for Support Tickets.
 """
 
 from typing import Optional
-from datetime import datetime
-from pydantic import BaseModel, Field, ConfigDict
+from datetime import datetime, timezone
+from pydantic import BaseModel, Field, ConfigDict, field_serializer
 
 
 class TicketBase(BaseModel):
@@ -49,6 +49,14 @@ class TicketHistoryResponse(BaseModel):
     comment: Optional[str] = None
     timestamp: Optional[datetime] = None
 
+    @field_serializer("timestamp")
+    def serialize_timestamp(self, dt: Optional[datetime]) -> Optional[str]:
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat()
+
 
 class TicketResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -66,3 +74,11 @@ class TicketResponse(BaseModel):
     resolution: Optional[str] = None
     created_date: Optional[datetime] = None
     closed_date: Optional[datetime] = None
+
+    @field_serializer("created_date", "closed_date")
+    def serialize_dates(self, dt: Optional[datetime]) -> Optional[str]:
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat()

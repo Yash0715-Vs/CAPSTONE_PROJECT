@@ -7,8 +7,8 @@ Meets Capstone Specification Sections 13, 31, and 32:
 - Compatible with MySQL (viewable in DBeaver), PostgreSQL, and SQLite
 """
 
-from datetime import datetime, date
-from typing import Dict, Any
+from datetime import datetime, date, timezone
+from typing import Dict, Any, Optional
 
 from enum import Enum
 from sqlalchemy import (
@@ -23,6 +23,15 @@ from sqlalchemy import (
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
+
+def _iso_utc(dt: Optional[datetime]) -> Optional[str]:
+    """Formats a datetime as an ISO-8601 string with explicit UTC timezone indicator."""
+    if not dt:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()
+
 
 
 class UserRole(str, Enum):
@@ -71,7 +80,7 @@ class UserDB(Base):
             "role": self.role,
             "status": self.status,
             "department": self.department,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "created_at": _iso_utc(self.created_at),
         }
 
 
@@ -170,8 +179,8 @@ class TicketDB(Base):
             "assigned_to": self.assigned_to,
             "asset_id": self.asset_id,
             "resolution": self.resolution,
-            "created_date": self.created_date.isoformat() if self.created_date else None,
-            "closed_date": self.closed_date.isoformat() if self.closed_date else None,
+            "created_date": _iso_utc(self.created_date),
+            "closed_date": _iso_utc(self.closed_date),
         }
 
 
@@ -207,7 +216,7 @@ class TicketHistoryDB(Base):
             "new_assignee": self.new_assignee,
             "assignment_method": self.assignment_method,
             "comment": self.comment,
-            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+            "timestamp": _iso_utc(self.timestamp),
         }
 
 
@@ -229,7 +238,7 @@ class ActivityLogDB(Base):
             "user_id": self.user_id,
             "action": self.action,
             "details": self.details,
-            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+            "timestamp": _iso_utc(self.timestamp),
         }
 
 
@@ -273,8 +282,8 @@ class EquipmentRequestDB(Base):
             "provisioned_asset_id": self.provisioned_asset_id,
             "admin_notes": self.admin_notes,
             "employee_notes": self.employee_notes,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "created_at": _iso_utc(self.created_at),
+            "updated_at": _iso_utc(self.updated_at),
         }
 
 class EquipmentRequestHistoryDB(Base):
@@ -307,6 +316,6 @@ class EquipmentRequestHistoryDB(Base):
             "new_status": self.new_status,
             "asset_id": self.asset_id,
             "notes": self.notes,
-            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+            "timestamp": _iso_utc(self.timestamp),
         }
 

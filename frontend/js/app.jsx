@@ -52,6 +52,32 @@ function parseApiError(errData, status, defaultMsg = "An unexpected error occurr
   }
   return defaultMsg;
 }
+// =====================================================================
+// Timezone-Aware Date & Time Localization Helpers
+// Ensures UTC timestamps from backend are localized accurately to user's
+// current system timezone and locale.
+// =====================================================================
+function formatLocalDateTime(raw) {
+  if (!raw) return "";
+  let s = String(raw).trim();
+  // If naive ISO string (no 'Z' and no timezone offset), treat it as UTC
+  if (!s.endsWith("Z") && !s.includes("+") && !/[0-9]{4}-[0-9]{2}-[0-9]{2}.*[-+][0-9]{2}:?[0-9]{2}/.test(s)) {
+    s = s.replace(" ", "T") + "Z";
+  }
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? String(raw) : d.toLocaleString();
+}
+
+function formatLocalTime(raw) {
+  if (!raw) return "";
+  let s = String(raw).trim();
+  if (!s.endsWith("Z") && !s.includes("+") && !/[0-9]{4}-[0-9]{2}-[0-9]{2}.*[-+][0-9]{2}:?[0-9]{2}/.test(s)) {
+    s = s.replace(" ", "T") + "Z";
+  }
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? String(raw) : d.toLocaleTimeString();
+}
+
 
 // =====================================================================
 // Component: Apex Sentinel Split-Screen Login Page (Matches User Design)
@@ -2434,7 +2460,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                               <div className="text-[11px] text-on-surface-variant mt-0.5">{log.details}</div>
                             </div>
                             <span className="text-[10px] font-mono text-on-surface-variant whitespace-nowrap">
-                              {log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : 'Live'}
+                              {log.timestamp ? formatLocalTime(log.timestamp) : 'Live'}
                             </span>
                           </div>
                         ))}
@@ -3628,7 +3654,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                       auditLogs.map((log, idx) => (
                         <tr key={log.id || idx}>
                           <td style={{ fontFamily: "var(--font-mono)", fontSize: "0.8rem", color: "var(--text-muted)", whiteSpace: "nowrap" }}>
-                            {log.timestamp ? new Date(log.timestamp).toLocaleString() : "Live"}
+                            {log.timestamp ? formatLocalDateTime(log.timestamp) : "Live"}
                           </td>
                           <td style={{ fontWeight: 600, color: "var(--primary)", fontFamily: "var(--font-mono)" }}>
                             {log.user_id}
@@ -4782,7 +4808,7 @@ function TicketHistoryModal({ ticket, token, onClose }) {
                       </span>
                     </div>
                     <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
-                      {h.timestamp ? new Date(h.timestamp).toLocaleString() : ""}
+                      {h.timestamp ? formatLocalDateTime(h.timestamp) : ""}
                     </span>
                   </div>
 
@@ -4940,7 +4966,7 @@ function EquipmentHistoryModal({ request, token, onClose }) {
                       </span>
                     </div>
                     <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
-                      {h.timestamp ? new Date(h.timestamp).toLocaleString() : ""}
+                      {h.timestamp ? formatLocalDateTime(h.timestamp) : ""}
                     </span>
                   </div>
 
@@ -5289,8 +5315,8 @@ function TicketDetailsModal({ ticket, assets = [], currentUser, token, onClose, 
   if (!ticket) return null;
 
   const matchedAsset = ticket.asset_id ? assets.find(a => a.asset_id === ticket.asset_id) : null;
-  const createdDate = ticket.created_at ? new Date(ticket.created_at).toLocaleString() : "Unknown";
-  const closedDate = ticket.closed_at ? new Date(ticket.closed_at).toLocaleString() : null;
+  const createdDate = (ticket.created_date || ticket.created_at) ? formatLocalDateTime(ticket.created_date || ticket.created_at) : "Unknown";
+  const closedDate = (ticket.closed_date || ticket.closed_at) ? formatLocalDateTime(ticket.closed_date || ticket.closed_at) : null;
 
   return (
     <div className="modal-backdrop">
