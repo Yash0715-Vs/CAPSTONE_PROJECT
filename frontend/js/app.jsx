@@ -780,6 +780,9 @@ function App() {
   const totalTickets = tickets.length;
   const openTickets = tickets.filter(t => t.status === "OPEN").length;
   const inProgressTickets = tickets.filter(t => t.status === "IN_PROGRESS" || t.status === "ASSIGNED").length;
+  const assignedTickets = tickets.filter(t => t.status === "ASSIGNED").length;
+  const inProgressOnlyTickets = tickets.filter(t => t.status === "IN_PROGRESS").length;
+  const activeQueueTickets = openTickets + inProgressTickets;
   const resolvedTickets = tickets.filter(t => t.status === "RESOLVED").length;
   const closedTickets = tickets.filter(t => t.status === "CLOSED").length;
   const resolvedAndClosed = resolvedTickets + closedTickets;
@@ -796,6 +799,8 @@ function App() {
 
   // Real SLA metrics
   const breachedTicketsCount = slaReport?.breached_count ?? tickets.filter(t => t.sla_status === "BREACHED").length;
+  const activeOverdueCount = slaReport?.active_overdue_count ?? tickets.filter(t => (t.status === "OPEN" || t.status === "IN_PROGRESS" || t.status === "ASSIGNED") && t.sla_status === "BREACHED").length;
+  const historicalBreachCount = slaReport?.historical_breached_count ?? tickets.filter(t => (t.status === "RESOLVED" || t.status === "CLOSED") && t.sla_status === "BREACHED").length;
   const complianceRate = totalTickets > 0 ? (((totalTickets - breachedTicketsCount) / totalTickets) * 100).toFixed(1) : "100.0";
 
   // Safe user profile details
@@ -1150,7 +1155,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
       }
 
       // Connect with query token per Section 38 / app/main.py specification
-      const socketUrl = `${WS_URL}?token=${encodeURIComponent(token)}`;
+      const socketUrl = WS_URL; // Secure in-band auth avoids token in URL access logs
       let ws;
       try {
         ws = new WebSocket(socketUrl);
@@ -1165,6 +1170,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
         if (isDestroyed) { ws.close(); return; }
         setWsConnected(true);
         reconnectDelay = 2000;
+        if (token) { ws.send(JSON.stringify({ action: "auth", token })); }
 
         // Start heartbeat ping every 25 seconds
         if (pingTimerRef.current) clearInterval(pingTimerRef.current);
@@ -1925,7 +1931,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                       </div>
                       <div className="mt-3">
                         <div className="text-2xl font-headline font-medium text-on-surface">{complianceRate}%</div>
-                        <span className="text-[11px] text-on-surface-variant mt-0.5 block">{breachedTicketsCount} active breaches</span>
+                        <span className="text-[11px] text-on-surface-variant mt-0.5 block">{activeOverdueCount} overdue in queue ({breachedTicketsCount} total)</span>
                       </div>
                     </div>
 
@@ -2129,7 +2135,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                       </div>
                       <div className="mt-2.5">
                         <div className="text-2xl font-headline font-medium text-on-surface">{openTickets}</div>
-                        <span className="text-[10px] text-on-surface-variant block mt-0.5">{inProgressTickets} in progress</span>
+                        <span className="text-[10px] text-on-surface-variant block mt-0.5">{inProgressTickets} active ({inProgressOnlyTickets} in-prog, {assignedTickets} assigned)</span>
                       </div>
                     </div>
 
@@ -2141,7 +2147,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                       </div>
                       <div className="mt-2.5">
                         <div className="text-2xl font-headline font-medium text-on-surface">{resolvedTickets}</div>
-                        <span className="text-[10px] text-on-surface-variant block mt-0.5">{closedTickets} closed</span>
+                        <span className="text-[10px] text-on-surface-variant block mt-0.5">{closedTickets} confirmed closed</span>
                       </div>
                     </div>
 
@@ -2177,7 +2183,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                       </div>
                       <div className="mt-2.5">
                         <div className="text-2xl font-headline font-medium text-error">{breachedTicketsCount}</div>
-                        <span className="text-[10px] text-on-surface-variant block mt-0.5">Active breaches</span>
+                        <span className="text-[10px] text-on-surface-variant block mt-0.5">{activeOverdueCount} active overdue · {historicalBreachCount} past</span>
                       </div>
                     </div>
                   </div>

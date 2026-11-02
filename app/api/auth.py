@@ -9,7 +9,9 @@ Meets Capstone Specification Section 12:
 """
 
 from datetime import datetime, timezone
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
 from app.database.connection import get_db
@@ -22,7 +24,7 @@ from app.schemas.user import (
     CompleteRegistrationRequest,
     VerifyInvitationResponse,
 )
-from app.services.auth_service import AuthService, get_current_user
+from app.services.auth_service import AuthService, get_current_user, security
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -236,8 +238,14 @@ def get_current_user_profile(current_user: UserDB = Depends(get_current_user)):
 
 
 @router.post("/logout")
-def logout(current_user: UserDB = Depends(get_current_user), session: Session = Depends(get_db)):
-    """Logs out the current session."""
+def logout(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    current_user: UserDB = Depends(get_current_user),
+    session: Session = Depends(get_db)
+):
+    """Logs out the current session and revokes the access token on the server side."""
+    if credentials and credentials.credentials:
+        AuthService.revoke_token(credentials.credentials)
     ActivityLogRepository.log(session, "USER_LOGOUT", current_user.user_id, "User logged out")
     return {"message": f"User {current_user.user_id} logged out successfully."}
 

@@ -309,3 +309,34 @@ def test_duplicate_user_id_and_email_rejected(admin_token):
     assert dup_email_res.status_code == 400
     assert "already exists" in dup_email_res.json()["detail"].lower()
 
+
+def test_server_side_logout_revokes_token():
+    """
+    Day 2/3 Verification: Validates that calling POST /auth/logout invalidates
+    the access token on the server side so it can no longer access protected endpoints.
+    """
+    try:
+        # 1. Login to obtain a fresh token
+        login_res = client.post("/auth/login", json={"user_id": "ADM-001", "password": "password"})
+        assert login_res.status_code == 200
+        token = login_res.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # 2. Access protected endpoint before logout -> Must succeed (200)
+        me_before = client.get("/auth/me", headers=headers)
+        assert me_before.status_code == 200
+        assert me_before.json()["user_id"] == "ADM-001"
+
+        # 3. Call server-side logout
+        logout_res = client.post("/auth/logout", headers=headers)
+        assert logout_res.status_code == 200
+
+        # 4. Attempt to access protected endpoint after logout -> Must be rejected with 401
+        me_after = client.get("/auth/me", headers=headers)
+        assert me_after.status_code == 401
+        assert "revoked" in me_after.json()["detail"].lower()
+    finally:
+        from app.services.auth_service import AuthService
+        AuthService._revoked_tokens.clear()
+
+

@@ -113,11 +113,15 @@ def get_sla_report(
 
     sla_evaluations = [SLAService.get_ticket_sla_status(t) for t in domain_tickets]
     breached_count = sum(1 for item in sla_evaluations if item["is_breached"])
+    active_overdue_count = sum(1 for item in sla_evaluations if item.get("is_active_overdue"))
+    historical_breached_count = sum(1 for item in sla_evaluations if item.get("is_historical_breach"))
     avg_stats = SLAService.calculate_average_resolution_time(domain_tickets)
 
     return {
         "total_tickets_analyzed": len(domain_tickets),
         "breached_count": breached_count,
+        "active_overdue_count": active_overdue_count,
+        "historical_breached_count": historical_breached_count,
         "active_on_time_count": len(domain_tickets) - breached_count,
         "compliance_rate": f"{((len(domain_tickets) - breached_count) / len(domain_tickets) * 100):.1f}%" if domain_tickets else "100%",
         "resolution_metrics": avg_stats,

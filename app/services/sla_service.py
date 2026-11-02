@@ -88,12 +88,18 @@ class SLAService:
             duration = ticket.closed_date - ticket.created_date
             resolution_time_minutes = round(duration.total_seconds() / 60.0, 2)
 
+        is_active_overdue = is_breached and ticket.status not in (TicketStatus.RESOLVED, TicketStatus.CLOSED)
+        is_historical_breach = is_breached and ticket.status in (TicketStatus.RESOLVED, TicketStatus.CLOSED)
+
         return {
             "ticket_id": ticket.ticket_id,
             "priority": ticket.priority.value,
+            "status": ticket.status.value,
             "created_date": ticket.created_date.isoformat(),
             "sla_deadline": deadline.isoformat(),
             "is_breached": is_breached,
+            "is_active_overdue": is_active_overdue,
+            "is_historical_breach": is_historical_breach,
             "sla_status": "SLA BREACHED" if is_breached else "SLA ACTIVE",
             "time_description": status_text,
             "resolution_time_minutes": resolution_time_minutes,

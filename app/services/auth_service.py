@@ -71,9 +71,28 @@ class AuthService:
         to_encode.update({"exp": expire})
         return jwt.encode(to_encode, config.SECRET_KEY, algorithm=config.ALGORITHM)
 
-    @staticmethod
-    def decode_token(token: str) -> Dict[str, Any]:
+    _revoked_tokens: set = set()
+
+    @classmethod
+    def revoke_token(cls, token: str) -> None:
+        """Revokes a JWT token on the server side upon logout."""
+        if token:
+            cls._revoked_tokens.add(token.strip())
+
+    @classmethod
+    def is_token_revoked(cls, token: str) -> bool:
+        """Checks whether token has been revoked on server side."""
+        return bool(token and token.strip() in cls._revoked_tokens)
+
+    @classmethod
+    def decode_token(cls, token: str) -> Dict[str, Any]:
         """Decodes and validates a JWT token using centralized configuration."""
+        if cls.is_token_revoked(token):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token has been revoked. Please log in again.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
         try:
             payload = jwt.decode(token, config.SECRET_KEY, algorithms=[config.ALGORITHM])
             return payload
