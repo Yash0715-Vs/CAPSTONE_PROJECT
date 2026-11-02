@@ -61,6 +61,7 @@ function LoginPage({ onLoginSuccess, onSwitchToRegister, demoAccounts, theme, on
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
+  const [showForgotModal, setShowForgotModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -237,7 +238,7 @@ function LoginPage({ onLoginSuccess, onSwitchToRegister, demoAccounts, theme, on
                   <label className="form-field-label" htmlFor="password">Password</label>
                   <span
                     className="forgot-pwd-link"
-                    onClick={() => alert("Enterprise self-service reset: Please contact your IT administrator (ADM-001) or click any demo role above.")}
+                    onClick={() => setShowForgotModal(true)}
                   >
                     Forgot Password?
                   </span>
@@ -284,6 +285,40 @@ function LoginPage({ onLoginSuccess, onSwitchToRegister, demoAccounts, theme, on
                 <span className="material-symbols-outlined" style={{ fontSize: "18px" }}>arrow_forward</span>
               </button>
             </form>
+
+          {showForgotModal && (
+            <div className="modal-backdrop" style={{ zIndex: 1100 }}>
+              <div className="modal-surface" style={{ maxWidth: "480px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "0.75rem" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+                    <div style={{ width: "36px", height: "36px", borderRadius: "50%", background: "var(--primary-subtle)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--primary)" }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>lock_reset</span>
+                    </div>
+                    <h2 className="modal-title" style={{ fontSize: "1.35rem", margin: 0 }}>Password Recovery</h2>
+                  </div>
+                  <button type="button" className="table-btn" onClick={() => setShowForgotModal(false)} style={{ padding: "0.25rem 0.5rem" }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: "16px" }}>close</span>
+                  </button>
+                </div>
+                <p style={{ fontSize: "0.9rem", color: "var(--text-secondary)", lineHeight: 1.5, marginBottom: "1.25rem" }}>
+                  Apex IT Systems enforces Enterprise Zero-Trust security protocols. Direct self-service password resetting is restricted to authorized directory controllers.
+                </p>
+                <div style={{ background: "var(--bg-subtle)", border: "1px solid var(--border-light)", borderRadius: "var(--radius-md)", padding: "1rem", marginBottom: "1.5rem" }}>
+                  <div style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--text-main)", marginBottom: "0.35rem" }}>How to regain access:</div>
+                  <ul style={{ fontSize: "0.82rem", color: "var(--text-secondary)", paddingLeft: "1.2rem", margin: 0, lineHeight: 1.6 }}>
+                    <li>Contact IT HelpDesk Admin at <strong style={{ color: "var(--primary)" }}>admin@apexcorp.internal</strong> (ADM-001)</li>
+                    <li>For testing and demonstration, use the <strong>One-Click Demo Credentials</strong> on the login page</li>
+                    <li>New hires should use the token provided in their onboarding email to complete registration</li>
+                  </ul>
+                </div>
+                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                  <button type="button" className="btn-primary-teal" onClick={() => setShowForgotModal(false)} style={{ padding: "0.6rem 1.4rem" }}>
+                    Understood
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
             {/* Onboarding Token Callout */}
             <div className="onboarding-box" style={{ marginTop: "1.75rem" }}>
@@ -888,7 +923,6 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
   const [assignTicketError, setAssignTicketError] = useState("");
   const [isSubmittingAssignTicket, setIsSubmittingAssignTicket] = useState(false);
 
-  const [showLoginModal, setShowLoginModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteError, setInviteError] = useState("");
   const [isSubmittingInvite, setIsSubmittingInvite] = useState(false);
@@ -902,6 +936,9 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
   const [showEquipmentHistoryModal, setShowEquipmentHistoryModal] = useState(null);
   const [showEditAssetModal, setShowEditAssetModal] = useState(null);
   const [showProvisionModal, setShowProvisionModal] = useState(null);
+  const [showTicketDetailsModal, setShowTicketDetailsModal] = useState(null);
+  const [showUserDetailsModal, setShowUserDetailsModal] = useState(null);
+  const [showEditUserModal, setShowEditUserModal] = useState(null);
 
   // Filters
   const [search, setSearch] = useState("");
@@ -973,32 +1010,6 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
     }
   }, [token, addToast]);
 
-  // Quick switch role inside dashboard
-  const authenticateUser = async (userId) => {
-    try {
-      const res = await fetch(`${API_BASE}/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: userId, password: "password" })
-      });
-      const data = await res.json().catch(() => null);
-      if (res.ok && data) {
-        setToken(data.access_token);
-        setCurrentUser(data.user);
-        localStorage.setItem("it_token", data.access_token);
-        localStorage.setItem("it_user", JSON.stringify(data.user));
-        setActiveTab("dashboard");
-        addToast(`Switched account to ${data.user.name} (${data.user.role})`, "success");
-        return data.access_token;
-      } else {
-        const msg = parseApiError(data, res.status, "Authentication failed.");
-        addToast(msg, "error");
-      }
-    } catch (e) {
-      addToast("Network error during role switch.", "error");
-    }
-    return token;
-  };
 
   // Verify saved token on load & sync fresh profile
   useEffect(() => {
@@ -1621,9 +1632,8 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
               <span className="material-symbols-outlined text-[20px]">help_outline</span>
             </button>
             <div
-              className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-on-primary font-semibold text-xs cursor-pointer shadow-sm"
-              title={`Logged in as ${userName} (${userRole}) - Click to switch role`}
-              onClick={() => setShowLoginModal(true)}
+              className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-on-primary font-semibold text-xs shadow-sm"
+              title={`Logged in as ${userName} (${userRole})`}
             >
               {userInitial}
             </div>
@@ -1790,7 +1800,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                           <tbody className="divide-y divide-surface-container-low">
                             {tickets.slice(0, 6).map(t => (
                               <tr key={t.id || t.ticket_id} className="hover:bg-surface-container-low transition-colors">
-                                <td className="py-3 px-3 font-mono font-medium text-primary">#{t.ticket_id}</td>
+                                <td className="py-3 px-3 font-mono font-medium text-primary cursor-pointer hover:underline" onClick={() => setShowTicketDetailsModal(t)} title="Click to view ticket details">#{t.ticket_id}</td>
                                 <td className="py-3 px-3 min-w-[180px]">
                                   <div className="font-medium text-on-surface truncate max-w-xs">{t.title}</div>
                                   <div className="text-[11px] text-on-surface-variant truncate max-w-xs">{t.description}</div>
@@ -2032,7 +2042,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                               .slice(0, 6)
                               .map(t => (
                                 <tr key={t.id || t.ticket_id} className="hover:bg-surface-container-low transition-colors">
-                                  <td className="py-3 px-3 font-mono font-medium text-primary">#{t.ticket_id}</td>
+                                  <td className="py-3 px-3 font-mono font-medium text-primary cursor-pointer hover:underline" onClick={() => setShowTicketDetailsModal(t)} title="Click to view ticket details">#{t.ticket_id}</td>
                                   <td className="py-3 px-3 min-w-[180px]">
                                     <div className="font-medium text-on-surface truncate max-w-xs">{t.title}</div>
                                     <div className="text-[11px] text-on-surface-variant truncate max-w-xs">By {t.created_by} · {t.description}</div>
@@ -2047,6 +2057,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                                   </td>
                                   <td className="py-3 px-3 text-right">
                                     <div className="flex justify-end gap-1.5">
+                                      <button type="button" className="table-btn" onClick={() => setShowTicketDetailsModal(t)} title="View Ticket Details">Details</button>
                                       <button type="button" className="table-btn" onClick={() => setShowTicketHistoryModal(t)} title="View Activity Trail">History</button>
                                       {currentUser.role === "ADMIN" && t.status !== "CLOSED" && (
                                         <button type="button" className="table-btn" onClick={() => setShowAssignTicketModal(t)}>Assign</button>
@@ -2381,7 +2392,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                               .slice(0, 5)
                               .map(t => (
                                 <tr key={t.id || t.ticket_id} className="hover:bg-surface-container-low transition-colors">
-                                  <td className="py-3 px-3 font-mono font-medium text-primary">#{t.ticket_id}</td>
+                                  <td className="py-3 px-3 font-mono font-medium text-primary cursor-pointer hover:underline" onClick={() => setShowTicketDetailsModal(t)} title="Click to view ticket details">#{t.ticket_id}</td>
                                   <td className="py-3 px-3 min-w-[180px]">
                                     <div className="font-medium text-on-surface truncate max-w-xs">{t.title}</div>
                                     <div className="text-[11px] text-on-surface-variant truncate max-w-xs">{t.description}</div>
@@ -2587,7 +2598,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                     ) : (
                       filteredTickets.map(t => (
                         <tr key={t.id || t.ticket_id}>
-                          <td style={{ fontWeight: 600, color: "var(--primary)", fontFamily: "var(--font-mono)" }}>
+                          <td style={{ fontWeight: 600, color: "var(--primary)", fontFamily: "var(--font-mono)", cursor: "pointer" }} onClick={() => setShowTicketDetailsModal(t)} title="Click to view ticket details">
                             #{t.ticket_id}
                           </td>
                           <td>
@@ -2612,6 +2623,10 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                           <td>{t.assigned_to || "Unassigned"}</td>
                           <td>
                             <div style={{ display: "flex", gap: "0.4rem" }}>
+                              <button className="table-btn" onClick={() => setShowTicketDetailsModal(t)} title="View Ticket Details">
+                                <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>visibility</span>
+                                <span>Details</span>
+                              </button>
                               <button className="table-btn" onClick={() => setShowTicketHistoryModal(t)} title="View Activity History">
                                 <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>history</span>
                                 <span>History</span>
@@ -3398,7 +3413,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                       <th>Work Email</th>
                       <th>Role</th>
                       <th>Status</th>
-                      <th>Invitation Token (Single-Use)</th>
+                      <th>Actions & Credentials</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -3435,7 +3450,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                     ) : (
                       filteredUsers.map(u => (
                         <tr key={u.id || u.user_id}>
-                          <td style={{ fontWeight: 600, color: "var(--primary)", fontFamily: "var(--font-mono)" }}>
+                          <td style={{ fontWeight: 600, color: "var(--primary)", fontFamily: "var(--font-mono)", cursor: "pointer" }} onClick={() => setShowUserDetailsModal(u)} title="Click to view user profile and assigned assets">
                             {u.user_id}
                           </td>
                           <td style={{ fontWeight: 500 }}>{u.name}</td>
@@ -3451,13 +3466,57 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                             </span>
                           </td>
                           <td>
-                            {u.invitation_token ? (
-                              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                                <code style={{ fontSize: "0.75rem", fontFamily: "var(--font-mono)", background: "var(--bg-subtle)", padding: "0.2rem 0.4rem", borderRadius: "4px" }}>
-                                  {u.invitation_token.slice(0, 16)}...
-                                </code>
+                            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap" }}>
+                              <button
+                                className="table-btn"
+                                onClick={() => setShowUserDetailsModal(u)}
+                                title="View User Details & Custody Assets"
+                              >
+                                <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>visibility</span>
+                                <span>Details</span>
+                              </button>
+                              <button
+                                className="table-btn"
+                                onClick={() => setShowEditUserModal(u)}
+                                title="Edit User Information & Role"
+                              >
+                                <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>edit</span>
+                                <span>Edit</span>
+                              </button>
+                              {u.status === "PENDING" && (
                                 <button
                                   className="table-btn"
+                                  title="Re-generate and copy invitation token"
+                                  onClick={async () => {
+                                    try {
+                                      const res = await fetch(`${API_BASE}/users/${u.user_id}/reinvite`, {
+                                        method: "POST",
+                                        headers: { "Authorization": `Bearer ${token}` }
+                                      });
+                                      if (res.ok) {
+                                        const data = await res.json();
+                                        if (navigator.clipboard && data.invitation_token) {
+                                          navigator.clipboard.writeText(data.invitation_token);
+                                        }
+                                        addToast(`Re-invited ${u.name}! New token copied to clipboard.`, "success");
+                                        fetchData();
+                                      } else {
+                                        const err = await res.json().catch(() => ({}));
+                                        addToast(parseApiError(err, res.status, "Failed to re-invite user"), "error");
+                                      }
+                                    } catch (e) {
+                                      addToast("Network error contacting directory service.", "error");
+                                    }
+                                  }}
+                                >
+                                  <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>mark_email_read</span>
+                                  <span>Re-invite</span>
+                                </button>
+                              )}
+                              {u.invitation_token && (
+                                <button
+                                  className="table-btn"
+                                  title="Copy invitation token to clipboard"
                                   onClick={() => {
                                     if (navigator.clipboard) {
                                       navigator.clipboard.writeText(u.invitation_token);
@@ -3465,12 +3524,11 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                                     addToast(`Copied token for ${u.name}`, "success");
                                   }}
                                 >
-                                  Copy
+                                  <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>content_copy</span>
+                                  <span>Token</span>
                                 </button>
-                              </div>
-                            ) : (
-                              <span style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>Activated</span>
-                            )}
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))
@@ -3901,6 +3959,101 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
         </div>
       )}
 
+      {/* TICKET DETAILS MODAL */}
+      {showTicketDetailsModal && (
+        <TicketDetailsModal
+          ticket={showTicketDetailsModal}
+          assets={assets}
+          currentUser={currentUser}
+          token={token}
+          onClose={() => setShowTicketDetailsModal(null)}
+          onAssign={(ticket) => {
+            setShowTicketDetailsModal(null);
+            setShowAssignTicketModal(ticket);
+          }}
+          onResolve={(ticket) => {
+            setShowTicketDetailsModal(null);
+            setShowResolveModal(ticket);
+          }}
+          onCloseTicket={async (ticket) => {
+            try {
+              const res = await fetch(`${API_BASE}/tickets/${ticket.ticket_id}/close`, {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${token}` }
+              });
+              if (res.ok) {
+                setShowTicketDetailsModal(null);
+                addToast(`Closed ticket ${ticket.ticket_id}`, "success");
+                fetchData();
+              } else {
+                const err = await res.json().catch(() => null);
+                const msg = parseApiError(err, res.status, `Failed to close ticket ${ticket.ticket_id}`);
+                if (res.status === 401) handleLogout(msg);
+                else addToast(msg, "error");
+              }
+            } catch (e) {
+              addToast("Network failure. Could not reach server.", "error");
+            }
+          }}
+          onViewHistory={(ticket) => {
+            setShowTicketDetailsModal(null);
+            setShowTicketHistoryModal(ticket);
+          }}
+        />
+      )}
+
+      {/* USER DETAILS MODAL */}
+      {showUserDetailsModal && (
+        <UserDetailsModal
+          user={showUserDetailsModal}
+          assets={assets}
+          tickets={tickets}
+          currentUser={currentUser}
+          onClose={() => setShowUserDetailsModal(null)}
+          onEditUser={(u) => {
+            setShowUserDetailsModal(null);
+            setShowEditUserModal(u);
+          }}
+          onReinviteUser={async (u) => {
+            try {
+              const res = await fetch(`${API_BASE}/users/${u.user_id}/reinvite`, {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${token}` }
+              });
+              if (res.ok) {
+                const data = await res.json();
+                if (navigator.clipboard && data.invitation_token) {
+                  navigator.clipboard.writeText(data.invitation_token);
+                }
+                addToast(`Regenerated invitation token for ${u.name} (copied to clipboard)`, "success");
+                fetchData();
+                setShowUserDetailsModal(null);
+              } else {
+                const err = await res.json().catch(() => ({}));
+                addToast(parseApiError(err, res.status, "Failed to re-invite user"), "error");
+              }
+            } catch (e) {
+              addToast("Network error contacting directory service.", "error");
+            }
+          }}
+        />
+      )}
+
+      {/* EDIT USER MODAL */}
+      {showEditUserModal && (
+        <EditUserModal
+          user={showEditUserModal}
+          token={token}
+          onClose={() => setShowEditUserModal(null)}
+          onSuccess={() => {
+            setShowEditUserModal(null);
+            fetchData();
+            addToast(`Updated user profile for ${showEditUserModal.name}`, "success");
+          }}
+          addToast={addToast}
+        />
+      )}
+
       {/* TICKET HISTORY MODAL */}
       {showTicketHistoryModal && (
         <TicketHistoryModal
@@ -4046,51 +4199,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
         </div>
       )}
 
-      {/* ROLE SWITCHER MODAL */}
-      {showLoginModal && (
-        <div className="modal-backdrop">
-          <div className="modal-surface">
-            <h2 className="modal-title">Switch Enterprise Role</h2>
-            <p className="modal-desc">Instant zero-friction role switching for system evaluation.</p>
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-              {DEMO_ACCOUNTS.map(acc => (
-                <div
-                  key={acc.user_id}
-                  style={{
-                    padding: "1rem 1.25rem",
-                    background: currentUser.user_id === acc.user_id ? "var(--primary-soft)" : "var(--bg-card)",
-                    border: `1.5px solid ${currentUser.user_id === acc.user_id ? "var(--primary)" : "var(--border-light)"}`,
-                    borderRadius: "var(--radius-lg)",
-                    cursor: "pointer",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    transition: "all var(--transition-fast)"
-                  }}
-                  onClick={async () => {
-                    await authenticateUser(acc.user_id);
-                    setShowLoginModal(false);
-                  }}
-                >
-                  <div>
-                    <div style={{ fontWeight: 600, color: "var(--text-main)" }}>{acc.name}</div>
-                    <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
-                      {acc.user_id} • {acc.email}
-                    </div>
-                  </div>
-                  <span className={`badge-priority ${acc.role === 'ADMIN' ? 'critical' : acc.role === 'SUPPORT' ? 'high' : 'medium'}`}>
-                    {acc.role}
-                  </span>
-                </div>
-              ))}
             </div>
-            <div className="modal-actions-row">
-              <button className="btn-secondary-parchment" onClick={() => setShowLoginModal(false)}>Close</button>
-            </div>
-          </div>
-        </div>
-      )}
-      </div>
     </div>
   );
 }
@@ -5170,3 +5279,493 @@ function ProvisionEquipmentModal({ request, availableAssets = [], token, onClose
 
 // Render React 18 Application
 ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+
+
+// =====================================================================
+// TICKET DETAILS DRAWER / MODAL (Tuesday Requirement)
+// =====================================================================
+function TicketDetailsModal({ ticket, assets = [], currentUser, token, onClose, onAssign, onResolve, onCloseTicket, onViewHistory }) {
+  if (!ticket) return null;
+
+  const matchedAsset = ticket.asset_id ? assets.find(a => a.asset_id === ticket.asset_id) : null;
+  const createdDate = ticket.created_at ? new Date(ticket.created_at).toLocaleString() : "Unknown";
+  const closedDate = ticket.closed_at ? new Date(ticket.closed_at).toLocaleString() : null;
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal-surface" style={{ maxWidth: "680px" }}>
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "0.75rem", borderBottom: "1px solid var(--border-light)", paddingBottom: "0.75rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            <div style={{ width: "40px", height: "40px", borderRadius: "10px", background: "var(--primary-subtle)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--primary)" }}>
+              <span className="material-symbols-outlined" style={{ fontSize: "22px" }}>confirmation_number</span>
+            </div>
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: "1.1rem", fontWeight: 700, color: "var(--primary)" }}>
+                  #{ticket.ticket_id}
+                </span>
+                <span className={`badge-priority ${(ticket.priority || "").toLowerCase()}`}>
+                  {ticket.priority}
+                </span>
+                <span className={`badge-status ${(ticket.status || "").toLowerCase().replace('_', '-')}`}>
+                  {ticket.status}
+                </span>
+              </div>
+              <h2 className="modal-title" style={{ fontSize: "1.25rem", margin: "0.2rem 0 0 0" }}>
+                {ticket.title}
+              </h2>
+            </div>
+          </div>
+          <button type="button" className="table-btn" onClick={onClose} style={{ padding: "0.3rem 0.5rem" }}>
+            <span className="material-symbols-outlined" style={{ fontSize: "16px" }}>close</span>
+          </button>
+        </div>
+
+        {/* Metadata Details Grid */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "0.85rem", marginBottom: "1.25rem" }}>
+          <div style={{ background: "var(--bg-subtle)", padding: "0.75rem 1rem", borderRadius: "var(--radius-md)", border: "1px solid var(--border-light)" }}>
+            <div style={{ fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)", fontWeight: 600 }}>Requester</div>
+            <div style={{ fontSize: "0.9rem", fontWeight: 600, color: "var(--text-main)", marginTop: "0.15rem", fontFamily: "var(--font-mono)" }}>
+              {ticket.created_by}
+            </div>
+          </div>
+
+          <div style={{ background: "var(--bg-subtle)", padding: "0.75rem 1rem", borderRadius: "var(--radius-md)", border: "1px solid var(--border-light)" }}>
+            <div style={{ fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)", fontWeight: 600 }}>Assigned Specialist</div>
+            <div style={{ fontSize: "0.9rem", fontWeight: 600, color: ticket.assigned_to ? "var(--primary)" : "var(--text-muted)", marginTop: "0.15rem", fontFamily: "var(--font-mono)" }}>
+              {ticket.assigned_to || "Unassigned"}
+            </div>
+          </div>
+
+          <div style={{ background: "var(--bg-subtle)", padding: "0.75rem 1rem", borderRadius: "var(--radius-md)", border: "1px solid var(--border-light)" }}>
+            <div style={{ fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)", fontWeight: 600 }}>Category</div>
+            <div style={{ fontSize: "0.9rem", fontWeight: 600, color: "var(--text-main)", marginTop: "0.15rem" }}>
+              {ticket.category}
+            </div>
+          </div>
+
+          <div style={{ background: "var(--bg-subtle)", padding: "0.75rem 1rem", borderRadius: "var(--radius-md)", border: "1px solid var(--border-light)" }}>
+            <div style={{ fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)", fontWeight: 600 }}>Submitted On</div>
+            <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginTop: "0.15rem" }}>
+              {createdDate}
+            </div>
+          </div>
+        </div>
+
+        {/* Associated Hardware Asset (if attached) */}
+        {ticket.asset_id && (
+          <div style={{ background: "var(--primary-subtle)", border: "1px solid var(--border-light)", borderRadius: "var(--radius-md)", padding: "0.85rem 1rem", marginBottom: "1.25rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.3rem" }}>
+              <span className="material-symbols-outlined" style={{ fontSize: "18px", color: "var(--primary)" }}>devices</span>
+              <span style={{ fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--primary)" }}>
+                Linked Hardware Custody
+              </span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--primary)", marginRight: "0.5rem" }}>
+                  {ticket.asset_id}
+                </span>
+                <span style={{ fontWeight: 500, fontSize: "0.88rem" }}>
+                  {matchedAsset ? `${matchedAsset.brand} ${matchedAsset.model} (${matchedAsset.type})` : "Inventory Asset"}
+                </span>
+              </div>
+              {matchedAsset && (
+                <span className={`badge-status ${(matchedAsset.status || "").toLowerCase()}`}>
+                  {matchedAsset.status}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Incident Description */}
+        <div style={{ marginBottom: "1.25rem" }}>
+          <div style={{ fontSize: "0.78rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)", marginBottom: "0.35rem" }}>
+            Issue Description &amp; Business Impact
+          </div>
+          <div style={{
+            background: "var(--bg-canvas)",
+            border: "1px solid var(--border-light)",
+            borderRadius: "var(--radius-md)",
+            padding: "1rem",
+            fontSize: "0.9rem",
+            lineHeight: 1.6,
+            color: "var(--text-main)",
+            whiteSpace: "pre-wrap"
+          }}>
+            {ticket.description}
+          </div>
+        </div>
+
+        {/* Resolution Information Panel */}
+        {(ticket.resolution || ticket.status === "RESOLVED" || ticket.status === "CLOSED") && (
+          <div style={{
+            background: "var(--status-resolved-bg)",
+            border: "1px solid var(--status-resolved-border)",
+            borderRadius: "var(--radius-md)",
+            padding: "1rem",
+            marginBottom: "1.25rem"
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.4rem" }}>
+              <span className="material-symbols-outlined" style={{ fontSize: "20px", color: "var(--status-resolved-text)" }}>check_circle</span>
+              <span style={{ fontSize: "0.82rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--status-resolved-text)" }}>
+                Resolution Information
+              </span>
+            </div>
+            <div style={{ fontSize: "0.88rem", color: "var(--text-main)", lineHeight: 1.5, marginBottom: "0.5rem" }}>
+              {ticket.resolution || "Service specialist verified and marked resolution."}
+            </div>
+            {closedDate && (
+              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+                Closure Recorded: {closedDate}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Modal Actions Bar */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "1.5rem", borderTop: "1px solid var(--border-light)", paddingTop: "1rem", flexWrap: "wrap", gap: "0.75rem" }}>
+          <button
+            type="button"
+            className="table-btn"
+            onClick={() => onViewHistory(ticket)}
+            title="View Immutable Audit Trail"
+            style={{ fontWeight: 600 }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: "16px" }}>history</span>
+            <span>View Activity History</span>
+          </button>
+
+          <div style={{ display: "flex", gap: "0.6rem", alignItems: "center" }}>
+            {currentUser && currentUser.role === "ADMIN" && ticket.status !== "CLOSED" && (
+              <button
+                type="button"
+                className="table-btn"
+                onClick={() => onAssign(ticket)}
+                title="Manually assign or reassign ticket"
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: "15px" }}>person_add</span>
+                <span>{ticket.assigned_to ? "Reassign Specialist" : "Assign Specialist"}</span>
+              </button>
+            )}
+
+            {currentUser && currentUser.role !== "EMPLOYEE" && ticket.status !== "RESOLVED" && ticket.status !== "CLOSED" && (
+              <button
+                type="button"
+                className="table-btn"
+                style={{ borderColor: "var(--primary)", color: "var(--primary)", fontWeight: 600 }}
+                onClick={() => onResolve(ticket)}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: "15px" }}>check</span>
+                <span>Resolve Ticket</span>
+              </button>
+            )}
+
+            {ticket.status === "RESOLVED" && (
+              <button
+                type="button"
+                className="btn-primary-teal"
+                style={{ padding: "0.5rem 1rem", fontSize: "0.84rem" }}
+                onClick={() => onCloseTicket(ticket)}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: "15px" }}>lock</span>
+                <span>Confirm &amp; Close Ticket</span>
+              </button>
+            )}
+
+            <button type="button" className="btn-secondary-parchment" onClick={onClose}>
+              Dismiss
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================================
+// USER PROFILE & ASSIGNED ASSETS DETAILS MODAL (Tuesday Requirement)
+// =====================================================================
+function UserDetailsModal({ user, assets = [], tickets = [], currentUser, onClose, onEditUser, onReinviteUser }) {
+  if (!user) return null;
+
+  const userAssets = assets.filter(a => a.assigned_to === user.user_id);
+  const userTickets = tickets.filter(t => t.created_by === user.user_id || t.assigned_to === user.user_id);
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal-surface" style={{ maxWidth: "660px" }}>
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1rem", borderBottom: "1px solid var(--border-light)", paddingBottom: "0.75rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            <div style={{ width: "42px", height: "42px", borderRadius: "10px", background: "var(--primary-subtle)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--primary)" }}>
+              <span className="material-symbols-outlined" style={{ fontSize: "24px" }}>badge</span>
+            </div>
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: "1.1rem", fontWeight: 700, color: "var(--primary)" }}>
+                  {user.user_id}
+                </span>
+                <span className={`badge-priority ${(user.role || "").toLowerCase() === 'admin' ? 'critical' : (user.role || "").toLowerCase() === 'support' ? 'high' : 'medium'}`}>
+                  {user.role}
+                </span>
+                <span className={`badge-status ${user.status === 'ACTIVE' ? 'resolved' : 'closed'}`}>
+                  {user.status}
+                </span>
+              </div>
+              <h2 className="modal-title" style={{ fontSize: "1.25rem", margin: "0.2rem 0 0 0" }}>
+                {user.name}
+              </h2>
+            </div>
+          </div>
+          <button type="button" className="table-btn" onClick={onClose} style={{ padding: "0.3rem 0.5rem" }}>
+            <span className="material-symbols-outlined" style={{ fontSize: "16px" }}>close</span>
+          </button>
+        </div>
+
+        {/* User Info Grid */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "0.75rem", marginBottom: "1.25rem" }}>
+          <div style={{ background: "var(--bg-subtle)", padding: "0.75rem 1rem", borderRadius: "var(--radius-md)", border: "1px solid var(--border-light)" }}>
+            <div style={{ fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)", fontWeight: 600 }}>Work Email</div>
+            <div style={{ fontSize: "0.85rem", fontWeight: 500, color: "var(--text-main)", marginTop: "0.15rem" }}>
+              {user.email}
+            </div>
+          </div>
+          <div style={{ background: "var(--bg-subtle)", padding: "0.75rem 1rem", borderRadius: "var(--radius-md)", border: "1px solid var(--border-light)" }}>
+            <div style={{ fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)", fontWeight: 600 }}>Department</div>
+            <div style={{ fontSize: "0.85rem", fontWeight: 500, color: "var(--text-main)", marginTop: "0.15rem" }}>
+              {user.department || "Enterprise Workforce"}
+            </div>
+          </div>
+        </div>
+
+        {/* Assigned Hardware Assets Section */}
+        <div style={{ marginBottom: "1.25rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+            <div style={{ fontSize: "0.82rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-main)", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+              <span className="material-symbols-outlined" style={{ fontSize: "16px", color: "var(--primary)" }}>devices</span>
+              <span>Assigned Hardware Custody ({userAssets.length})</span>
+            </div>
+          </div>
+          {userAssets.length === 0 ? (
+            <div style={{ padding: "1rem", background: "var(--bg-subtle)", border: "1px dashed var(--border-light)", borderRadius: "var(--radius-md)", textAlign: "center", color: "var(--text-muted)", fontSize: "0.85rem" }}>
+              No hardware devices currently in custody for this employee account.
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", maxHeight: "160px", overflowY: "auto" }}>
+              {userAssets.map(a => (
+                <div key={a.id || a.asset_id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.6rem 0.85rem", background: "var(--bg-canvas)", border: "1px solid var(--border-light)", borderRadius: "var(--radius-md)" }}>
+                  <div>
+                    <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600, color: "var(--primary)", marginRight: "0.5rem" }}>{a.asset_id}</span>
+                    <span style={{ fontWeight: 500, fontSize: "0.85rem" }}>{a.brand} {a.model} ({a.type})</span>
+                  </div>
+                  <span className={`badge-status ${(a.status || "").toLowerCase()}`}>{a.status}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Associated ServiceDesk Tickets */}
+        <div style={{ marginBottom: "1.25rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+            <div style={{ fontSize: "0.82rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-main)", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+              <span className="material-symbols-outlined" style={{ fontSize: "16px", color: "var(--primary)" }}>confirmation_number</span>
+              <span>Recent ServiceDesk Incidents ({userTickets.length})</span>
+            </div>
+          </div>
+          {userTickets.length === 0 ? (
+            <div style={{ padding: "1rem", background: "var(--bg-subtle)", border: "1px dashed var(--border-light)", borderRadius: "var(--radius-md)", textAlign: "center", color: "var(--text-muted)", fontSize: "0.85rem" }}>
+              No active or historical tickets recorded for this workforce account.
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", maxHeight: "160px", overflowY: "auto" }}>
+              {userTickets.slice(0, 5).map(t => (
+                <div key={t.id || t.ticket_id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.6rem 0.85rem", background: "var(--bg-canvas)", border: "1px solid var(--border-light)", borderRadius: "var(--radius-md)" }}>
+                  <div>
+                    <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600, color: "var(--primary)", marginRight: "0.5rem" }}>#{t.ticket_id}</span>
+                    <span style={{ fontWeight: 500, fontSize: "0.85rem" }}>{t.title}</span>
+                  </div>
+                  <div style={{ display: "flex", gap: "0.4rem" }}>
+                    <span className={`badge-priority ${(t.priority || "").toLowerCase()}`}>{t.priority}</span>
+                    <span className={`badge-status ${(t.status || "").toLowerCase().replace('_', '-')}`}>{t.status}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Modal Actions */}
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.6rem", borderTop: "1px solid var(--border-light)", paddingTop: "1rem" }}>
+          {currentUser && currentUser.role === "ADMIN" && user.status === "PENDING" && (
+            <button
+              type="button"
+              className="table-btn"
+              onClick={() => onReinviteUser(user)}
+              title="Generate new invitation token and copy to clipboard"
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: "15px" }}>mark_email_read</span>
+              <span>Re-send Invite Token</span>
+            </button>
+          )}
+
+          {currentUser && currentUser.role === "ADMIN" && (
+            <button
+              type="button"
+              className="btn-primary-teal"
+              style={{ padding: "0.5rem 1rem", fontSize: "0.84rem" }}
+              onClick={() => onEditUser(user)}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: "15px" }}>edit</span>
+              <span>Edit User Profile</span>
+            </button>
+          )}
+
+          <button type="button" className="btn-secondary-parchment" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================================
+// EDIT USER MODAL (Tuesday Requirement - PUT /users/{user_id})
+// =====================================================================
+function EditUserModal({ user, token, onClose, onSuccess, addToast }) {
+  if (!user) return null;
+
+  const [name, setName] = useState(user.name || "");
+  const [role, setRole] = useState(user.role || "EMPLOYEE");
+  const [department, setDepartment] = useState(user.department || "Engineering");
+  const [status, setStatus] = useState(user.status || "ACTIVE");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    if (!name.trim()) {
+      setError("Full name is required.");
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const res = await fetch(`${API_BASE}/users/${user.user_id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name: name.trim(),
+          role,
+          department: department.trim(),
+          status
+        })
+      });
+      if (res.ok) {
+        onSuccess();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        const msg = parseApiError(err, res.status, "Failed to update user profile");
+        setError(msg);
+        addToast(msg, "error");
+      }
+    } catch (e) {
+      setError("Network failure updating user profile.");
+      addToast("Network failure updating user profile.", "error");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal-surface" style={{ maxWidth: "520px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "0.5rem" }}>
+          <div>
+            <h2 className="modal-title">Edit Workforce Profile</h2>
+            <p className="modal-desc" style={{ marginBottom: 0 }}>
+              Update directory attributes for <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600, color: "var(--primary)" }}>{user.user_id}</span>
+            </p>
+          </div>
+          <button type="button" className="table-btn" onClick={onClose} style={{ padding: "0.25rem 0.5rem" }}>
+            <span className="material-symbols-outlined" style={{ fontSize: "16px" }}>close</span>
+          </button>
+        </div>
+
+        {error && (
+          <div style={{ padding: "0.75rem 1rem", background: "var(--status-critical-bg)", border: "1px solid var(--status-critical)", borderRadius: "var(--radius-md)", margin: "1rem 0", color: "var(--status-critical)", fontSize: "0.84rem" }}>
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} style={{ marginTop: "1rem" }}>
+          <div className="form-field-group">
+            <label className="form-field-label">Full Name</label>
+            <input
+              type="text"
+              className="apex-form-input"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              required
+            />
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+            <div className="form-field-group">
+              <label className="form-field-label">System Role</label>
+              <select
+                className="apex-form-input"
+                value={role}
+                onChange={e => setRole(e.target.value)}
+              >
+                <option value="EMPLOYEE">EMPLOYEE</option>
+                <option value="SUPPORT">SUPPORT</option>
+                <option value="ADMIN">ADMIN</option>
+              </select>
+            </div>
+
+            <div className="form-field-group">
+              <label className="form-field-label">Account Status</label>
+              <select
+                className="apex-form-input"
+                value={status}
+                onChange={e => setStatus(e.target.value)}
+              >
+                <option value="ACTIVE">ACTIVE</option>
+                <option value="PENDING">PENDING</option>
+                <option value="DISABLED">DISABLED</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="form-field-group">
+            <label className="form-field-label">Department</label>
+            <input
+              type="text"
+              className="apex-form-input"
+              value={department}
+              onChange={e => setDepartment(e.target.value)}
+              placeholder="e.g. Engineering, IT Support, Operations"
+            />
+          </div>
+
+          <div className="modal-actions-row">
+            <button type="button" className="btn-secondary-parchment" onClick={onClose} disabled={isSubmitting}>
+              Cancel
+            </button>
+            <button type="submit" className="btn-primary-teal" disabled={isSubmitting}>
+              {isSubmitting ? "Saving Updates..." : "Save Changes"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
