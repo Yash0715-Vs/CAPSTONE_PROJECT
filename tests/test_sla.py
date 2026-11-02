@@ -82,3 +82,38 @@ def test_average_resolution_time_calculation():
     assert stats["total_resolved"] == 2
     assert stats["average_resolution_minutes"] == 120.0  # (60 + 180) / 2 = 120 mins
     assert stats["average_resolution_human"] == "2h 0m"
+
+
+def test_sla_report_metric_breakdown():
+    """
+    Pre-Day 3 Verification: Validates that GET /reports/sla returns mathematically
+    consistent and distinct metrics for active overdue, active on-time,
+    historical breached, and historical met SLA tickets.
+    """
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    client = TestClient(app)
+    # Login as admin to get auth token
+    login_res = client.post("/auth/login", json={"user_id": "ADM-001", "password": "password"})
+    assert login_res.status_code == 200
+    token = login_res.json()["access_token"]
+
+    res = client.get("/reports/sla", headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 200
+    data = res.json()
+
+    total = data["total_tickets_analyzed"]
+    breached = data["breached_count"]
+    non_breached = data["non_breached_count"]
+    active_overdue = data["active_overdue_count"]
+    active_on_time = data["active_on_time_count"]
+    historical_breached = data["historical_breached_count"]
+    historical_met = data["historical_met_count"]
+
+    # Verify mathematical integrity
+    assert breached == active_overdue + historical_breached
+    assert non_breached == active_on_time + historical_met
+    assert total == breached + non_breached
+    assert "compliance_rate" in data
+

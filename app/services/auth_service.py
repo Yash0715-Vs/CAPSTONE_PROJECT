@@ -71,17 +71,32 @@ class AuthService:
         to_encode.update({"exp": expire})
         return jwt.encode(to_encode, config.SECRET_KEY, algorithm=config.ALGORITHM)
 
+    # In-Memory Token Revocation Store (Process-Bound)
+    #
+    # ARCHITECTURAL DESIGN & LIMITATIONS:
+    # 1. Scope: In-memory set effective within the running process for the local demo.
+    # 2. Expiration Handling: Tokens have an `exp` claim. Expired tokens are rejected
+    #    via jwt.ExpiredSignatureError. Revoked tokens are rejected with HTTP 401 "Token has been revoked".
+    # 3. Operational Integrity: The set persists across requests and is never cleared during normal execution.
+    # 4. Multi-Worker / Clustered Limitations: In-memory state is isolated per OS process. If deploying with
+    #    multiple Uvicorn worker processes (--workers N) or multi-node clusters, a shared cache (e.g., Redis
+    #    with TTL matching token expiration) or a database table (`revoked_tokens`) is required for cross-worker visibility.
     _revoked_tokens: set = set()
 
     @classmethod
     def revoke_token(cls, token: str) -> None:
-        """Revokes a JWT token on the server side upon logout."""
+        """
+        Revokes a JWT token on the server side upon logout.
+        Adds the token to the server-side revocation registry.
+        """
         if token:
             cls._revoked_tokens.add(token.strip())
 
     @classmethod
     def is_token_revoked(cls, token: str) -> bool:
-        """Checks whether token has been revoked on server side."""
+        """
+        Checks whether token has been revoked on the server side.
+        """
         return bool(token and token.strip() in cls._revoked_tokens)
 
     @classmethod

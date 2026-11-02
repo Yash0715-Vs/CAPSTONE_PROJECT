@@ -801,6 +801,9 @@ function App() {
   const breachedTicketsCount = slaReport?.breached_count ?? tickets.filter(t => t.sla_status === "BREACHED").length;
   const activeOverdueCount = slaReport?.active_overdue_count ?? tickets.filter(t => (t.status === "OPEN" || t.status === "IN_PROGRESS" || t.status === "ASSIGNED") && t.sla_status === "BREACHED").length;
   const historicalBreachCount = slaReport?.historical_breached_count ?? tickets.filter(t => (t.status === "RESOLVED" || t.status === "CLOSED") && t.sla_status === "BREACHED").length;
+  const activeOnTimeCount = slaReport?.active_on_time_count ?? tickets.filter(t => (t.status === "OPEN" || t.status === "IN_PROGRESS" || t.status === "ASSIGNED") && t.sla_status !== "BREACHED").length;
+  const historicalMetCount = slaReport?.historical_met_count ?? tickets.filter(t => (t.status === "RESOLVED" || t.status === "CLOSED") && t.sla_status !== "BREACHED").length;
+  const nonBreachedCount = slaReport?.non_breached_count ?? (totalTickets - breachedTicketsCount);
   const complianceRate = totalTickets > 0 ? (((totalTickets - breachedTicketsCount) / totalTickets) * 100).toFixed(1) : "100.0";
 
   // Safe user profile details
@@ -1169,6 +1172,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
       ws.onopen = () => {
         if (isDestroyed) { ws.close(); return; }
         setWsConnected(true);
+        setWsAuthenticated(false); // Transport connected; await backend authentication frame
         reconnectDelay = 2000;
         if (token) { ws.send(JSON.stringify({ action: "auth", token })); }
 
@@ -1590,7 +1594,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                   <div className="flex items-center gap-3">
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container text-on-surface-variant font-mono text-[11px] font-medium tracking-wide">
                       <span className={`w-1.5 h-1.5 rounded-full ${wsConnected && wsAuthenticated ? "bg-tertiary animate-pulse" : "bg-amber-500"}`}></span>
-                      {wsConnected && wsAuthenticated ? "Live Stream Authenticated" : "Live Database Connected"}
+                      {wsConnected && wsAuthenticated ? "Live Stream Authenticated" : wsConnected ? "Stream Connecting (Auth Pending)" : "Live Database Connected"}
                     </span>
                     <span className="text-xs text-on-surface-variant font-mono">
                       {currentUser.role === 'ADMIN' ? 'Administrator Gateway' : currentUser.role === 'SUPPORT' ? 'IT ServiceDesk Console' : 'Personal Employee Portal'}
@@ -2171,7 +2175,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                       </div>
                       <div className="mt-2.5">
                         <div className="text-2xl font-headline font-medium text-on-surface">{complianceRate}%</div>
-                        <span className="text-[10px] text-on-surface-variant block mt-0.5">Target &gt;= 95%</span>
+                        <span className="text-[10px] text-on-surface-variant block mt-0.5">{nonBreachedCount} compliant ({activeOnTimeCount} active on-time)</span>
                       </div>
                     </div>
 

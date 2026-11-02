@@ -1,53 +1,89 @@
 """
-Pytest configuration and isolation fixtures.
-Ensures automated tests do not pollute or inflate the demonstration MySQL database.
+Pytest configuration and test database isolation.
+
+Meets Pre-Day 3 Technical Requirement 1:
+- Uses a dedicated test database (SQLite: test_it_asset.db).
+- Overrides FastAPI's `get_db` dependency during automated tests.
+- Redirects `db_manager._session_factory` to the test database so all direct session usages use the test DB.
+- Completely isolates all test executions from the demonstration MySQL database.
+- Never deletes or modifies legitimate demonstration MySQL records based on ticket titles or patterns.
+- Guarantees demonstration MySQL records remain 100% unchanged across repeated test runs.
 """
 
 import pytest
-from app.database.connection import get_db
-from app.models.db_models import TicketDB, TicketHistoryDB, AssetDB
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
-TEST_TICKET_TITLES = {
-    "EMP-101 Secret Ticket",
-    "EMP-101 Close Test",
-    "Still Open Ticket",
-    "Assign Check",
-    "VPN connection drops",
-    "WiFi disconnected on 3rd floor",
-    "EMP-101 WS Test",
-    "Test Ticket Title",
-    "Unique Title For Auto Classify"
-}
+from app.main import app
+from app.database.connection import db_manager, get_db
+from app.models.db_models import (
+    Base,
+    UserDB,
+    AssetDB,
+    AssetAssignmentDB,
+    TicketDB,
+    TicketHistoryDB,
+    ActivityLogDB,
+)
 
-@pytest.fixture(autouse=True)
-def isolate_test_database_records():
-    """
-    Teardown hook: Automatically removes newly created test tickets and assets
-    created during integration test executions, preserving the demonstration dataset.
-    """
-    yield
+TEST_DB_URL = "sqlite:///test_it_asset.db"
+
+# Dedicated SQLite test engine
+test_engine = create_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+
+
+def override_get_db():
+    """FastAPI dependency override yielding sessions bound to the test database."""
+    session = TestSessionLocal()
     try:
-        session = next(get_db())
-        # Find test-generated tickets created during tests
-        test_tickets = session.query(TicketDB).filter(
-            (TicketDB.title.in_(TEST_TICKET_TITLES)) |
-            (TicketDB.ticket_id.startswith("TEST-")) |
-            (TicketDB.ticket_id.startswith("ISO-"))
-        ).all()
-        
-        # Only clean up test tickets created beyond the baseline seed
-        # Notice: seeded tickets start from INC-1001 to INC-1055.
-        # Any test tickets with ID >= INC-1290 matching test titles are isolated test artifacts.
-        for t in test_tickets:
-            # Only remove if ticket_id is TEST-* or was created in recent test runs (e.g. >= INC-1294)
-            if t.ticket_id.startswith("TEST-") or t.ticket_id.startswith("ISO-") or (
-                t.ticket_id.startswith("INC-") and int(t.ticket_id.split("-")[1]) >= 1294
-            ):
-                session.query(TicketHistoryDB).filter(TicketHistoryDB.ticket_id == t.ticket_id).delete()
-                session.delete(t)
-
+        yield session
         session.commit()
     except Exception:
         session.rollback()
+        raise
     finally:
         session.close()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_test_database():
+    """
+    Session fixture:
+    1. Initializes isolated SQLite test database tables.
+    2. Clones the baseline dataset into SQLite once for realistic test execution.
+    3. Overrides FastAPI `get_db` and `db_manager._session_factory` to point to test_engine.
+    4. Restores original configuration on session completion.
+    """
+    # 1. Reset and initialize SQLite schema
+    Base.metadata.drop_all(test_engine)
+    Base.metadata.create_all(test_engine)
+
+    # 2. Clone demonstration baseline into the test database
+    orig_factory = db_manager._session_factory
+    test_session = TestSessionLocal()
+
+    try:
+        with orig_factory() as live_session:
+            for model in [UserDB, AssetDB, AssetAssignmentDB, TicketDB, TicketHistoryDB, ActivityLogDB]:
+                rows = live_session.query(model).all()
+                for row in rows:
+                    live_session.expunge(row)
+                    test_session.merge(row)
+                test_session.flush()
+            test_session.commit()
+    except Exception as err:
+        test_session.rollback()
+        print(f"[conftest warning] Could not clone demonstration data to SQLite: {err}")
+    finally:
+        test_session.close()
+
+    # 3. Apply isolation overrides
+    db_manager._session_factory = TestSessionLocal
+    app.dependency_overrides[get_db] = override_get_db
+
+    yield
+
+    # 4. Teardown: Clean up overrides
+    app.dependency_overrides.pop(get_db, None)
+    db_manager._session_factory = orig_factory
