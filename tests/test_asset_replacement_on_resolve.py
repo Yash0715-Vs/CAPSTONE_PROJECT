@@ -132,3 +132,4 @@ def test_resolve_ticket_with_asset_replacement(auth_tokens):
         )
         assert new_log is not None
         assert new_log.employee_id == "EMP-101"
+

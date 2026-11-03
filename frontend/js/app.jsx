@@ -5867,26 +5867,88 @@ function ResolveTicketModal({ ticket, assets, token, onClose, onSuccess, addToas
   const [notes, setNotes] = useState("");
   const [isNonRepairable, setIsNonRepairable] = useState(false);
   const [oldAssetId, setOldAssetId] = useState(ticket?.asset_id || "");
+  const [allocationMode, setAllocationMode] = useState("auto"); // 'auto' or 'manual'
   const [replacementAssetId, setReplacementAssetId] = useState("");
+  const [filterByTypeOnly, setFilterByTypeOnly] = useState(true);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const availableAssets = (assets || []).filter(a => a.status === "AVAILABLE");
-  const employeeAssets = (assets || []).filter(a => a.assigned_to === ticket?.created_by);
+  // All available assets in inventory
+  const allAvailableAssets = useMemo(() => {
+    return (assets || []).filter(a => a.status === "AVAILABLE");
+  }, [assets]);
 
+  // Assets currently assigned to the ticket creator
+  const employeeAssets = useMemo(() => {
+    return (assets || []).filter(a => a.assigned_to === ticket?.created_by);
+  }, [assets, ticket]);
+
+  // Fallback: If ticket had no asset_id, default to employee's first assigned asset if available
   useEffect(() => {
     if (!oldAssetId && employeeAssets.length === 1) {
       setOldAssetId(employeeAssets[0].asset_id);
     }
   }, [employeeAssets, oldAssetId]);
 
-  const currentOldAsset = (assets || []).find(a => a.asset_id === oldAssetId);
-  const selectedNewAsset = (assets || []).find(a => a.asset_id === replacementAssetId);
+  // Identify damaged/old asset and detect its type (Laptop, Monitor, Mouse, Keyboard, Printer)
+  const currentOldAsset = useMemo(() => {
+    return (assets || []).find(a => a.asset_id === oldAssetId);
+  }, [assets, oldAssetId]);
+
+  const detectedType = useMemo(() => {
+    if (currentOldAsset?.type) return currentOldAsset.type;
+    const aid = (oldAssetId || ticket?.asset_id || "").toUpperCase();
+    if (aid.startsWith("LAP")) return "Laptop";
+    if (aid.startsWith("MON")) return "Monitor";
+    if (aid.startsWith("MOU")) return "Mouse";
+    if (aid.startsWith("KEY")) return "Keyboard";
+    if (aid.startsWith("PRN")) return "Printer";
+    const titleLower = (ticket?.title || "").toLowerCase();
+    if (titleLower.includes("laptop") || titleLower.includes("macbook") || titleLower.includes("thinkpad")) return "Laptop";
+    if (titleLower.includes("monitor") || titleLower.includes("screen") || titleLower.includes("display")) return "Monitor";
+    if (titleLower.includes("mouse")) return "Mouse";
+    if (titleLower.includes("keyboard")) return "Keyboard";
+    if (titleLower.includes("printer")) return "Printer";
+    return null;
+  }, [currentOldAsset, oldAssetId, ticket]);
+
+  // Available assets strictly matching the damaged asset type
+  const matchingTypeAssets = useMemo(() => {
+    if (!detectedType) return allAvailableAssets;
+    const target = detectedType.trim().toLowerCase();
+    return allAvailableAssets.filter(a => (a.type || "").trim().toLowerCase() === target);
+  }, [allAvailableAssets, detectedType]);
+
+  // Assets to display in manual dropdown: filtered to matching type by default, or all if toggled
+  const dropdownAssets = useMemo(() => {
+    if (filterByTypeOnly && matchingTypeAssets.length > 0) {
+      return matchingTypeAssets;
+    }
+    return allAvailableAssets;
+  }, [filterByTypeOnly, matchingTypeAssets, allAvailableAssets]);
+
+  // Auto-Assign best matching asset when non-repairable is enabled or mode is auto
+  useEffect(() => {
+    if (isNonRepairable) {
+      if (allocationMode === "auto") {
+        const bestMatch = matchingTypeAssets.length > 0 ? matchingTypeAssets[0] : allAvailableAssets[0];
+        if (bestMatch) {
+          setReplacementAssetId(bestMatch.asset_id);
+        }
+      }
+    } else {
+      setReplacementAssetId("");
+    }
+  }, [isNonRepairable, allocationMode, matchingTypeAssets, allAvailableAssets]);
+
+  const selectedNewAsset = useMemo(() => {
+    return (assets || []).find(a => a.asset_id === replacementAssetId);
+  }, [assets, replacementAssetId]);
 
   const handleAutoFillNotes = () => {
     const oldName = currentOldAsset ? `${currentOldAsset.brand} ${currentOldAsset.model} (#${currentOldAsset.asset_id})` : (oldAssetId ? `#${oldAssetId}` : "Hardware device");
     const newName = selectedNewAsset ? `${selectedNewAsset.brand} ${selectedNewAsset.model} (#${selectedNewAsset.asset_id})` : (replacementAssetId ? `#${replacementAssetId}` : "replacement hardware");
-    const replacementText = `Diagnosed ${oldName} as non-repairable and decommissioned. Replaced with ${newName} and deployed to employee. Verified functionality and completed setup.`;
+    const replacementText = `Diagnosed ${oldName} as non-repairable and decommissioned (RETIRED). Allocated and deployed replacement ${detectedType || "asset"} ${newName} to employee ${ticket.created_by}. Verified device functionality and operational readiness.`;
     setNotes(prev => prev ? `${prev.trim()}\n${replacementText}` : replacementText);
   };
 
@@ -5901,7 +5963,7 @@ function ResolveTicketModal({ ticket, assets, token, onClose, onSuccess, addToas
     }
 
     if (isNonRepairable && !replacementAssetId) {
-      setError("Please select an available replacement asset from inventory to assign to the employee.");
+      setError("Please select or auto-assign an available replacement asset from inventory.");
       return;
     }
 
@@ -5947,7 +6009,7 @@ function ResolveTicketModal({ ticket, assets, token, onClose, onSuccess, addToas
 
   return (
     <div className="modal-backdrop">
-      <div className="modal-surface" style={{ maxWidth: "620px", width: "100%", boxSizing: "border-box" }}>
+      <div className="modal-surface" style={{ maxWidth: "640px", width: "100%", boxSizing: "border-box" }}>
         {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1.1rem", borderBottom: "1px solid var(--border-light)", paddingBottom: "0.85rem" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.85rem" }}>
@@ -5955,9 +6017,9 @@ function ResolveTicketModal({ ticket, assets, token, onClose, onSuccess, addToas
               <span className="material-symbols-outlined" style={{ fontSize: "24px" }}>task_alt</span>
             </div>
             <div>
-              <h2 className="modal-title" style={{ fontSize: "1.22rem", margin: 0 }}>Resolve Ticket (#{ticket.ticket_id})</h2>
+              <h2 className="modal-title" style={{ fontSize: "1.22rem", margin: 0 }}>Resolve Incident (#{ticket.ticket_id})</h2>
               <p className="modal-desc" style={{ margin: "0.2rem 0 0 0", fontSize: "0.84rem" }}>
-                Record resolution actions and close out SLA timers.
+                Record diagnostic findings, resolution actions, and close SLA timers.
               </p>
             </div>
           </div>
@@ -6018,7 +6080,7 @@ function ResolveTicketModal({ ticket, assets, token, onClose, onSuccess, addToas
               <div style={{ flex: 1 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                   <span style={{ fontWeight: 700, fontSize: "0.9rem", color: isNonRepairable ? "var(--status-critical)" : "var(--text-main)" }}>
-                    Asset is Non-Repairable &mdash; Assign Replacement Asset
+                    Asset is Non-Repairable — Assign Replacement Asset
                   </span>
                   <span style={{
                     fontSize: "0.65rem",
@@ -6047,7 +6109,7 @@ function ResolveTicketModal({ ticket, assets, token, onClose, onSuccess, addToas
                 borderTop: "1px dashed rgba(186, 26, 26, 0.25)",
                 display: "flex",
                 flexDirection: "column",
-                gap: "12px"
+                gap: "14px"
               }}>
                 {/* 1. Old Asset Identification */}
                 <div>
@@ -6069,7 +6131,8 @@ function ResolveTicketModal({ ticket, assets, token, onClose, onSuccess, addToas
                         <span className="material-symbols-outlined" style={{ fontSize: "18px", color: "var(--status-critical)" }}>devices_other</span>
                         <span>
                           <strong style={{ fontFamily: "var(--font-mono)" }}>#{ticket.asset_id}</strong>
-                          {currentOldAsset && ` &mdash; ${currentOldAsset.brand} ${currentOldAsset.model} (${currentOldAsset.type})`}
+                          {" — "}
+                          {currentOldAsset ? `${currentOldAsset.brand} ${currentOldAsset.model} (${currentOldAsset.type})` : (detectedType || "Hardware Asset")}
                         </span>
                       </div>
                       <span style={{ fontSize: "0.7rem", fontWeight: 700, padding: "2px 6px", borderRadius: "4px", background: "var(--status-critical)", color: "#fff" }}>
@@ -6087,44 +6150,197 @@ function ResolveTicketModal({ ticket, assets, token, onClose, onSuccess, addToas
                       <option value="">-- Select Damaged Asset to Decommission --</option>
                       {employeeAssets.map(a => (
                         <option key={a.asset_id} value={a.asset_id}>
-                          {a.asset_id} &mdash; {a.brand} {a.model} ({a.type}) [Assigned to {a.assigned_to}]
+                          {a.asset_id} — {a.brand} {a.model} ({a.type}) [Assigned to {a.assigned_to}]
                         </option>
                       ))}
                     </select>
                   )}
                 </div>
 
-                {/* 2. Replacement Asset Dropdown */}
+                {/* 2. Replacement Mode Switcher (Auto-Assign vs Choose Manually) */}
                 <div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
                     <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-main)", margin: 0 }}>
-                      2. Select Replacement Asset from Inventory <span style={{ color: "var(--status-critical)" }}>*</span>
+                      2. Allocation Method for Replacement {detectedType ? detectedType : "Asset"} <span style={{ color: "var(--status-critical)" }}>*</span>
                     </label>
                     <span style={{ fontSize: "0.72rem", color: "var(--primary)", fontWeight: 600, fontFamily: "var(--font-mono)" }}>
-                      {availableAssets.length} Available in Inventory
+                      {matchingTypeAssets.length} Available {detectedType ? `${detectedType}s` : "Assets"}
                     </span>
                   </div>
 
-                  {availableAssets.length === 0 ? (
-                    <div style={{ padding: "8px 12px", background: "var(--status-warning-bg)", border: "1px solid var(--status-warning)", borderRadius: "6px", fontSize: "0.8rem", color: "var(--status-warning)" }}>
-                      Warning: No hardware assets are currently marked as AVAILABLE in inventory. Please add or return an asset first.
-                    </div>
-                  ) : (
-                    <select
-                      className="filter-select"
-                      style={{ width: "100%", height: "40px", fontSize: "0.85rem", background: "var(--bg-input)" }}
-                      value={replacementAssetId}
-                      onChange={e => setReplacementAssetId(e.target.value)}
-                      disabled={submitting}
-                      required={isNonRepairable}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "10px" }}>
+                    <button
+                      type="button"
+                      onClick={() => setAllocationMode("auto")}
+                      style={{
+                        padding: "8px 12px",
+                        borderRadius: "8px",
+                        border: allocationMode === "auto" ? "2px solid var(--primary)" : "1px solid var(--border-light)",
+                        background: allocationMode === "auto" ? "rgba(15, 118, 110, 0.1)" : "var(--bg-subtle)",
+                        color: allocationMode === "auto" ? "var(--primary)" : "var(--text-main)",
+                        fontWeight: allocationMode === "auto" ? 700 : 500,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "6px",
+                        fontSize: "0.82rem",
+                        transition: "all 0.15s ease"
+                      }}
                     >
-                      <option value="">-- Choose Available Replacement Asset --</option>
-                      {availableAssets.map(a => (
-                        <option key={a.asset_id} value={a.asset_id}>
-                          {a.asset_id} &mdash; {a.brand} {a.model} ({a.type}) &bull; S/N: {a.serial_number}
-                        </option>
-                      ))}
-                    </select>
+                      <span className="material-symbols-outlined" style={{ fontSize: "17px" }}>auto_awesome</span>
+                      <span>Auto-Assign ({detectedType || "Asset"})</span>
+                      {allocationMode === "auto" && (
+                        <span style={{ fontSize: "0.62rem", padding: "1px 5px", borderRadius: "3px", background: "var(--primary)", color: "#fff", fontWeight: 700 }}>
+                          ACTIVE
+                        </span>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setAllocationMode("manual")}
+                      style={{
+                        padding: "8px 12px",
+                        borderRadius: "8px",
+                        border: allocationMode === "manual" ? "2px solid var(--primary)" : "1px solid var(--border-light)",
+                        background: allocationMode === "manual" ? "rgba(15, 118, 110, 0.1)" : "var(--bg-subtle)",
+                        color: allocationMode === "manual" ? "var(--primary)" : "var(--text-main)",
+                        fontWeight: allocationMode === "manual" ? 700 : 500,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "6px",
+                        fontSize: "0.82rem",
+                        transition: "all 0.15s ease"
+                      }}
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: "17px" }}>tune</span>
+                      <span>Choose Manually from List</span>
+                      {allocationMode === "manual" && (
+                        <span style={{ fontSize: "0.62rem", padding: "1px 5px", borderRadius: "3px", background: "var(--primary)", color: "#fff", fontWeight: 700 }}>
+                          ACTIVE
+                        </span>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* AUTO-ASSIGN VIEW */}
+                  {allocationMode === "auto" && (
+                    <div>
+                      {selectedNewAsset ? (
+                        <div style={{
+                          padding: "10px 14px",
+                          borderRadius: "8px",
+                          background: "rgba(15, 118, 110, 0.08)",
+                          border: "1.5px solid var(--primary-border)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: "10px"
+                        }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                            <div style={{ width: "34px", height: "34px", borderRadius: "8px", background: "var(--primary)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                              <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>auto_awesome</span>
+                            </div>
+                            <div>
+                              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                <span style={{ fontWeight: 700, fontSize: "0.88rem", color: "var(--text-main)" }}>
+                                  #{selectedNewAsset.asset_id} — {selectedNewAsset.brand} {selectedNewAsset.model}
+                                </span>
+                                <span style={{ fontSize: "0.65rem", fontWeight: 700, padding: "2px 6px", borderRadius: "4px", background: "var(--primary)", color: "#fff" }}>
+                                  AUTO-SELECTED
+                                </span>
+                              </div>
+                              <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block", marginTop: "2px" }}>
+                                Type: <strong>{selectedNewAsset.type}</strong> &bull; S/N: {selectedNewAsset.serial_number} &bull; Matched from available database inventory
+                              </span>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setAllocationMode("manual")}
+                            style={{
+                              padding: "4px 8px",
+                              fontSize: "0.74rem",
+                              fontWeight: 600,
+                              background: "var(--bg-card)",
+                              color: "var(--primary)",
+                              border: "1px solid var(--primary-border)",
+                              borderRadius: "4px",
+                              cursor: "pointer",
+                              whiteSpace: "nowrap"
+                            }}
+                          >
+                            Change Device
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={{ padding: "10px 12px", background: "var(--status-critical-bg)", border: "1px solid var(--status-critical)", borderRadius: "6px", fontSize: "0.8rem", color: "var(--status-critical)" }}>
+                          No available {detectedType ? detectedType : "hardware"} assets found in inventory for auto-assignment. Please switch to manual selection or register new inventory.
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* MANUAL SELECTION VIEW (Strictly filtered by matching asset type) */}
+                  {allocationMode === "manual" && (
+                    <div>
+                      {/* Filter indicator & toggle */}
+                      {detectedType && (
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px", fontSize: "0.75rem" }}>
+                          <span style={{ color: "var(--text-main)", display: "flex", alignItems: "center", gap: "4px" }}>
+                            <span className="material-symbols-outlined" style={{ fontSize: "15px", color: "var(--primary)" }}>filter_alt</span>
+                            <span>List filtered to: <strong>{detectedType}s only</strong> ({dropdownAssets.length} found)</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setFilterByTypeOnly(prev => !prev)}
+                            style={{
+                              background: "transparent",
+                              border: "none",
+                              color: "var(--primary)",
+                              cursor: "pointer",
+                              fontSize: "0.73rem",
+                              textDecoration: "underline",
+                              padding: 0
+                            }}
+                          >
+                            {filterByTypeOnly ? "Show All Asset Types" : `Filter to ${detectedType}s Only`}
+                          </button>
+                        </div>
+                      )}
+
+                      {dropdownAssets.length === 0 ? (
+                        <div style={{ padding: "8px 12px", background: "var(--status-warning-bg)", border: "1px solid var(--status-warning)", borderRadius: "6px", fontSize: "0.8rem", color: "var(--status-warning)" }}>
+                          Warning: No {detectedType ? detectedType : ""} assets currently available in inventory.
+                          <button
+                            type="button"
+                            onClick={() => setFilterByTypeOnly(false)}
+                            style={{ marginLeft: "6px", color: "var(--primary)", background: "transparent", border: "none", textDecoration: "underline", cursor: "pointer", fontWeight: 600 }}
+                          >
+                            View other asset categories
+                          </button>
+                        </div>
+                      ) : (
+                        <select
+                          className="filter-select"
+                          style={{ width: "100%", height: "40px", fontSize: "0.85rem", background: "var(--bg-input)" }}
+                          value={replacementAssetId}
+                          onChange={e => setReplacementAssetId(e.target.value)}
+                          disabled={submitting}
+                          required={isNonRepairable}
+                        >
+                          <option value="">-- Choose from Available {detectedType ? `${detectedType}s` : "Assets"} ({dropdownAssets.length} Available) --</option>
+                          {dropdownAssets.map(a => (
+                            <option key={a.asset_id} value={a.asset_id}>
+                              {a.asset_id} — {a.brand} {a.model} ({a.type}) • S/N: {a.serial_number}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
                   )}
                 </div>
 
@@ -6142,7 +6358,7 @@ function ResolveTicketModal({ ticket, assets, token, onClose, onSuccess, addToas
                     flexWrap: "wrap"
                   }}>
                     <div style={{ fontSize: "0.8rem", color: "var(--text-main)", lineHeight: 1.4 }}>
-                      <span style={{ color: "var(--primary)", fontWeight: 700 }}>✓ Replacement Confirmed: </span>
+                      <span style={{ color: "var(--primary)", fontWeight: 700 }}>✓ Ready for Assignment: </span>
                       <span>Asset <strong>#{selectedNewAsset.asset_id}</strong> ({selectedNewAsset.brand} {selectedNewAsset.model}) will be assigned to <strong>{ticket.created_by}</strong>.</span>
                     </div>
                     <button
@@ -6240,7 +6456,6 @@ function ResolveTicketModal({ ticket, assets, token, onClose, onSuccess, addToas
     </div>
   );
 }
-
 
 function VerifyResolutionModal({ ticket, currentUser, token, onClose, onSuccess, addToast }) {
   const [feedback, setFeedback] = useState("");
