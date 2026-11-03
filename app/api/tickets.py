@@ -1,480 +1,552 @@
-"""
-Tickets API Endpoints.
-
-Meets Capstone Specification Section 12:
-- GET    /tickets
-- GET    /tickets/{ticket_id}
-- POST   /tickets (Automatically hooks into TicketClassifier!)
-- PUT    /tickets/{ticket_id}
-- POST   /tickets/{ticket_id}/assign
-- POST   /tickets/{ticket_id}/resolve
-- POST   /tickets/{ticket_id}/close
-"""
-
-from typing import List, Optional
-from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.orm import Session
-
-from app.database.connection import get_db
-from app.database.repositories import TicketRepository, UserRepository, ActivityLogRepository
-from app.models.db_models import TicketDB, UserDB, TicketHistoryDB, AssetDB
-from app.schemas.ticket import (
-    TicketCreate,
-    TicketUpdate,
-    TicketResponse,
-    TicketAssignRequest,
-    TicketResolveRequest,
-    TicketCloseRequest,
-    TicketReopenRequest,
-    TicketHistoryResponse,
-)
-from app.services.auth_service import get_current_user, require_roles
-from app.services.ticket_classifier import TicketClassifier
-from app.services.assignment_service import auto_assign_ticket
-from app.services.websocket_manager import ws_manager
-
-router = APIRouter(prefix="/tickets", tags=["Tickets"])
-
-
-
-@router.get("", response_model=List[TicketResponse])
-def list_tickets(
-    status_filter: Optional[str] = Query(None, alias="status"),
-    category_filter: Optional[str] = Query(None, alias="category"),
-    priority_filter: Optional[str] = Query(None, alias="priority"),
-    session: Session = Depends(get_db),
-    current_user: UserDB = Depends(get_current_user)
-):
-    """
-    Lists support tickets according to strict role isolation:
-    - Employees see only tickets created by them.
-    - IT Support see ONLY tickets assigned to them.
-    - Admin can view all tickets across the organization.
-    """
-    if current_user.role == "EMPLOYEE":
-        return TicketRepository.list_tickets(
-            session=session,
-            status=status_filter,
-            category=category_filter,
-            priority=priority_filter,
-            created_by=current_user.user_id
-        )
-    elif current_user.role == "SUPPORT":
-        return TicketRepository.list_tickets(
-            session=session,
-            status=status_filter,
-            category=category_filter,
-            priority=priority_filter,
-            assigned_to=current_user.user_id
-        )
-    else:  # ADMIN
-        return TicketRepository.list_tickets(
-            session=session,
-            status=status_filter,
-            category=category_filter,
-            priority=priority_filter
-        )
-
-
-@router.get("/{ticket_id}", response_model=TicketResponse)
-def get_ticket_by_id(
-    ticket_id: str,
-    session: Session = Depends(get_db),
-    current_user: UserDB = Depends(get_current_user)
-):
-    """Retrieves specific ticket details."""
-    ticket = TicketRepository.get_by_ticket_id(session, ticket_id)
-    if not ticket:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Ticket '{ticket_id}' not found.")
-
-    if current_user.role == "EMPLOYEE" and ticket.created_by != current_user.user_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You are only authorized to view your own support tickets."
-        )
-
-    if current_user.role == "SUPPORT" and ticket.assigned_to != current_user.user_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You are only authorized to view tickets assigned to you."
-        )
-
-    return ticket
-
-
-@router.post("", response_model=TicketResponse, status_code=status.HTTP_201_CREATED)
-def create_ticket(
-    ticket_in: TicketCreate,
-    session: Session = Depends(get_db),
-    current_user: UserDB = Depends(get_current_user)
-):
-    """
-    Creates a new support ticket.
-    If category or priority is not provided by the user,
-    our Rule-Based TicketClassifier (Regex) automatically infers them!
-    """
-    category = ticket_in.category
-    priority = ticket_in.priority
-
-    # Automatic Ticket Classification (Section 6)
-    if not category or not priority:
-        classification = TicketClassifier.classify_ticket(ticket_in.title, ticket_in.description)
-        category = category or classification["category_name"]
-        priority = priority or classification["priority_name"]
-
-    # Validate employee asset ownership if asset_id is provided
-    if ticket_in.asset_id:
-        asset_obj = session.query(AssetDB).filter(AssetDB.asset_id == ticket_in.asset_id).first()
-        if not asset_obj:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Asset '{ticket_in.asset_id}' not found."
-            )
-        if current_user.role == "EMPLOYEE" and asset_obj.assigned_to != current_user.user_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Asset '{ticket_in.asset_id}' is not assigned to your account."
-            )
-
-    # Generate robust next Ticket ID (e.g. INC-1056)
-    last_ticket = session.query(TicketDB).order_by(TicketDB.id.desc()).first()
-    next_num = (last_ticket.id + 1) if last_ticket else 1
-    generated_ticket_id = f"INC-{1000 + next_num}"
-    while TicketRepository.get_by_ticket_id(session, generated_ticket_id):
-        next_num += 1
-        generated_ticket_id = f"INC-{1000 + next_num}"
-
-    ticket = TicketDB(
-        ticket_id=generated_ticket_id,
-        title=ticket_in.title,
-        description=ticket_in.description,
-        category=category,
-        priority=priority,
-        status="OPEN",
-        created_by=current_user.user_id,
-        asset_id=ticket_in.asset_id,
-        created_date=datetime.now(timezone.utc),
-    )
-    saved = TicketRepository.create(session, ticket)
-    ActivityLogRepository.log(
-        session, "TICKET_CREATED", current_user.user_id, f"Created {saved.ticket_id} ({category}/{priority})"
-    )
-
-    # Automatic least-load assignment under admin-authorized system policy
-    auto_assign_ticket(session, saved.ticket_id)
-    session.flush()
-
-    ws_manager.trigger_ticket_broadcast("TICKET_CREATED", saved.to_dict())
-    return saved
-
-
-
-@router.put("/{ticket_id}", response_model=TicketResponse)
-def update_ticket(
-    ticket_id: str,
-    update_in: TicketUpdate,
-    session: Session = Depends(get_db),
-    staff_user: UserDB = Depends(require_roles(["ADMIN", "SUPPORT"]))
-):
-    """Updates ticket priority, category, or title (Admin / Support only)."""
-    ticket = TicketRepository.get_by_ticket_id(session, ticket_id)
-    if not ticket:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Ticket '{ticket_id}' not found.")
-
-    if staff_user.role == "SUPPORT" and ticket.assigned_to != staff_user.user_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"You are only authorized to update tickets assigned to you (ticket is assigned to {ticket.assigned_to or 'Unassigned'})."
-        )
-
-    if update_in.title:
-        ticket.title = update_in.title
-    if update_in.description:
-        ticket.description = update_in.description
-    if update_in.category:
-        ticket.category = update_in.category
-    if update_in.priority:
-        ticket.priority = update_in.priority
-    if update_in.status:
-        TicketRepository.update_status(session, ticket_id, update_in.status, staff_user.user_id)
-
-    session.flush()
-    ActivityLogRepository.log(session, "TICKET_UPDATED", staff_user.user_id, f"Updated ticket {ticket_id}")
-    ws_manager.trigger_ticket_broadcast("TICKET_UPDATED", ticket.to_dict())
-    return ticket
-
-
-
-@router.post("/{ticket_id}/assign", response_model=TicketResponse)
-def assign_ticket(
-    ticket_id: str,
-    assign_req: TicketAssignRequest,
-    session: Session = Depends(get_db),
-    admin_user: UserDB = Depends(require_roles(["ADMIN"]))  # Exclusively ADMIN per Monday specifications
-):
-    """Assigns or reassigns ticket to an IT Support specialist (ADMIN only)."""
-    ticket = TicketRepository.get_by_ticket_id(session, ticket_id)
-    if not ticket:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Ticket '{ticket_id}' not found.")
-
-
-    if ticket.status == "CLOSED":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot assign closed ticket '{ticket_id}'."
-        )
-
-    support_user = UserRepository.get_by_user_id(session, assign_req.assigned_to)
-    if not support_user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"IT Support user '{assign_req.assigned_to}' not found."
-        )
-
-    if support_user.role not in ("SUPPORT", "ADMIN"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"User '{assign_req.assigned_to}' has role '{support_user.role}'. Tickets can only be assigned to SUPPORT or ADMIN staff."
-        )
-
-    previous_assignee = ticket.assigned_to
-    ticket.assigned_to = assign_req.assigned_to
-    TicketRepository.update_status(
-        session=session,
-        ticket_id=ticket_id,
-        new_status="ASSIGNED",
-        changed_by=admin_user.user_id,
-        comment=f"Assigned to {assign_req.assigned_to} by Administrator",
-        previous_assignee=previous_assignee,
-        new_assignee=assign_req.assigned_to,
-        assignment_method="MANUAL"
-    )
-    ActivityLogRepository.log(
-        session,
-        "TICKET_ASSIGNED",
-        admin_user.user_id,
-        f"Admin {admin_user.user_id} assigned {ticket_id} to {assign_req.assigned_to}"
-    )
-    session.flush()
-    ws_manager.trigger_ticket_broadcast("TICKET_ASSIGNED", ticket.to_dict())
-    return ticket
-
-
-
-@router.post("/{ticket_id}/resolve", response_model=TicketResponse)
-def resolve_ticket(
-    ticket_id: str,
-    resolve_req: TicketResolveRequest,
-    session: Session = Depends(get_db),
-    staff_user: UserDB = Depends(require_roles(["ADMIN", "SUPPORT"]))
-):
-    """Resolves a ticket with explanatory resolution notes."""
-    ticket = TicketRepository.get_by_ticket_id(session, ticket_id)
-    if not ticket:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Ticket '{ticket_id}' not found.")
-
-    if staff_user.role == "SUPPORT" and ticket.assigned_to != staff_user.user_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"You are only authorized to resolve tickets assigned to you (ticket is assigned to {ticket.assigned_to or 'Unassigned'})."
-        )
-
-
-    if ticket.status == "CLOSED":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot resolve ticket '{ticket_id}' because it is already CLOSED."
-        )
-
-    if ticket.status == "RESOLVED":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Ticket '{ticket_id}' is already RESOLVED."
-        )
-
-    ticket.resolution = resolve_req.resolution
-    TicketRepository.update_status(
-        session=session,
-        ticket_id=ticket_id,
-        new_status="RESOLVED",
-        changed_by=staff_user.user_id,
-        comment=f"Resolved: {resolve_req.resolution}"
-    )
-    session.flush()
-    ws_manager.trigger_ticket_broadcast("TICKET_RESOLVED", ticket.to_dict())
-    return ticket
-
-
-
-@router.post("/{ticket_id}/close", response_model=TicketResponse)
-def close_ticket(
-    ticket_id: str,
-    close_in: Optional[TicketCloseRequest] = None,
-    session: Session = Depends(get_db),
-    current_user: UserDB = Depends(get_current_user)
-):
-    """
-    Closes a ticket after resolution verification.
-    - Employees can only close their own tickets, and only after the ticket is RESOLVED.
-    - Support specialists cannot close tickets.
-    - Administrators can also close tickets if permitted.
-    """
-    ticket = TicketRepository.get_by_ticket_id(session, ticket_id)
-    if not ticket:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Ticket '{ticket_id}' not found.")
-
-    if ticket.status == "CLOSED":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Ticket '{ticket_id}' is already CLOSED."
-        )
-
-    if current_user.role == "EMPLOYEE":
-        if ticket.created_by != current_user.user_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You are only authorized to close support tickets created by you."
-            )
-        if ticket.status != "RESOLVED":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Cannot close ticket '{ticket_id}' before it is RESOLVED (current status: {ticket.status})."
-            )
-    elif current_user.role == "SUPPORT":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Support specialists cannot close tickets. Only the ticket creator or an Administrator can confirm and close."
-        )
-    else:  # ADMIN
-        if ticket.status != "RESOLVED":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Cannot close ticket '{ticket_id}' before it is RESOLVED (current status: {ticket.status})."
-            )
-
-    feedback_text = (
-        close_in.feedback.strip()
-        if (close_in and close_in.feedback and close_in.feedback.strip())
-        else "Issue verified fixed. Ticket confirmed and closed."
-    )
-    ticket.closed_date = datetime.now(timezone.utc)
-    TicketRepository.update_status(
-        session=session,
-        ticket_id=ticket_id,
-        new_status="CLOSED",
-        changed_by=current_user.user_id,
-        comment=feedback_text
-    )
-    ActivityLogRepository.log(
-        session,
-        "TICKET_CLOSED",
-        current_user.user_id,
-        f"Ticket {ticket_id} verified and closed by {current_user.user_id}: {feedback_text}"
-    )
-    session.flush()
-    ws_manager.trigger_ticket_broadcast("TICKET_CLOSED", ticket.to_dict())
-    return ticket
-
-
-@router.post("/{ticket_id}/reopen", response_model=TicketResponse)
-def reopen_ticket(
-    ticket_id: str,
-    reopen_in: TicketReopenRequest,
-    session: Session = Depends(get_db),
-    current_user: UserDB = Depends(get_current_user)
-):
-    """
-    Reopens a RESOLVED ticket when employee reports 'Issue Still Exists'.
-    - Moves status back to IN_PROGRESS.
-    - Preserves assigned IT Support specialist so they can continue investigation.
-    - Records employee feedback in ticket history and activity log.
-    - Restricts action to ticket creator (EMPLOYEE) or Administrator.
-    """
-    ticket = TicketRepository.get_by_ticket_id(session, ticket_id)
-    if not ticket:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Ticket '{ticket_id}' not found.")
-
-    if ticket.status == "CLOSED":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Ticket '{ticket_id}' is already CLOSED and cannot be reopened."
-        )
-
-    if ticket.status != "RESOLVED":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot report issue exists on ticket '{ticket_id}' because its status is '{ticket.status}' (expected RESOLVED)."
-        )
-
-    if current_user.role == "EMPLOYEE":
-        if ticket.created_by != current_user.user_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You are only authorized to verify or reopen support tickets created by you."
-            )
-    elif current_user.role == "SUPPORT":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Support specialists cannot reject resolution. Only the ticket creator or an Administrator can report that the issue still exists."
-        )
-
-    # Change status back to IN_PROGRESS, keeping the existing assigned specialist
-    comment = f"Employee reported issue still exists: {reopen_in.reason.strip()}"
-    ticket.closed_date = None
-    TicketRepository.update_status(
-        session=session,
-        ticket_id=ticket_id,
-        new_status="IN_PROGRESS",
-        changed_by=current_user.user_id,
-        comment=comment,
-        previous_assignee=ticket.assigned_to,
-        new_assignee=ticket.assigned_to,
-        assignment_method="PRESERVED"
-    )
-    ActivityLogRepository.log(
-        session,
-        "TICKET_REOPENED",
-        current_user.user_id,
-        f"Ticket {ticket_id} reopened by {current_user.user_id}: {reopen_in.reason.strip()}"
-    )
-    session.flush()
-    ws_manager.trigger_ticket_broadcast("TICKET_UPDATED", ticket.to_dict())
-    return ticket
-
-
-@router.get("/{ticket_id}/history", response_model=List[TicketHistoryResponse])
-def get_ticket_history(
-    ticket_id: str,
-    session: Session = Depends(get_db),
-    current_user: UserDB = Depends(get_current_user)
-):
-    """
-    Returns full, immutable chronological audit trail for a ticket.
-    Employees may only view history for tickets they created.
-    """
-    ticket = TicketRepository.get_by_ticket_id(session, ticket_id)
-    if not ticket:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Ticket '{ticket_id}' not found.")
-
-    if current_user.role == "EMPLOYEE" and ticket.created_by != current_user.user_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You are only authorized to view history for your own tickets."
-        )
-
-    if current_user.role == "SUPPORT" and ticket.assigned_to != current_user.user_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You are only authorized to view history for tickets assigned to you."
-        )
-
-    records = (
-        session.query(TicketHistoryDB)
-        .filter(TicketHistoryDB.ticket_id == ticket_id)
-        .order_by(TicketHistoryDB.timestamp.asc(), TicketHistoryDB.id.asc())
-        .all()
-    )
-    return records
-
-
+"""
+Tickets API Endpoints.
+
+Meets Capstone Specification Section 12:
+- GET    /tickets
+- GET    /tickets/{ticket_id}
+- POST   /tickets (Automatically hooks into TicketClassifier!)
+- PUT    /tickets/{ticket_id}
+- POST   /tickets/{ticket_id}/assign
+- POST   /tickets/{ticket_id}/resolve
+- POST   /tickets/{ticket_id}/close
+"""
+
+from typing import List, Optional
+from datetime import datetime, timezone
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from sqlalchemy.orm import Session
+
+from app.database.connection import get_db
+from app.database.repositories import TicketRepository, UserRepository, ActivityLogRepository
+from app.models.db_models import TicketDB, UserDB, TicketHistoryDB, AssetDB, AssetAssignmentDB
+from app.schemas.ticket import (
+    TicketCreate,
+    TicketUpdate,
+    TicketResponse,
+    TicketAssignRequest,
+    TicketResolveRequest,
+    TicketCloseRequest,
+    TicketReopenRequest,
+    TicketHistoryResponse,
+)
+from app.services.auth_service import get_current_user, require_roles
+from app.services.ticket_classifier import TicketClassifier
+from app.services.assignment_service import auto_assign_ticket
+from app.services.websocket_manager import ws_manager
+
+router = APIRouter(prefix="/tickets", tags=["Tickets"])
+
+
+
+@router.get("", response_model=List[TicketResponse])
+def list_tickets(
+    status_filter: Optional[str] = Query(None, alias="status"),
+    category_filter: Optional[str] = Query(None, alias="category"),
+    priority_filter: Optional[str] = Query(None, alias="priority"),
+    session: Session = Depends(get_db),
+    current_user: UserDB = Depends(get_current_user)
+):
+    """
+    Lists support tickets according to strict role isolation:
+    - Employees see only tickets created by them.
+    - IT Support see ONLY tickets assigned to them.
+    - Admin can view all tickets across the organization.
+    """
+    if current_user.role == "EMPLOYEE":
+        return TicketRepository.list_tickets(
+            session=session,
+            status=status_filter,
+            category=category_filter,
+            priority=priority_filter,
+            created_by=current_user.user_id
+        )
+    elif current_user.role == "SUPPORT":
+        return TicketRepository.list_tickets(
+            session=session,
+            status=status_filter,
+            category=category_filter,
+            priority=priority_filter,
+            assigned_to=current_user.user_id
+        )
+    else:  # ADMIN
+        return TicketRepository.list_tickets(
+            session=session,
+            status=status_filter,
+            category=category_filter,
+            priority=priority_filter
+        )
+
+
+@router.get("/{ticket_id}", response_model=TicketResponse)
+def get_ticket_by_id(
+    ticket_id: str,
+    session: Session = Depends(get_db),
+    current_user: UserDB = Depends(get_current_user)
+):
+    """Retrieves specific ticket details."""
+    ticket = TicketRepository.get_by_ticket_id(session, ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Ticket '{ticket_id}' not found.")
+
+    if current_user.role == "EMPLOYEE" and ticket.created_by != current_user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are only authorized to view your own support tickets."
+        )
+
+    if current_user.role == "SUPPORT" and ticket.assigned_to != current_user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are only authorized to view tickets assigned to you."
+        )
+
+    return ticket
+
+
+@router.post("", response_model=TicketResponse, status_code=status.HTTP_201_CREATED)
+def create_ticket(
+    ticket_in: TicketCreate,
+    session: Session = Depends(get_db),
+    current_user: UserDB = Depends(get_current_user)
+):
+    """
+    Creates a new support ticket.
+    If category or priority is not provided by the user,
+    our Rule-Based TicketClassifier (Regex) automatically infers them!
+    """
+    category = ticket_in.category
+    priority = ticket_in.priority
+
+    # Automatic Ticket Classification (Section 6)
+    if not category or not priority:
+        classification = TicketClassifier.classify_ticket(ticket_in.title, ticket_in.description)
+        category = category or classification["category_name"]
+        priority = priority or classification["priority_name"]
+
+    # Validate employee asset ownership if asset_id is provided
+    if ticket_in.asset_id:
+        asset_obj = session.query(AssetDB).filter(AssetDB.asset_id == ticket_in.asset_id).first()
+        if not asset_obj:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Asset '{ticket_in.asset_id}' not found."
+            )
+        if current_user.role == "EMPLOYEE" and asset_obj.assigned_to != current_user.user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Asset '{ticket_in.asset_id}' is not assigned to your account."
+            )
+
+    # Generate robust next Ticket ID (e.g. INC-1056)
+    last_ticket = session.query(TicketDB).order_by(TicketDB.id.desc()).first()
+    next_num = (last_ticket.id + 1) if last_ticket else 1
+    generated_ticket_id = f"INC-{1000 + next_num}"
+    while TicketRepository.get_by_ticket_id(session, generated_ticket_id):
+        next_num += 1
+        generated_ticket_id = f"INC-{1000 + next_num}"
+
+    ticket = TicketDB(
+        ticket_id=generated_ticket_id,
+        title=ticket_in.title,
+        description=ticket_in.description,
+        category=category,
+        priority=priority,
+        status="OPEN",
+        created_by=current_user.user_id,
+        asset_id=ticket_in.asset_id,
+        created_date=datetime.now(timezone.utc),
+    )
+    saved = TicketRepository.create(session, ticket)
+    ActivityLogRepository.log(
+        session, "TICKET_CREATED", current_user.user_id, f"Created {saved.ticket_id} ({category}/{priority})"
+    )
+
+    # Automatic least-load assignment under admin-authorized system policy
+    auto_assign_ticket(session, saved.ticket_id)
+    session.flush()
+
+    ws_manager.trigger_ticket_broadcast("TICKET_CREATED", saved.to_dict())
+    return saved
+
+
+
+@router.put("/{ticket_id}", response_model=TicketResponse)
+def update_ticket(
+    ticket_id: str,
+    update_in: TicketUpdate,
+    session: Session = Depends(get_db),
+    staff_user: UserDB = Depends(require_roles(["ADMIN", "SUPPORT"]))
+):
+    """Updates ticket priority, category, or title (Admin / Support only)."""
+    ticket = TicketRepository.get_by_ticket_id(session, ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Ticket '{ticket_id}' not found.")
+
+    if staff_user.role == "SUPPORT" and ticket.assigned_to != staff_user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"You are only authorized to update tickets assigned to you (ticket is assigned to {ticket.assigned_to or 'Unassigned'})."
+        )
+
+    if update_in.title:
+        ticket.title = update_in.title
+    if update_in.description:
+        ticket.description = update_in.description
+    if update_in.category:
+        ticket.category = update_in.category
+    if update_in.priority:
+        ticket.priority = update_in.priority
+    if update_in.status:
+        TicketRepository.update_status(session, ticket_id, update_in.status, staff_user.user_id)
+
+    session.flush()
+    ActivityLogRepository.log(session, "TICKET_UPDATED", staff_user.user_id, f"Updated ticket {ticket_id}")
+    ws_manager.trigger_ticket_broadcast("TICKET_UPDATED", ticket.to_dict())
+    return ticket
+
+
+
+@router.post("/{ticket_id}/assign", response_model=TicketResponse)
+def assign_ticket(
+    ticket_id: str,
+    assign_req: TicketAssignRequest,
+    session: Session = Depends(get_db),
+    admin_user: UserDB = Depends(require_roles(["ADMIN"]))  # Exclusively ADMIN per Monday specifications
+):
+    """Assigns or reassigns ticket to an IT Support specialist (ADMIN only)."""
+    ticket = TicketRepository.get_by_ticket_id(session, ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Ticket '{ticket_id}' not found.")
+
+
+    if ticket.status == "CLOSED":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot assign closed ticket '{ticket_id}'."
+        )
+
+    support_user = UserRepository.get_by_user_id(session, assign_req.assigned_to)
+    if not support_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"IT Support user '{assign_req.assigned_to}' not found."
+        )
+
+    if support_user.role not in ("SUPPORT", "ADMIN"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"User '{assign_req.assigned_to}' has role '{support_user.role}'. Tickets can only be assigned to SUPPORT or ADMIN staff."
+        )
+
+    previous_assignee = ticket.assigned_to
+    ticket.assigned_to = assign_req.assigned_to
+    TicketRepository.update_status(
+        session=session,
+        ticket_id=ticket_id,
+        new_status="ASSIGNED",
+        changed_by=admin_user.user_id,
+        comment=f"Assigned to {assign_req.assigned_to} by Administrator",
+        previous_assignee=previous_assignee,
+        new_assignee=assign_req.assigned_to,
+        assignment_method="MANUAL"
+    )
+    ActivityLogRepository.log(
+        session,
+        "TICKET_ASSIGNED",
+        admin_user.user_id,
+        f"Admin {admin_user.user_id} assigned {ticket_id} to {assign_req.assigned_to}"
+    )
+    session.flush()
+    ws_manager.trigger_ticket_broadcast("TICKET_ASSIGNED", ticket.to_dict())
+    return ticket
+
+
+
+@router.post("/{ticket_id}/resolve", response_model=TicketResponse)
+def resolve_ticket(
+    ticket_id: str,
+    resolve_req: TicketResolveRequest,
+    session: Session = Depends(get_db),
+    staff_user: UserDB = Depends(require_roles(["ADMIN", "SUPPORT"]))
+):
+    """Resolves a ticket with explanatory resolution notes."""
+    ticket = TicketRepository.get_by_ticket_id(session, ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Ticket '{ticket_id}' not found.")
+
+    if staff_user.role == "SUPPORT" and ticket.assigned_to != staff_user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"You are only authorized to resolve tickets assigned to you (ticket is assigned to {ticket.assigned_to or 'Unassigned'})."
+        )
+
+
+    if ticket.status == "CLOSED":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot resolve ticket '{ticket_id}' because it is already CLOSED."
+        )
+
+    if ticket.status == "RESOLVED":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Ticket '{ticket_id}' is already RESOLVED."
+        )
+
+    # Handle Non-Repairable Asset Replacement
+    replacement_note = ""
+    if resolve_req.is_non_repairable and resolve_req.replacement_asset_id:
+        target_old_asset_id = resolve_req.old_asset_id or ticket.asset_id
+        new_asset = session.query(AssetDB).filter(AssetDB.asset_id == resolve_req.replacement_asset_id).first()
+        if not new_asset:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Replacement asset '{resolve_req.replacement_asset_id}' not found."
+            )
+        if new_asset.status != "AVAILABLE":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Replacement asset '{resolve_req.replacement_asset_id}' is not available (current status: {new_asset.status})."
+            )
+
+        now_utc = datetime.now(timezone.utc)
+        emp_id = ticket.created_by
+
+        # Retire / Decommission old asset if exists
+        if target_old_asset_id:
+            old_asset = session.query(AssetDB).filter(AssetDB.asset_id == target_old_asset_id).first()
+            if old_asset:
+                latest_assign = (
+                    session.query(AssetAssignmentDB)
+                    .filter(
+                        AssetAssignmentDB.asset_id == target_old_asset_id,
+                        AssetAssignmentDB.returned_date.is_(None)
+                    )
+                    .order_by(AssetAssignmentDB.assigned_date.desc())
+                    .first()
+                )
+                if latest_assign:
+                    latest_assign.returned_date = now_utc
+                    latest_assign.notes = f"Decommissioned: Non-repairable (Replaced via Ticket #{ticket_id})"
+
+                old_asset.status = "RETIRED"
+                old_asset.assigned_to = None
+                ActivityLogRepository.log(
+                    session,
+                    "ASSET_DECOMMISSIONED",
+                    staff_user.user_id,
+                    f"Asset {target_old_asset_id} marked as RETIRED (Non-repairable) via Ticket {ticket_id}"
+                )
+
+        # Assign replacement asset to the employee
+        new_asset.status = "ASSIGNED"
+        new_asset.assigned_to = emp_id
+
+        new_assignment = AssetAssignmentDB(
+            asset_id=new_asset.asset_id,
+            employee_id=emp_id,
+            assigned_date=now_utc,
+            notes=f"Assigned as replacement for non-repairable asset {target_old_asset_id or 'N/A'} via Ticket #{ticket_id}"
+        )
+        session.add(new_assignment)
+
+        # Re-link ticket to the new replacement asset
+        ticket.asset_id = new_asset.asset_id
+
+        replacement_note = (
+            f" [Asset Replaced: Old asset {target_old_asset_id or 'N/A'} retired (Non-repairable); "
+            f"New asset {new_asset.asset_id} ({new_asset.brand} {new_asset.model}) assigned to {emp_id}]"
+        )
+        ActivityLogRepository.log(
+            session,
+            "ASSET_REPLACED",
+            staff_user.user_id,
+            f"Replaced non-repairable asset {target_old_asset_id or 'N/A'} with {new_asset.asset_id} for {emp_id} on ticket {ticket_id}"
+        )
+
+    full_resolution = resolve_req.resolution + replacement_note
+    ticket.resolution = full_resolution
+    TicketRepository.update_status(
+        session=session,
+        ticket_id=ticket_id,
+        new_status="RESOLVED",
+        changed_by=staff_user.user_id,
+        comment=f"Resolved: {full_resolution}"
+    )
+    session.flush()
+    ws_manager.trigger_ticket_broadcast("TICKET_RESOLVED", ticket.to_dict())
+    return ticket
+
+
+
+@router.post("/{ticket_id}/close", response_model=TicketResponse)
+def close_ticket(
+    ticket_id: str,
+    close_in: Optional[TicketCloseRequest] = None,
+    session: Session = Depends(get_db),
+    current_user: UserDB = Depends(get_current_user)
+):
+    """
+    Closes a ticket after resolution verification.
+    - Employees can only close their own tickets, and only after the ticket is RESOLVED.
+    - Support specialists cannot close tickets.
+    - Administrators can also close tickets if permitted.
+    """
+    ticket = TicketRepository.get_by_ticket_id(session, ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Ticket '{ticket_id}' not found.")
+
+    if ticket.status == "CLOSED":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Ticket '{ticket_id}' is already CLOSED."
+        )
+
+    if current_user.role == "EMPLOYEE":
+        if ticket.created_by != current_user.user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are only authorized to close support tickets created by you."
+            )
+        if ticket.status != "RESOLVED":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot close ticket '{ticket_id}' before it is RESOLVED (current status: {ticket.status})."
+            )
+    elif current_user.role == "SUPPORT":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Support specialists cannot close tickets. Only the ticket creator or an Administrator can confirm and close."
+        )
+    else:  # ADMIN
+        if ticket.status != "RESOLVED":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot close ticket '{ticket_id}' before it is RESOLVED (current status: {ticket.status})."
+            )
+
+    feedback_text = (
+        close_in.feedback.strip()
+        if (close_in and close_in.feedback and close_in.feedback.strip())
+        else "Issue verified fixed. Ticket confirmed and closed."
+    )
+    ticket.closed_date = datetime.now(timezone.utc)
+    TicketRepository.update_status(
+        session=session,
+        ticket_id=ticket_id,
+        new_status="CLOSED",
+        changed_by=current_user.user_id,
+        comment=feedback_text
+    )
+    ActivityLogRepository.log(
+        session,
+        "TICKET_CLOSED",
+        current_user.user_id,
+        f"Ticket {ticket_id} verified and closed by {current_user.user_id}: {feedback_text}"
+    )
+    session.flush()
+    ws_manager.trigger_ticket_broadcast("TICKET_CLOSED", ticket.to_dict())
+    return ticket
+
+
+@router.post("/{ticket_id}/reopen", response_model=TicketResponse)
+def reopen_ticket(
+    ticket_id: str,
+    reopen_in: TicketReopenRequest,
+    session: Session = Depends(get_db),
+    current_user: UserDB = Depends(get_current_user)
+):
+    """
+    Reopens a RESOLVED ticket when employee reports 'Issue Still Exists'.
+    - Moves status back to IN_PROGRESS.
+    - Preserves assigned IT Support specialist so they can continue investigation.
+    - Records employee feedback in ticket history and activity log.
+    - Restricts action to ticket creator (EMPLOYEE) or Administrator.
+    """
+    ticket = TicketRepository.get_by_ticket_id(session, ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Ticket '{ticket_id}' not found.")
+
+    if ticket.status == "CLOSED":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Ticket '{ticket_id}' is already CLOSED and cannot be reopened."
+        )
+
+    if ticket.status != "RESOLVED":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot report issue exists on ticket '{ticket_id}' because its status is '{ticket.status}' (expected RESOLVED)."
+        )
+
+    if current_user.role == "EMPLOYEE":
+        if ticket.created_by != current_user.user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are only authorized to verify or reopen support tickets created by you."
+            )
+    elif current_user.role == "SUPPORT":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Support specialists cannot reject resolution. Only the ticket creator or an Administrator can report that the issue still exists."
+        )
+
+    # Change status back to IN_PROGRESS, keeping the existing assigned specialist
+    comment = f"Employee reported issue still exists: {reopen_in.reason.strip()}"
+    ticket.closed_date = None
+    TicketRepository.update_status(
+        session=session,
+        ticket_id=ticket_id,
+        new_status="IN_PROGRESS",
+        changed_by=current_user.user_id,
+        comment=comment,
+        previous_assignee=ticket.assigned_to,
+        new_assignee=ticket.assigned_to,
+        assignment_method="PRESERVED"
+    )
+    ActivityLogRepository.log(
+        session,
+        "TICKET_REOPENED",
+        current_user.user_id,
+        f"Ticket {ticket_id} reopened by {current_user.user_id}: {reopen_in.reason.strip()}"
+    )
+    session.flush()
+    ws_manager.trigger_ticket_broadcast("TICKET_UPDATED", ticket.to_dict())
+    return ticket
+
+
+@router.get("/{ticket_id}/history", response_model=List[TicketHistoryResponse])
+def get_ticket_history(
+    ticket_id: str,
+    session: Session = Depends(get_db),
+    current_user: UserDB = Depends(get_current_user)
+):
+    """
+    Returns full, immutable chronological audit trail for a ticket.
+    Employees may only view history for tickets they created.
+    """
+    ticket = TicketRepository.get_by_ticket_id(session, ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Ticket '{ticket_id}' not found.")
+
+    if current_user.role == "EMPLOYEE" and ticket.created_by != current_user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are only authorized to view history for your own tickets."
+        )
+
+    if current_user.role == "SUPPORT" and ticket.assigned_to != current_user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are only authorized to view history for tickets assigned to you."
+        )
+
+    records = (
+        session.query(TicketHistoryDB)
+        .filter(TicketHistoryDB.ticket_id == ticket_id)
+        .order_by(TicketHistoryDB.timestamp.asc(), TicketHistoryDB.id.asc())
+        .all()
+    )
+    return records
+
+
