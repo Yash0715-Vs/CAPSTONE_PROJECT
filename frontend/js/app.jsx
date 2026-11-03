@@ -757,6 +757,66 @@ function RegisterPage({ onRegisterSuccess, onSwitchToLogin, theme, onToggleTheme
 }
 
 // =====================================================================
+// =====================================================================
+// Expandable Description Component (Inline "More" / "Show less" toggle)
+// =====================================================================
+function ExpandableDescription({ text, maxLength = 80 }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  if (!text) {
+    return <span style={{ color: "var(--text-muted)", fontStyle: "italic", fontSize: "0.78rem" }}>No description provided</span>;
+  }
+
+  const trimmed = text.trim();
+  const needsTruncation = trimmed.length > maxLength;
+
+  return (
+    <div style={{ fontSize: "0.82rem", color: "var(--text-secondary)", maxWidth: "420px", lineHeight: 1.45, marginTop: "3px" }}>
+      <span style={{ whiteSpace: isExpanded ? "pre-wrap" : "normal" }}>
+        {needsTruncation && !isExpanded ? `${trimmed.slice(0, maxLength).trim()}... ` : trimmed}
+      </span>
+      {needsTruncation && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsExpanded(!isExpanded);
+          }}
+          style={{
+            background: "transparent",
+            border: "none",
+            padding: "0 2px",
+            color: "var(--primary)",
+            fontWeight: 700,
+            fontSize: "0.76rem",
+            cursor: "pointer",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "2px",
+            textDecoration: "underline",
+            verticalAlign: "baseline"
+          }}
+          title={isExpanded ? "Collapse description" : "Expand full description"}
+        >
+          <span>{isExpanded ? "Show less" : "More"}</span>
+          <span
+            className="material-symbols-outlined"
+            style={{
+              fontSize: "13px",
+              transform: isExpanded ? "rotate(180deg)" : "none",
+              transition: "transform 0.15s ease",
+              verticalAlign: "middle"
+            }}
+          >
+            expand_more
+          </span>
+        </button>
+      )}
+    </div>
+  );
+}
+
+
 // Main Application Component (Apex Sentinel Theme)
 // =====================================================================
 function App() {
@@ -2581,6 +2641,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                   </button>
                 </div>
 
+                <div className="table-responsive">
                 <table className="data-table">
                   <thead>
                     <tr>
@@ -2632,7 +2693,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                           </td>
                           <td>
                             <div style={{ fontWeight: 600 }}>{t.title}</div>
-                            <div style={{ fontSize: "0.82rem", color: "var(--text-secondary)", maxWidth: "380px" }}>{t.description}</div>
+                            <ExpandableDescription text={t.description} maxLength={80} />
                           </td>
                           <td>
                             <span className="badge-status" style={{ background: "var(--bg-subtle)", color: "var(--text-main)" }}>
@@ -2736,6 +2797,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                     )}
                   </tbody>
                 </table>
+                </div>
               </div>
             </div>
           )}
@@ -2836,6 +2898,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                   </button>
                 </div>
 
+                <div className="table-responsive">
                 <table className="data-table">
                   <thead>
                     <tr>
@@ -2941,6 +3004,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                     )}
                   </tbody>
                 </table>
+                </div>
               </div>
             </div>
           )}
@@ -2984,6 +3048,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                   </div>
                 </div>
 
+                <div className="table-responsive">
                 <table className="data-table">
                   <thead>
                     <tr>
@@ -3208,6 +3273,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                     )}
                   </tbody>
                 </table>
+                </div>
               </div>
             </div>
           )}
@@ -3313,6 +3379,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                   </span>
                 </div>
 
+                <div className="table-responsive">
                 <table className="data-table">
                   <thead>
                     <tr>
@@ -3343,9 +3410,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                             </td>
                             <td>
                               <div style={{ fontWeight: 600 }}>{t.title}</div>
-                              <div style={{ fontSize: "0.78rem", color: "var(--text-secondary)", maxWidth: "340px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                {t.description}
-                              </div>
+                              <ExpandableDescription text={t.description} maxLength={75} />
                             </td>
                             <td>
                               <span className="badge-status" style={{ background: "var(--bg-subtle)", color: "var(--text-main)" }}>
@@ -3395,6 +3460,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                     )}
                   </tbody>
                 </table>
+                </div>
               </div>
             </div>
           )}
@@ -3486,6 +3552,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                   </button>
                 </div>
 
+                <div className="table-responsive">
                 <table className="data-table">
                   <thead>
                     <tr>
@@ -3616,6 +3683,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                     )}
                   </tbody>
                 </table>
+                </div>
               </div>
             </div>
           )}
@@ -3674,6 +3742,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                   </button>
                 </div>
 
+                <div className="table-responsive">
                 <table className="data-table">
                   <thead>
                     <tr>
@@ -3726,6 +3795,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                     )}
                   </tbody>
                 </table>
+                </div>
               </div>
 
               {/* Live WebSocket Broadcast Stream */}

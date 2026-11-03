@@ -703,10 +703,52 @@ html.dark .btn-nav-logout:hover {
   color: var(--text-main);
 }
 
+/* Responsive Table Horizontal Scroll Container */
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .data-table {
   width: 100%;
+  min-width: 980px;
   border-collapse: collapse;
   text-align: left;
+}
+
+/* Custom styled horizontal scrollbar for data tables */
+.table-responsive::-webkit-scrollbar {
+  height: 8px;
+}
+
+.table-responsive::-webkit-scrollbar-track {
+  background: var(--bg-subtle, #f8f7f4);
+  border-radius: 4px;
+}
+
+.table-responsive::-webkit-scrollbar-thumb {
+  background: rgba(15, 118, 110, 0.28);
+  border-radius: 4px;
+}
+
+.table-responsive::-webkit-scrollbar-thumb:hover {
+  background: var(--primary, #0f766e);
+}
+
+[data-theme="dark"] .table-responsive::-webkit-scrollbar-track,
+html.dark .table-responsive::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+[data-theme="dark"] .table-responsive::-webkit-scrollbar-thumb,
+html.dark .table-responsive::-webkit-scrollbar-thumb {
+  background: rgba(45, 212, 191, 0.35);
+}
+
+[data-theme="dark"] .table-responsive::-webkit-scrollbar-thumb:hover,
+html.dark .table-responsive::-webkit-scrollbar-thumb:hover {
+  background: var(--primary, #2dd4bf);
 }
 
 .data-table th {
