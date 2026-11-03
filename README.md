@@ -4,7 +4,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688.svg)](https://fastapi.tiangolo.com/)
 [![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0-red.svg)](https://www.sqlalchemy.org/)
 [![Pylint](https://img.shields.io/badge/Pylint-10.00%2F10-brightgreen.svg)]()
-[![Tests](https://img.shields.io/badge/Pytest-81%20Passed-success.svg)]()
+[![Tests](https://img.shields.io/badge/Pytest-84%20Passed-success.svg)]()
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://www.docker.com/)
 
 An enterprise-grade, production-style **IT Asset Management and Support Ticket Management System** developed with **Python, FastAPI, SQLAlchemy 2, Alembic, MySQL 8.0 (Primary) / PostgreSQL 15, WebSockets, and a React 18 Single Page Application (SPA)**.
@@ -62,7 +62,7 @@ This system provides:
 | **Real-Time & Networking** | FastAPI WebSockets, Python `requests` (External API integration) |
 | **Frontend** | React 18, Babel Standalone (Zero Node/NPM dependencies required), Modern Deep Teal CSS |
 | **Containerization** | Docker, Docker Compose, Nginx Alpine Reverse Proxy |
-| **Testing & Quality** | Pytest (**81 Passed**), Pytest-Asyncio, Pylint (Score: 10.00/10), SonarLint |
+| **Testing & Quality** | Pytest (**84 Passed**), Pytest-Asyncio, Pylint (Score: 10.00/10), SonarLint |
 
 ---
 
@@ -430,7 +430,8 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```powershell
 pytest tests/ -v
 ```
-**Results**: **81 passed** (100% pass rate across all suites), covering:
+**Results**: **84 passed** (100% pass rate across all suites), covering:
+- **Assignment Service Workflows & Tie-Breaking** (`test_assignment_bugfixes.py`): Assignment tie-breaker using actual `TicketHistoryDB` timestamp, initial status transition recording (`OPEN -> ASSIGNED`).
 - **Employee Verification & Closure Lifecycle** (`test_employee_verification.py`): Resolution summary enforcement, employee confirmation & closure, reopening to IN_PROGRESS upon rejection, RBAC closure permission enforcement.
 - **Hardware Replacement on Resolve** (`test_asset_replacement_on_resolve.py`): Non-repairable asset decommissioning (RETIRED), automated replacement inventory allocation (ASSIGNED), custody transfer audit logging.
 - **Authentication & Registration** (`test_auth_registration.py`): Login success/rejection, elimination of placeholder password bypass, pending/disabled account rejection, single-use invitation lifecycle, invitation expiry.

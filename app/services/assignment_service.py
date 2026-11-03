@@ -50,15 +50,17 @@ def get_least_loaded_support_user(db: Session) -> Optional[UserDB]:
     )
     counts = {row.assigned_to: row.cnt for row in active_counts_query}
 
-    # Latest assigned timestamp per user for tie-breaking
+    # Latest assignment event timestamp per support user from TicketHistoryDB for tie-breaking.
+    # Uses actual assignment event timestamp (TicketHistoryDB.timestamp) rather than ticket creation date,
+    # ensuring reassignments and recent work allocations update the tie-breaker correctly.
     latest_assignments_query = (
-        db.query(TicketDB.assigned_to, func.max(TicketDB.created_date).label("last_assigned"))
-        .filter(TicketDB.assigned_to.isnot(None))
-        .group_by(TicketDB.assigned_to)
+        db.query(TicketHistoryDB.new_assignee, func.max(TicketHistoryDB.timestamp).label("last_assigned"))
+        .filter(TicketHistoryDB.new_assignee.isnot(None))
+        .group_by(TicketHistoryDB.new_assignee)
         .all()
     )
     latest_assigned = {
-        row.assigned_to: (row.last_assigned.timestamp() if row.last_assigned else 0)
+        row.new_assignee: (row.last_assigned.timestamp() if row.last_assigned else 0)
         for row in latest_assignments_query
     }
 
@@ -94,9 +96,9 @@ def auto_assign_ticket(db: Session, ticket_id: str) -> Optional[str]:
 
         old_assignee = ticket.assigned_to
         ticket.assigned_to = specialist.user_id
-        ticket.status = "ASSIGNED"
 
-        # Record history with SYSTEM actor and explicit assignment audit fields
+        # Record history with SYSTEM actor and explicit assignment audit fields.
+        # TicketRepository.update_status transitions ticket.status and records true old_status (e.g. OPEN -> ASSIGNED).
         TicketRepository.update_status(
             session=db,
             ticket_id=ticket_id,
