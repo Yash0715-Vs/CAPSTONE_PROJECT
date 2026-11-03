@@ -5924,7 +5924,7 @@ function EditUserModal({ user, token, onClose, onSuccess, addToast }) {
 function VerifyResolutionModal({ ticket, currentUser, token, onClose, onSuccess, addToast }) {
   const [feedback, setFeedback] = useState("");
   const [reopenReason, setReopenReason] = useState("");
-  const [activeMode, setActiveMode] = useState(null); // null, 'confirm_close', 'still_exists'
+  const [activeMode, setActiveMode] = useState("confirm_close"); // 'confirm_close' (Yes) or 'still_exists' (No)
   const [submitting, setSubmitting] = useState(false);
 
   if (!ticket) return null;
@@ -5985,7 +5985,7 @@ function VerifyResolutionModal({ ticket, currentUser, token, onClose, onSuccess,
 
   return (
     <div className="modal-backdrop">
-      <div className="modal-surface" style={{ maxWidth: "580px" }}>
+      <div className="modal-surface" style={{ maxWidth: "600px" }}>
         {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1rem", borderBottom: "1px solid var(--border-light)", paddingBottom: "0.75rem" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
@@ -6005,14 +6005,14 @@ function VerifyResolutionModal({ ticket, currentUser, token, onClose, onSuccess,
         </div>
 
         {/* Resolution Information Card */}
-        <div style={{ background: "var(--bg-subtle)", border: "1px solid var(--border-light)", borderRadius: "var(--radius-md)", padding: "1rem", marginBottom: "1.25rem" }}>
+        <div style={{ background: "var(--bg-subtle)", border: "1px solid var(--border-light)", borderRadius: "var(--radius-md)", padding: "1rem", marginBottom: "1.15rem" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.5rem" }}>
             <span style={{ fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--primary)" }}>
               IT Support Resolution Summary
             </span>
             <span className="badge-status resolved">RESOLVED</span>
           </div>
-          <div style={{ fontSize: "0.88rem", color: "var(--text-main)", lineHeight: 1.5, background: "var(--bg-card)", padding: "0.75rem", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-light)" }}>
+          <div style={{ fontSize: "0.88rem", color: "var(--text-main)", lineHeight: 1.5, background: "var(--bg-card)", padding: "0.75rem 0.9rem", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-light)" }}>
             {ticket.resolution || "IT Support reported this issue as resolved."}
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.5rem", flexWrap: "wrap", gap: "0.25rem" }}>
@@ -6021,69 +6021,101 @@ function VerifyResolutionModal({ ticket, currentUser, token, onClose, onSuccess,
           </div>
         </div>
 
-        {/* Action Choice: Option A or Option B */}
-        {!activeMode && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-            <p style={{ fontSize: "0.88rem", fontWeight: 600, color: "var(--text-main)", margin: "0 0 0.25rem 0" }}>
-              Has the reported problem been resolved to your satisfaction?
-            </p>
+        {/* Question & Interactive Yes / No Option Cards */}
+        <div style={{ marginBottom: "0.85rem" }}>
+          <p style={{ fontSize: "0.86rem", fontWeight: 600, color: "var(--text-main)", margin: "0 0 0.55rem 0" }}>
+            Has the reported issue been resolved to your satisfaction?
+          </p>
 
-            <button
-              type="button"
-              className="btn-primary-teal"
-              style={{ padding: "0.85rem 1rem", justifyContent: "flex-start", gap: "0.75rem", width: "100%", textAlign: "left" }}
+          <div className="verification-decision-grid">
+            {/* Yes Box Option */}
+            <div
+              className={`verification-option-card ${activeMode === "confirm_close" ? "active-yes" : ""}`}
               onClick={() => setActiveMode("confirm_close")}
+              role="button"
+              tabIndex={0}
             >
-              <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>task_alt</span>
-              <div style={{ display: "flex", flexDirection: "column" }}>
-                <span style={{ fontWeight: 600, fontSize: "0.92rem" }}>Issue Fixed - Close Ticket</span>
-                <span style={{ fontSize: "0.75rem", opacity: 0.9 }}>Confirm that the equipment or system is working properly and close this ticket permanently.</span>
+              <div className="verification-icon-box yes">
+                <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>
+                  {activeMode === "confirm_close" ? "check_circle" : "task_alt"}
+                </span>
               </div>
-            </button>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span className="verification-card-title">Yes, Issue Fixed</span>
+                  {activeMode === "confirm_close" && (
+                    <span style={{ fontSize: "0.68rem", fontWeight: 700, padding: "2px 6px", borderRadius: "4px", background: "var(--primary)", color: "#ffffff" }}>
+                      SELECTED
+                    </span>
+                  )}
+                </div>
+                <span className="verification-card-desc">Verify fix &amp; close ticket permanently</span>
+              </div>
+            </div>
 
-            <button
-              type="button"
-              className="table-btn"
-              style={{ padding: "0.85rem 1rem", justifyContent: "flex-start", gap: "0.75rem", width: "100%", textAlign: "left", borderColor: "var(--status-critical)", color: "var(--status-critical)" }}
+            {/* No Box Option */}
+            <div
+              className={`verification-option-card ${activeMode === "still_exists" ? "active-no" : ""}`}
               onClick={() => setActiveMode("still_exists")}
+              role="button"
+              tabIndex={0}
             >
-              <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>error_outline</span>
-              <div style={{ display: "flex", flexDirection: "column" }}>
-                <span style={{ fontWeight: 600, fontSize: "0.92rem" }}>Issue Still Exists</span>
-                <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>The problem is not fixed. Return the ticket to IT Support for continued investigation.</span>
+              <div className="verification-icon-box no">
+                <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>
+                  {activeMode === "still_exists" ? "report" : "error_outline"}
+                </span>
               </div>
-            </button>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span className="verification-card-title" style={{ color: activeMode === "still_exists" ? "var(--status-critical)" : undefined }}>
+                    No, Issue Exists
+                  </span>
+                  {activeMode === "still_exists" && (
+                    <span style={{ fontSize: "0.68rem", fontWeight: 700, padding: "2px 6px", borderRadius: "4px", background: "var(--status-critical)", color: "#ffffff" }}>
+                      SELECTED
+                    </span>
+                  )}
+                </div>
+                <span className="verification-card-desc">Return to IT Support for investigation</span>
+              </div>
+            </div>
           </div>
-        )}
+        </div>
 
-        {/* Option A: Confirm & Close Flow */}
+        {/* Option A: Confirm & Close Flow (Yes Box) */}
         {activeMode === "confirm_close" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
-            <div style={{ background: "rgba(15, 118, 110, 0.08)", border: "1px solid var(--primary-border)", borderRadius: "var(--radius-md)", padding: "0.85rem", display: "flex", gap: "0.6rem", alignItems: "flex-start" }}>
-              <span className="material-symbols-outlined" style={{ color: "var(--primary)", fontSize: "20px" }}>check_circle</span>
-              <div style={{ fontSize: "0.84rem", color: "var(--text-main)" }}>
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            <div className="verification-banner-yes">
+              <span className="material-symbols-outlined" style={{ color: "var(--primary)", fontSize: "22px" }}>check_circle</span>
+              <div style={{ fontSize: "0.84rem", color: "var(--text-main)", lineHeight: 1.5 }}>
                 <strong>Confirming Resolution:</strong> You are confirming that this issue is fully resolved. The ticket status will transition to <strong>CLOSED</strong> with your verification record and timestamp.
               </div>
             </div>
 
-            <div>
-              <label className="field-label" style={{ fontSize: "0.8rem", marginBottom: "0.3rem" }}>
-                Optional Verification Note (Feedback for IT Specialist)
+            <div className="verification-input-wrap">
+              <label className="verification-input-label">
+                <span>Optional Verification Note (Feedback for IT Specialist)</span>
+                <span style={{ fontSize: "0.74rem", color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+                  {feedback.length}/500
+                </span>
               </label>
-              <input
-                type="text"
-                className="input-field"
+              <textarea
+                className="verification-textarea"
+                style={{ minHeight: "85px", height: "85px" }}
                 placeholder="e.g., Tested and working properly now. Thank you!"
                 value={feedback}
                 onChange={e => setFeedback(e.target.value)}
                 maxLength={500}
                 disabled={submitting}
               />
+              <div className="verification-hint-bar">
+                <span>Feedback will be recorded in the audit history and shared with the engineer.</span>
+              </div>
             </div>
 
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.6rem", marginTop: "0.5rem" }}>
-              <button type="button" className="table-btn" onClick={() => setActiveMode(null)} disabled={submitting}>
-                Back
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.65rem", marginTop: "0.25rem" }}>
+              <button type="button" className="btn-secondary-parchment" onClick={onClose} disabled={submitting}>
+                Cancel
               </button>
               <button type="button" className="btn-primary-teal" onClick={handleConfirmClose} disabled={submitting}>
                 {submitting ? (
@@ -6102,42 +6134,68 @@ function VerifyResolutionModal({ ticket, currentUser, token, onClose, onSuccess,
           </div>
         )}
 
-        {/* Option B: Issue Still Exists Flow */}
+        {/* Option B: Issue Still Exists Flow (No Box) */}
         {activeMode === "still_exists" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
-            <div style={{ background: "rgba(220, 38, 38, 0.08)", border: "1px solid rgba(220, 38, 38, 0.25)", borderRadius: "var(--radius-md)", padding: "0.85rem", display: "flex", gap: "0.6rem", alignItems: "flex-start" }}>
-              <span className="material-symbols-outlined" style={{ color: "var(--status-critical)", fontSize: "20px" }}>warning</span>
-              <div style={{ fontSize: "0.84rem", color: "var(--text-main)" }}>
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            <div className="verification-banner-no">
+              <span className="material-symbols-outlined" style={{ color: "var(--status-critical)", fontSize: "22px" }}>warning</span>
+              <div style={{ fontSize: "0.84rem", color: "var(--text-main)", lineHeight: 1.5 }}>
                 <strong>Reopening Ticket:</strong> The ticket will be returned to <strong>IN PROGRESS</strong> status and remain assigned to specialist <strong style={{ fontFamily: "var(--font-mono)" }}>{ticket.assigned_to || "IT Specialist"}</strong> for immediate re-investigation.
               </div>
             </div>
 
-            <div>
-              <label className="field-label" style={{ fontSize: "0.8rem", marginBottom: "0.3rem" }}>
-                Please describe what is still not working: <span style={{ color: "var(--status-critical)" }}>*</span>
+            <div className="verification-input-wrap">
+              <label className="verification-input-label">
+                <span>Please describe what is still not working <span style={{ color: "var(--status-critical)" }}>*</span></span>
+                <span style={{
+                  fontSize: "0.74rem",
+                  color: reopenReason.trim().length >= 5 ? "var(--primary)" : "var(--status-critical)",
+                  fontFamily: "var(--font-mono)",
+                  fontWeight: 600
+                }}>
+                  {reopenReason.length}/500 (min 5 chars)
+                </span>
               </label>
               <textarea
-                className="input-field"
-                rows={3}
+                className="verification-textarea"
+                style={{
+                  minHeight: "100px",
+                  height: "100px",
+                  borderColor: reopenReason.length > 0 && reopenReason.trim().length < 5 ? "var(--status-critical)" : undefined
+                }}
                 placeholder="Explain why the problem persists so the IT specialist can investigate..."
                 value={reopenReason}
                 onChange={e => setReopenReason(e.target.value)}
                 maxLength={500}
                 disabled={submitting}
+                required
               />
-              <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "0.2rem" }}>
-                Minimum 5 characters required ({reopenReason.length}/500)
+              <div className="verification-hint-bar">
+                <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: "14px", color: reopenReason.trim().length >= 5 ? "var(--status-active)" : "var(--status-critical)" }}>
+                    {reopenReason.trim().length >= 5 ? "check_circle" : "info"}
+                  </span>
+                  <span style={{ color: reopenReason.trim().length >= 5 ? "var(--status-active)" : "var(--text-muted)" }}>
+                    {reopenReason.trim().length >= 5 ? "Validation met. Ready to return to IT Support." : "Minimum 5 characters required describing the ongoing issue."}
+                  </span>
+                </div>
               </div>
             </div>
 
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.6rem", marginTop: "0.5rem" }}>
-              <button type="button" className="table-btn" onClick={() => setActiveMode(null)} disabled={submitting}>
-                Back
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.65rem", marginTop: "0.25rem" }}>
+              <button type="button" className="btn-secondary-parchment" onClick={onClose} disabled={submitting}>
+                Cancel
               </button>
               <button
                 type="button"
                 className="table-btn"
-                style={{ borderColor: "var(--status-critical)", color: "var(--status-critical)", fontWeight: 600 }}
+                style={{
+                  borderColor: reopenReason.trim().length >= 5 ? "var(--status-critical)" : "var(--border-light)",
+                  color: reopenReason.trim().length >= 5 ? "#ffffff" : "var(--text-muted)",
+                  background: reopenReason.trim().length >= 5 ? "var(--status-critical)" : "var(--bg-subtle)",
+                  fontWeight: 600,
+                  cursor: reopenReason.trim().length >= 5 ? "pointer" : "not-allowed"
+                }}
                 onClick={handleReportIssueExists}
                 disabled={submitting || reopenReason.trim().length < 5}
               >
