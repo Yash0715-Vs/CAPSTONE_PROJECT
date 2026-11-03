@@ -35,6 +35,14 @@ class TicketResolveRequest(BaseModel):
     resolution: str = Field(..., min_length=5, json_schema_extra={"example": "Replaced faulty RAM module; system tested stable."})
 
 
+class TicketCloseRequest(BaseModel):
+    feedback: Optional[str] = Field(None, max_length=500, json_schema_extra={"example": "Verified and confirmed issue fixed."})
+
+
+class TicketReopenRequest(BaseModel):
+    reason: str = Field(..., min_length=5, max_length=500, json_schema_extra={"example": "Issue still persists intermittently after restart."})
+
+
 class TicketHistoryResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

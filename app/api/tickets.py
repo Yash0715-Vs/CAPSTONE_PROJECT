@@ -25,6 +25,8 @@ from app.schemas.ticket import (
     TicketResponse,
     TicketAssignRequest,
     TicketResolveRequest,
+    TicketCloseRequest,
+    TicketReopenRequest,
     TicketHistoryResponse,
 )
 from app.services.auth_service import get_current_user, require_roles
@@ -308,18 +310,19 @@ def resolve_ticket(
 @router.post("/{ticket_id}/close", response_model=TicketResponse)
 def close_ticket(
     ticket_id: str,
+    close_in: Optional[TicketCloseRequest] = None,
     session: Session = Depends(get_db),
     current_user: UserDB = Depends(get_current_user)
 ):
     """
-    Closes a ticket after resolution confirmation.
+    Closes a ticket after resolution verification.
     - Employees can only close their own tickets, and only after the ticket is RESOLVED.
-    - Support and Admins can close tickets according to business rules.
+    - Support specialists cannot close tickets.
+    - Administrators can also close tickets if permitted.
     """
     ticket = TicketRepository.get_by_ticket_id(session, ticket_id)
     if not ticket:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Ticket '{ticket_id}' not found.")
-
 
     if ticket.status == "CLOSED":
         raise HTTPException(
@@ -350,16 +353,93 @@ def close_ticket(
                 detail=f"Cannot close ticket '{ticket_id}' before it is RESOLVED (current status: {ticket.status})."
             )
 
+    feedback_text = (
+        close_in.feedback.strip()
+        if (close_in and close_in.feedback and close_in.feedback.strip())
+        else "Issue verified fixed. Ticket confirmed and closed."
+    )
     ticket.closed_date = datetime.now(timezone.utc)
     TicketRepository.update_status(
         session=session,
         ticket_id=ticket_id,
         new_status="CLOSED",
         changed_by=current_user.user_id,
-        comment="Ticket confirmed and closed."
+        comment=feedback_text
+    )
+    ActivityLogRepository.log(
+        session,
+        "TICKET_CLOSED",
+        current_user.user_id,
+        f"Ticket {ticket_id} verified and closed by {current_user.user_id}: {feedback_text}"
     )
     session.flush()
     ws_manager.trigger_ticket_broadcast("TICKET_CLOSED", ticket.to_dict())
+    return ticket
+
+
+@router.post("/{ticket_id}/reopen", response_model=TicketResponse)
+def reopen_ticket(
+    ticket_id: str,
+    reopen_in: TicketReopenRequest,
+    session: Session = Depends(get_db),
+    current_user: UserDB = Depends(get_current_user)
+):
+    """
+    Reopens a RESOLVED ticket when employee reports 'Issue Still Exists'.
+    - Moves status back to IN_PROGRESS.
+    - Preserves assigned IT Support specialist so they can continue investigation.
+    - Records employee feedback in ticket history and activity log.
+    - Restricts action to ticket creator (EMPLOYEE) or Administrator.
+    """
+    ticket = TicketRepository.get_by_ticket_id(session, ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Ticket '{ticket_id}' not found.")
+
+    if ticket.status == "CLOSED":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Ticket '{ticket_id}' is already CLOSED and cannot be reopened."
+        )
+
+    if ticket.status != "RESOLVED":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot report issue exists on ticket '{ticket_id}' because its status is '{ticket.status}' (expected RESOLVED)."
+        )
+
+    if current_user.role == "EMPLOYEE":
+        if ticket.created_by != current_user.user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are only authorized to verify or reopen support tickets created by you."
+            )
+    elif current_user.role == "SUPPORT":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Support specialists cannot reject resolution. Only the ticket creator or an Administrator can report that the issue still exists."
+        )
+
+    # Change status back to IN_PROGRESS, keeping the existing assigned specialist
+    comment = f"Employee reported issue still exists: {reopen_in.reason.strip()}"
+    ticket.closed_date = None
+    TicketRepository.update_status(
+        session=session,
+        ticket_id=ticket_id,
+        new_status="IN_PROGRESS",
+        changed_by=current_user.user_id,
+        comment=comment,
+        previous_assignee=ticket.assigned_to,
+        new_assignee=ticket.assigned_to,
+        assignment_method="PRESERVED"
+    )
+    ActivityLogRepository.log(
+        session,
+        "TICKET_REOPENED",
+        current_user.user_id,
+        f"Ticket {ticket_id} reopened by {current_user.user_id}: {reopen_in.reason.strip()}"
+    )
+    session.flush()
+    ws_manager.trigger_ticket_broadcast("TICKET_UPDATED", ticket.to_dict())
     return ticket
 
 
