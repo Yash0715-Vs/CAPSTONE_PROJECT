@@ -2564,9 +2564,9 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
               <div className="table-card">
                 <div className="table-header-box">
                   <div>
-                    <div className="table-header-title">{currentUser.role === 'EMPLOYEE' ? 'My Support Incident Requests' : 'Enterprise Incident Queue'}</div>
+                    <div className="table-header-title">{currentUser.role === 'EMPLOYEE' ? 'My Support Incident Requests' : currentUser.role === 'SUPPORT' ? 'My Assigned Incident Queue' : 'Enterprise Incident Queue'}</div>
                     <div style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginTop: "0.15rem" }}>
-                      Showing {filteredTickets.length} of {tickets.length} total tickets from database ({openTickets} Open, {assignedTickets} Assigned, {inProgressTickets} In Progress, {resolvedTickets} Resolved, {closedTickets} Closed)
+                      Showing {filteredTickets.length} of {tickets.length} {currentUser.role === 'SUPPORT' ? 'assigned tickets' : 'total tickets from database'} ({openTickets} Open, {assignedTickets} Assigned, {inProgressTickets} In Progress, {resolvedTickets} Resolved, {closedTickets} Closed)
                     </div>
                   </div>
                   <button
@@ -2659,7 +2659,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                                 <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>history</span>
                                 <span>History</span>
                               </button>
-                              {currentUser.role !== "EMPLOYEE" && t.status === "ASSIGNED" && (
+                              {(currentUser.role === "ADMIN" || (currentUser.role === "SUPPORT" && currentUser.user_id === t.assigned_to)) && t.status === "ASSIGNED" && (
                                 <button
                                   type="button"
                                   className="table-btn"
@@ -2697,13 +2697,13 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                                   <span>Assign</span>
                                 </button>
                               )}
-                              {currentUser.role !== "EMPLOYEE" && t.status !== "RESOLVED" && t.status !== "CLOSED" && (
+                              {(currentUser.role === "ADMIN" || (currentUser.role === "SUPPORT" && currentUser.user_id === t.assigned_to)) && t.status !== "RESOLVED" && t.status !== "CLOSED" && (
                                 <button className="table-btn" onClick={() => setShowResolveModal(t)}>
                                   <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>check</span>
                                   <span>Resolve</span>
                                 </button>
                               )}
-                              {t.status === "RESOLVED" && (
+                              {t.status === "RESOLVED" && (currentUser.role === "ADMIN" || currentUser.user_id === t.created_by) && (
                                 <button className="table-btn" onClick={async () => {
                                   try {
                                     const res = await fetch(`${API_BASE}/tickets/${t.ticket_id}/close`, {
@@ -5534,7 +5534,7 @@ function TicketDetailsModal({ ticket, assets = [], currentUser, token, onClose, 
               </button>
             )}
 
-            {currentUser && currentUser.role !== "EMPLOYEE" && ticket.status === "ASSIGNED" && onStartProgress && (
+            {currentUser && (currentUser.role === "ADMIN" || currentUser.user_id === ticket.assigned_to) && ticket.status === "ASSIGNED" && onStartProgress && (
               <button
                 type="button"
                 className="table-btn"
@@ -5547,7 +5547,7 @@ function TicketDetailsModal({ ticket, assets = [], currentUser, token, onClose, 
               </button>
             )}
 
-            {currentUser && currentUser.role !== "EMPLOYEE" && ticket.status !== "RESOLVED" && ticket.status !== "CLOSED" && (
+            {currentUser && (currentUser.role === "ADMIN" || (currentUser.role === "SUPPORT" && currentUser.user_id === ticket.assigned_to)) && ticket.status !== "RESOLVED" && ticket.status !== "CLOSED" && (
               <button
                 type="button"
                 className="table-btn"
@@ -5559,7 +5559,7 @@ function TicketDetailsModal({ ticket, assets = [], currentUser, token, onClose, 
               </button>
             )}
 
-            {ticket.status === "RESOLVED" && (
+            {ticket.status === "RESOLVED" && (currentUser.role === "ADMIN" || currentUser.user_id === ticket.created_by) && (
               <button
                 type="button"
                 className="btn-primary-teal"

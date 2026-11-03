@@ -45,18 +45,34 @@ def list_tickets(
     current_user: UserDB = Depends(get_current_user)
 ):
     """
-    Lists support tickets.
-    Employees see only tickets created by them.
-    IT Support and Admin can view all tickets across the organization.
+    Lists support tickets according to strict role isolation:
+    - Employees see only tickets created by them.
+    - IT Support see ONLY tickets assigned to them.
+    - Admin can view all tickets across the organization.
     """
-    user_id_filter = current_user.user_id if current_user.role == "EMPLOYEE" else None
-    return TicketRepository.list_tickets(
-        session=session,
-        status=status_filter,
-        category=category_filter,
-        priority=priority_filter,
-        user_id=user_id_filter
-    )
+    if current_user.role == "EMPLOYEE":
+        return TicketRepository.list_tickets(
+            session=session,
+            status=status_filter,
+            category=category_filter,
+            priority=priority_filter,
+            created_by=current_user.user_id
+        )
+    elif current_user.role == "SUPPORT":
+        return TicketRepository.list_tickets(
+            session=session,
+            status=status_filter,
+            category=category_filter,
+            priority=priority_filter,
+            assigned_to=current_user.user_id
+        )
+    else:  # ADMIN
+        return TicketRepository.list_tickets(
+            session=session,
+            status=status_filter,
+            category=category_filter,
+            priority=priority_filter
+        )
 
 
 @router.get("/{ticket_id}", response_model=TicketResponse)
@@ -75,6 +91,13 @@ def get_ticket_by_id(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You are only authorized to view your own support tickets."
         )
+
+    if current_user.role == "SUPPORT" and ticket.assigned_to != current_user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are only authorized to view tickets assigned to you."
+        )
+
     return ticket
 
 
@@ -157,6 +180,12 @@ def update_ticket(
     if not ticket:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Ticket '{ticket_id}' not found.")
 
+    if staff_user.role == "SUPPORT" and ticket.assigned_to != staff_user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"You are only authorized to update tickets assigned to you (ticket is assigned to {ticket.assigned_to or 'Unassigned'})."
+        )
+
     if update_in.title:
         ticket.title = update_in.title
     if update_in.description:
@@ -186,6 +215,7 @@ def assign_ticket(
     ticket = TicketRepository.get_by_ticket_id(session, ticket_id)
     if not ticket:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Ticket '{ticket_id}' not found.")
+
 
     if ticket.status == "CLOSED":
         raise HTTPException(
@@ -242,6 +272,13 @@ def resolve_ticket(
     if not ticket:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Ticket '{ticket_id}' not found.")
 
+    if staff_user.role == "SUPPORT" and ticket.assigned_to != staff_user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"You are only authorized to resolve tickets assigned to you (ticket is assigned to {ticket.assigned_to or 'Unassigned'})."
+        )
+
+
     if ticket.status == "CLOSED":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -283,6 +320,7 @@ def close_ticket(
     if not ticket:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Ticket '{ticket_id}' not found.")
 
+
     if ticket.status == "CLOSED":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -295,6 +333,17 @@ def close_ticket(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You are only authorized to close support tickets created by you."
             )
+        if ticket.status != "RESOLVED":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot close ticket '{ticket_id}' before it is RESOLVED (current status: {ticket.status})."
+            )
+    elif current_user.role == "SUPPORT":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Support specialists cannot close tickets. Only the ticket creator or an Administrator can confirm and close."
+        )
+    else:  # ADMIN
         if ticket.status != "RESOLVED":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -332,6 +381,12 @@ def get_ticket_history(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You are only authorized to view history for your own tickets."
+        )
+
+    if current_user.role == "SUPPORT" and ticket.assigned_to != current_user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are only authorized to view history for tickets assigned to you."
         )
 
     records = (

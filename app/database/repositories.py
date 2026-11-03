@@ -164,7 +164,9 @@ class TicketRepository:
         status: Optional[str] = None,
         category: Optional[str] = None,
         priority: Optional[str] = None,
-        user_id: Optional[str] = None
+        user_id: Optional[str] = None,
+        created_by: Optional[str] = None,
+        assigned_to: Optional[str] = None,
     ) -> List[TicketDB]:
         query = session.query(TicketDB)
         if status:
@@ -173,6 +175,10 @@ class TicketRepository:
             query = query.filter(TicketDB.category == category)
         if priority:
             query = query.filter(TicketDB.priority == priority)
+        if created_by:
+            query = query.filter(TicketDB.created_by == created_by)
+        if assigned_to:
+            query = query.filter(TicketDB.assigned_to == assigned_to)
         if user_id:
             query = query.filter(
                 (TicketDB.created_by == user_id) | (TicketDB.assigned_to == user_id)

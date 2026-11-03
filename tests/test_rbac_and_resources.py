@@ -148,6 +148,10 @@ def test_employee_cannot_close_another_employees_ticket(tokens):
     assert create_res.status_code == 201
     ticket_id = create_res.json()["ticket_id"]
 
+    # Ensure assigned to IT-501 (support_headers user)
+    admin_headers = {"Authorization": f"Bearer {tokens['admin']}"}
+    client.post(f"/tickets/{ticket_id}/assign", json={"assigned_to": "IT-501"}, headers=admin_headers)
+
     # 2. Support resolves ticket
     res_resolve = client.post(
         f"/tickets/{ticket_id}/resolve",
@@ -262,3 +266,43 @@ def test_audit_log_access_restricted_to_admin(tokens):
     assert admin_res.status_code == 200
     assert isinstance(admin_res.json(), list)
 
+
+
+def test_support_isolated_to_assigned_tickets_only(tokens):
+    """Support specialists can only view, update, and resolve tickets assigned to them."""
+    emp1_headers = {"Authorization": f"Bearer {tokens['emp1']}"}
+    admin_headers = {"Authorization": f"Bearer {tokens['admin']}"}
+    support_headers = {"Authorization": f"Bearer {tokens['support']}"}  # IT-501
+
+    # Create ticket and assign specifically to IT-504
+    create_res = client.post(
+        "/tickets",
+        json={"title": "IT-504 Restricted Incident", "description": "Strictly assigned to IT-504"},
+        headers=emp1_headers
+    )
+    assert create_res.status_code == 201
+    t_id = create_res.json()["ticket_id"]
+    client.post(f"/tickets/{t_id}/assign", json={"assigned_to": "IT-504"}, headers=admin_headers)
+
+    # IT-501 tries to get ticket details -> 403 Forbidden
+    assert client.get(f"/tickets/{t_id}", headers=support_headers).status_code == 403
+
+    # IT-501 tries to get ticket history -> 403 Forbidden
+    assert client.get(f"/tickets/{t_id}/history", headers=support_headers).status_code == 403
+
+    # IT-501 tries to update ticket -> 403 Forbidden
+    update_res = client.put(f"/tickets/{t_id}", json={"status": "IN_PROGRESS"}, headers=support_headers)
+    assert update_res.status_code == 403
+
+    # IT-501 tries to resolve IT-504's ticket -> 403 Forbidden
+    resolve_res = client.post(f"/tickets/{t_id}/resolve", json={"resolution": "Unauthorized resolution attempt"}, headers=support_headers)
+    assert resolve_res.status_code == 403
+    assert "only authorized to resolve tickets assigned to you" in resolve_res.json()["detail"].lower()
+
+    # IT-501 tries to close ticket -> 403 Forbidden
+    close_res = client.post(f"/tickets/{t_id}/close", headers=support_headers)
+    assert close_res.status_code == 403
+
+    # IT-501 lists tickets -> t_id must NOT be included in IT-501's list
+    sup_tickets = client.get("/tickets", headers=support_headers).json()
+    assert all(t["ticket_id"] != t_id for t in sup_tickets)
