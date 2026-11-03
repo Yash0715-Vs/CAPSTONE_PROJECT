@@ -7,7 +7,7 @@ Meets Capstone Specification Sections 13, 31, and 32:
 - Compatible with MySQL (viewable in DBeaver), PostgreSQL, and SQLite
 """
 
-from datetime import datetime, date, timezone
+from datetime import datetime, date, timezone, timedelta
 from typing import Dict, Any, Optional
 
 from enum import Enum
@@ -166,6 +166,32 @@ class TicketDB(Base):
     linked_asset = relationship("AssetDB", foreign_keys=[asset_id])
     history = relationship("TicketHistoryDB", back_populates="ticket", cascade="all, delete-orphan")
 
+    @property
+    def sla_deadline(self) -> Optional[datetime]:
+        if not self.created_date:
+            return None
+        target_hours = {"CRITICAL": 2, "HIGH": 4, "MEDIUM": 8, "LOW": 24}.get((self.priority or "").upper(), 8)
+        return self.created_date + timedelta(hours=target_hours)
+
+    @property
+    def is_breached(self) -> bool:
+        if not self.created_date:
+            return False
+        deadline = self.sla_deadline
+        if not deadline:
+            return False
+        is_closed = bool(self.closed_date and self.status in ("RESOLVED", "CLOSED"))
+        comp = self.closed_date if is_closed else datetime.now(timezone.utc)
+        if deadline.tzinfo is None and comp.tzinfo is not None:
+            deadline = deadline.replace(tzinfo=timezone.utc)
+        elif deadline.tzinfo is not None and comp.tzinfo is None:
+            comp = comp.replace(tzinfo=timezone.utc)
+        return comp > deadline
+
+    @property
+    def sla_status(self) -> str:
+        return "BREACHED" if self.is_breached else "ACTIVE"
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "id": self.id,
@@ -181,6 +207,9 @@ class TicketDB(Base):
             "resolution": self.resolution,
             "created_date": _iso_utc(self.created_date),
             "closed_date": _iso_utc(self.closed_date),
+            "sla_deadline": _iso_utc(self.sla_deadline),
+            "sla_status": self.sla_status,
+            "is_breached": self.is_breached,
         }
 
 

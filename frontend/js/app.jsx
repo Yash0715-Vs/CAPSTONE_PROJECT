@@ -859,12 +859,22 @@ function App() {
   const accessTickets = tickets.filter(t => (t.category || "").toUpperCase() === "ACCESS").length;
   const otherTickets = tickets.filter(t => !["HARDWARE", "NETWORK", "SOFTWARE", "ACCESS"].includes((t.category || "").toUpperCase())).length;
 
-  // Real SLA metrics
-  const breachedTicketsCount = slaReport?.breached_count ?? tickets.filter(t => t.sla_status === "BREACHED").length;
-  const activeOverdueCount = slaReport?.active_overdue_count ?? tickets.filter(t => (t.status === "OPEN" || t.status === "IN_PROGRESS" || t.status === "ASSIGNED") && t.sla_status === "BREACHED").length;
-  const historicalBreachCount = slaReport?.historical_breached_count ?? tickets.filter(t => (t.status === "RESOLVED" || t.status === "CLOSED") && t.sla_status === "BREACHED").length;
-  const activeOnTimeCount = slaReport?.active_on_time_count ?? tickets.filter(t => (t.status === "OPEN" || t.status === "IN_PROGRESS" || t.status === "ASSIGNED") && t.sla_status !== "BREACHED").length;
-  const historicalMetCount = slaReport?.historical_met_count ?? tickets.filter(t => (t.status === "RESOLVED" || t.status === "CLOSED") && t.sla_status !== "BREACHED").length;
+  // Real SLA map and metrics
+  const slaMap = useMemo(() => {
+    const map = {};
+    if (slaReport && Array.isArray(slaReport.individual_ticket_sla)) {
+      slaReport.individual_ticket_sla.forEach(item => {
+        map[item.ticket_id] = item;
+      });
+    }
+    return map;
+  }, [slaReport]);
+
+  const breachedTicketsCount = slaReport?.breached_count ?? tickets.filter(t => t.is_breached || t.sla_status === "BREACHED").length;
+  const activeOverdueCount = slaReport?.active_overdue_count ?? tickets.filter(t => (t.status === "OPEN" || t.status === "IN_PROGRESS" || t.status === "ASSIGNED") && (t.is_breached || t.sla_status === "BREACHED")).length;
+  const historicalBreachCount = slaReport?.historical_breached_count ?? tickets.filter(t => (t.status === "RESOLVED" || t.status === "CLOSED") && (t.is_breached || t.sla_status === "BREACHED")).length;
+  const activeOnTimeCount = slaReport?.active_on_time_count ?? tickets.filter(t => (t.status === "OPEN" || t.status === "IN_PROGRESS" || t.status === "ASSIGNED") && !t.is_breached && t.sla_status !== "BREACHED").length;
+  const historicalMetCount = slaReport?.historical_met_count ?? tickets.filter(t => (t.status === "RESOLVED" || t.status === "CLOSED") && !t.is_breached && t.sla_status !== "BREACHED").length;
   const nonBreachedCount = slaReport?.non_breached_count ?? (totalTickets - breachedTicketsCount);
   const complianceRate = totalTickets > 0 ? (((totalTickets - breachedTicketsCount) / totalTickets) * 100).toFixed(1) : "100.0";
 
@@ -1451,7 +1461,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                   <span>{currentUser.role === 'EMPLOYEE' ? 'My Tickets' : 'Tickets'}</span>
                 </div>
                 <span className={`px-1.5 py-0.5 text-[11px] font-medium rounded-full font-mono ${activeTab === 'tickets' ? 'bg-primary/20 text-on-primary-fixed' : 'bg-surface-container text-on-surface'}`}>
-                  {currentUser.role === 'EMPLOYEE' ? myOpenTickets : openTickets}
+                  {currentUser.role === 'EMPLOYEE' ? myOpenTickets : currentUser.role === 'SUPPORT' ? myOpenTickets : activeQueueTickets}
                 </span>
               </button>
 
@@ -1511,11 +1521,15 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                     <span className={`material-symbols-outlined text-[19px] ${activeTab === 'sla' ? 'text-primary' : ''}`}>timelapse</span>
                     <span>SLA &amp; Performance</span>
                   </div>
-                  {breachedTicketsCount > 0 && (
+                  {activeOverdueCount > 0 ? (
+                    <span className="px-1.5 py-0.5 text-[11px] font-medium rounded-full bg-error-container text-on-error-container font-mono" title={`${activeOverdueCount} active overdue SLA incident(s)`}>
+                      {activeOverdueCount}
+                    </span>
+                  ) : breachedTicketsCount > 0 ? (
                     <span className="px-1.5 py-0.5 text-[11px] font-medium rounded-full bg-error-container text-on-error-container font-mono">
                       {breachedTicketsCount}
                     </span>
-                  )}
+                  ) : null}
                 </button>
               )}
 
@@ -2222,12 +2236,12 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                     {/* KPI 4: Open Tickets */}
                     <div className="bg-surface-container-lowest p-3.5 rounded-xl shadow-sm flex flex-col justify-between">
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-medium uppercase tracking-wider text-on-surface-variant font-label">Open Tickets</span>
+                        <span className="text-[10px] font-medium uppercase tracking-wider text-on-surface-variant font-label">Active Assigned</span>
                         <span className="material-symbols-outlined text-[16px] text-primary">inbox</span>
                       </div>
                       <div className="mt-2.5">
-                        <div className="text-2xl font-headline font-medium text-on-surface">{openTickets}</div>
-                        <span className="text-[10px] text-on-surface-variant block mt-0.5">{activeTickets} active ({assignedTickets} assigned, {inProgressTickets} in-prog)</span>
+                        <div className="text-2xl font-headline font-medium text-on-surface">{myOpenTickets}</div>
+                        <span className="text-[10px] text-on-surface-variant block mt-0.5">{myOpenTickets} active tickets in your queue</span>
                       </div>
                     </div>
 
@@ -2644,9 +2658,16 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                             </span>
                           </td>
                           <td>
-                            <span className={`badge-status ${(t.status || "").toLowerCase().replace('_', '-')}`}>
-                              {t.status}
-                            </span>
+                            <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", flexWrap: "wrap" }}>
+                              <span className={`badge-status ${(t.status || "").toLowerCase().replace('_', '-')}`}>
+                                {t.status}
+                              </span>
+                              {(t.is_breached || slaMap[t.ticket_id]?.is_breached) && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold font-mono bg-error-container text-on-error-container" title={slaMap[t.ticket_id]?.time_description || "SLA Deadline Breached"}>
+                                  BREACHED
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td>{t.assigned_to || "Unassigned"}</td>
                           <td>
@@ -3263,13 +3284,13 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                 <div className="bg-surface-container-lowest p-5 rounded-xl shadow-sm">
                   <div className="text-[11px] font-medium uppercase tracking-wider text-on-surface-variant font-label">
-                    Active Breaches
+                    Active Overdue
                   </div>
                   <div className="text-3xl font-headline font-semibold text-error mt-2">
-                    {breachedTicketsCount}
+                    {activeOverdueCount}
                   </div>
                   <div className="text-xs text-on-surface-variant mt-1">
-                    Requiring priority response
+                    Requiring priority response ({historicalBreachCount} past)
                   </div>
                 </div>
 
@@ -3308,7 +3329,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                     </div>
                   </div>
                   <span className="px-2.5 py-1 rounded-full bg-error-container text-on-error-container text-xs font-mono font-medium">
-                    {breachedTicketsCount} Breached
+                    {activeOverdueCount} Active Overdue ({breachedTicketsCount} Total Breaches)
                   </span>
                 </div>
 
@@ -3326,47 +3347,66 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                   </thead>
                   <tbody>
                     {tickets
-                      .filter(t => t.sla_status === "BREACHED" || (t.priority === "CRITICAL" && t.status !== "RESOLVED" && t.status !== "CLOSED"))
-                      .map(t => (
-                        <tr key={t.id || t.ticket_id}>
-                          <td style={{ fontWeight: 600, color: "var(--primary)", fontFamily: "var(--font-mono)" }}>
-                            #{t.ticket_id}
-                          </td>
-                          <td>
-                            <div style={{ fontWeight: 600 }}>{t.title}</div>
-                            <div style={{ fontSize: "0.78rem", color: "var(--text-secondary)", maxWidth: "340px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              {t.description}
-                            </div>
-                          </td>
-                          <td>
-                            <span className="badge-status" style={{ background: "var(--bg-subtle)", color: "var(--text-main)" }}>
-                              {t.category}
-                            </span>
-                          </td>
-                          <td>
-                            <span className={`badge-priority ${(t.priority || "").toLowerCase()}`}>
-                              {t.priority}
-                            </span>
-                          </td>
-                          <td>
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold font-mono bg-error-container text-on-error-container">
-                              BREACHED
-                            </span>
-                          </td>
-                          <td style={{ fontSize: "0.84rem", color: t.assigned_to ? "var(--text-main)" : "var(--text-muted)" }}>
-                            {t.assigned_to || "Unassigned"}
-                          </td>
-                          <td>
-                            {currentUser.role !== "EMPLOYEE" && t.status !== "RESOLVED" && t.status !== "CLOSED" && (
-                              <button className="table-btn" onClick={() => setShowResolveModal(t)}>
-                                <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>check</span>
-                                <span>Resolve</span>
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    {tickets.filter(t => t.sla_status === "BREACHED" || (t.priority === "CRITICAL" && t.status !== "RESOLVED" && t.status !== "CLOSED")).length === 0 && (
+                      .filter(t => {
+                        const sla = slaMap[t.ticket_id];
+                        if (sla) return sla.is_breached || sla.is_active_overdue;
+                        return t.is_breached || t.sla_status === "BREACHED" || (t.priority === "CRITICAL" && t.status !== "RESOLVED" && t.status !== "CLOSED");
+                      })
+                      .map(t => {
+                        const slaInfo = slaMap[t.ticket_id];
+                        const isOverdue = slaInfo ? slaInfo.is_active_overdue : (t.status !== "RESOLVED" && t.status !== "CLOSED");
+                        const timeDesc = slaInfo?.time_description || (t.is_breached ? "BREACHED" : "ON TRACK");
+                        return (
+                          <tr key={t.id || t.ticket_id}>
+                            <td style={{ fontWeight: 600, color: "var(--primary)", fontFamily: "var(--font-mono)", cursor: "pointer" }} onClick={() => setShowTicketDetailsModal(t)} title="Click to view details">
+                              #{t.ticket_id}
+                            </td>
+                            <td>
+                              <div style={{ fontWeight: 600 }}>{t.title}</div>
+                              <div style={{ fontSize: "0.78rem", color: "var(--text-secondary)", maxWidth: "340px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {t.description}
+                              </div>
+                            </td>
+                            <td>
+                              <span className="badge-status" style={{ background: "var(--bg-subtle)", color: "var(--text-main)" }}>
+                                {t.category}
+                              </span>
+                            </td>
+                            <td>
+                              <span className={`badge-priority ${(t.priority || "").toLowerCase()}`}>
+                                {t.priority}
+                              </span>
+                            </td>
+                            <td>
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold font-mono ${isOverdue ? 'bg-error-container text-on-error-container' : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'}`}>
+                                {timeDesc}
+                              </span>
+                            </td>
+                            <td style={{ fontSize: "0.84rem", color: t.assigned_to ? "var(--text-main)" : "var(--text-muted)" }}>
+                              {t.assigned_to || "Unassigned"}
+                            </td>
+                            <td>
+                              <div style={{ display: "flex", gap: "0.4rem" }}>
+                                <button className="table-btn" onClick={() => setShowTicketDetailsModal(t)} title="View Details">
+                                  <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>visibility</span>
+                                  <span>Details</span>
+                                </button>
+                                {(currentUser.role === "ADMIN" || (currentUser.role === "SUPPORT" && currentUser.user_id === t.assigned_to)) && t.status !== "RESOLVED" && t.status !== "CLOSED" && (
+                                  <button className="table-btn" onClick={() => setShowResolveModal(t)}>
+                                    <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>check</span>
+                                    <span>Resolve</span>
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    {tickets.filter(t => {
+                      const sla = slaMap[t.ticket_id];
+                      if (sla) return sla.is_breached || sla.is_active_overdue;
+                      return t.is_breached || t.sla_status === "BREACHED" || (t.priority === "CRITICAL" && t.status !== "RESOLVED" && t.status !== "CLOSED");
+                    }).length === 0 && (
                       <tr>
                         <td colSpan="7" style={{ textAlign: "center", padding: "2.5rem", color: "var(--text-muted)" }}>
                           All incident tickets are currently within SLA compliance deadlines.
@@ -5432,6 +5472,20 @@ function TicketDetailsModal({ ticket, assets = [], currentUser, token, onClose, 
             <div style={{ fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)", fontWeight: 600 }}>Submitted On</div>
             <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginTop: "0.15rem" }}>
               {createdDate}
+            </div>
+          </div>
+
+          <div style={{ background: "var(--bg-subtle)", padding: "0.75rem 1rem", borderRadius: "var(--radius-md)", border: "1px solid var(--border-light)" }}>
+            <div style={{ fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)", fontWeight: 600 }}>SLA Status</div>
+            <div style={{ fontSize: "0.85rem", marginTop: "0.15rem", display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap" }}>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold font-mono ${ticket.is_breached ? 'bg-error-container text-on-error-container' : 'bg-primary/10 text-primary'}`}>
+                {ticket.is_breached ? "SLA BREACHED" : "WITHIN SLA"}
+              </span>
+              {ticket.sla_deadline && (
+                <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>
+                  Target: {formatLocalDateTime(ticket.sla_deadline)}
+                </span>
+              )}
             </div>
           </div>
         </div>
