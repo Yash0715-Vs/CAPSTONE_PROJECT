@@ -1,10 +1,8 @@
-version: '3.8'
-
 # =====================================================================
 # Docker Compose - Smart IT Asset & Support Ticket Management System
 # Meets Capstone Architecture (Section 16, 45)
 # Services:
-#   1. db (MySQL 8.0)
+#   1. db (MySQL 8.0 Primary Relational Database)
 #   2. backend (FastAPI REST & WebSocket API)
 #   3. frontend (Nginx Web Server & Reverse Proxy)
 # =====================================================================
@@ -20,7 +18,7 @@ services:
     command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     environment:
       MYSQL_DATABASE: ${DB_NAME:-it_asset_db}
-      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-root}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
     ports:
       - "${DB_PORT:-3306}:3306"
     volumes:
@@ -49,13 +47,13 @@ services:
     environment:
       APP_ENV: ${APP_ENV:-prod}
       DEBUG: ${DEBUG:-False}
-      DB_TYPE: mysql
-      DB_HOST: db
-      DB_PORT: 3306
+      DB_TYPE: ${DB_TYPE:-mysql}
+      DB_HOST: ${DB_HOST:-db}
+      DB_PORT: ${DB_PORT:-3306}
       DB_NAME: ${DB_NAME:-it_asset_db}
       DB_USER: ${DB_USER:-root}
-      DB_PASSWORD: ${DB_PASSWORD:-root}
-      SECRET_KEY: ${SECRET_KEY:-supersecretjwtkey_production_capstone_2026}
+      DB_PASSWORD: ${DB_PASSWORD}
+      SECRET_KEY: ${SECRET_KEY}
       ALGORITHM: HS256
       ACCESS_TOKEN_EXPIRE_MINUTES: 60
       LOG_LEVEL: ${LOG_LEVEL:-INFO}

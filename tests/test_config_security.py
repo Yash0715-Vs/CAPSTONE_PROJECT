@@ -29,12 +29,24 @@ def test_production_rejects_weak_secret_key(monkeypatch):
 
 
 def test_production_accepts_strong_secret_key(monkeypatch):
-    """Production mode accepts 32+ character strong unpredictable secret key."""
+    """Production mode accepts 32+ character strong unpredictable secret key and strong DB password."""
     monkeypatch.setattr(Config, "APP_ENV", "prod")
     monkeypatch.setattr(Config, "SECRET_KEY", "a_very_strong_production_secret_key_with_high_entropy_123456789")
+    monkeypatch.setattr(Config, "DB_PASSWORD", "prod_super_secure_vault_db_pass_998877")
 
     # Should not raise exception
     Config.validate_production_configuration()
+
+
+def test_production_rejects_weak_db_password(monkeypatch):
+    """Production mode strictly rejects default or trivial database passwords."""
+    monkeypatch.setattr(Config, "APP_ENV", "prod")
+    monkeypatch.setattr(Config, "SECRET_KEY", "a_very_strong_production_secret_key_with_high_entropy_123456789")
+    monkeypatch.setattr(Config, "DB_PASSWORD", "root")
+
+    with pytest.raises(ValueError) as excinfo:
+        Config.validate_production_configuration()
+    assert "non-default, secure DB_PASSWORD" in str(excinfo.value)
 
 
 def test_cors_origins_contain_no_wildcard():

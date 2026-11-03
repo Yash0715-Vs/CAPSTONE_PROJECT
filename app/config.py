@@ -59,14 +59,22 @@ class Config:
         """Validates security settings for non-development environments."""
         env = cls.APP_ENV.lower()
         if env in ("prod", "production"):
-            if not cls.SECRET_KEY or cls.SECRET_KEY in (
+            blocked_keys = (
                 "dev_secret_key_for_local_testing_only_capstone_2026",
                 "super_secret_jwt_key_capstone_2026",
                 "supersecretjwtkey_production_capstone_2026",
-            ) or len(cls.SECRET_KEY) < 32:
+                "supersecretjwtkey_change_me_in_production_capstone_2026",
+            )
+            if not cls.SECRET_KEY or cls.SECRET_KEY in blocked_keys or len(cls.SECRET_KEY) < 32:
                 raise ValueError(
                     "CRITICAL SECURITY CONFIGURATION ERROR: A strong, unique SECRET_KEY (minimum 32 characters) "
                     "must be configured in environment variables for production environments."
+                )
+
+            if not cls.DB_PASSWORD or cls.DB_PASSWORD.lower() in ("root", "password", "admin", "123456"):
+                raise ValueError(
+                    "CRITICAL SECURITY CONFIGURATION ERROR: A non-default, secure DB_PASSWORD must be configured "
+                    "in environment variables for production deployments."
                 )
 
 

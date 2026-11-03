@@ -4,10 +4,10 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688.svg)](https://fastapi.tiangolo.com/)
 [![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0-red.svg)](https://www.sqlalchemy.org/)
 [![Pylint](https://img.shields.io/badge/Pylint-10.00%2F10-brightgreen.svg)]()
-[![Tests](https://img.shields.io/badge/Pytest-59%20Passed-success.svg)]()
+[![Tests](https://img.shields.io/badge/Pytest-81%20Passed-success.svg)]()
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://www.docker.com/)
 
-An enterprise-grade, production-style **IT Asset Management and Support Ticket Management System** developed with **Python, FastAPI, SQLAlchemy 2, Alembic, MySQL/PostgreSQL, WebSockets, and a React 18 Single Page Application (SPA)**.
+An enterprise-grade, production-style **IT Asset Management and Support Ticket Management System** developed with **Python, FastAPI, SQLAlchemy 2, Alembic, MySQL 8.0 (Primary) / PostgreSQL 15, WebSockets, and a React 18 Single Page Application (SPA)**.
 
 ---
 
@@ -27,6 +27,15 @@ An enterprise-grade, production-style **IT Asset Management and Support Ticket M
 
 ---
 
+## 📚 Documentation Guide
+
+To navigate the project documentation effectively:
+* **[`README.md`](README.md) (This Document)**: Authoritative single source of truth for the implemented system, architectural diagrams, MySQL/PostgreSQL configuration, security controls, API specifications, and test results.
+* **[`Prerequisites.md`](Prerequisites.md)**: Technical checklist and foundational concepts (Python OOP, FastAPI, SQLAlchemy, Docker, JWT) recommended prior to code review.
+* **[`Capstone_1_IT_Asset_Ticket_Management_README.md`](Capstone_1_IT_Asset_Ticket_Management_README.md)**: The original capstone requirements specification, core milestones, and evaluation guidelines.
+
+---
+
 ## 📖 Project Overview
 
 Organizations require seamless management of physical hardware assets (laptops, monitors, keyboards, mice, printers) and structured support ticket workflows for employee issue resolution. 
@@ -35,7 +44,7 @@ This system provides:
 - **Role-Based Access Control (RBAC)** across three distinct personas: **Admin**, **IT Support**, and **Employee**.
 - **Hardware Asset Lifecycle Tracking**: `AVAILABLE` → `ASSIGNED` → `UNDER_REPAIR` → `RETIRED` with hardware specifications and serial number encapsulation.
 - **Automated Ticket Classification**: Regex-based auto-categorization into `Hardware`, `Software`, `Network`, `Access`, or `Other`, with dynamic priority assignment (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`).
-- **SLA Tracking Engine**: Strict resolution deadlines (Critical: 2h/4h, High: 4h/8h, Medium: 8h/24h, Low: 24h/48h) with real-time breach detection.
+- **SLA Tracking Engine**: Strict resolution turnaround deadlines (**CRITICAL: 2h**, **HIGH: 4h**, **MEDIUM: 8h**, **LOW: 24h**) with real-time breach detection and SLA timers.
 - **Real-Time Live Updates via WebSockets**: Instant dashboard notification broadcasts when tickets are opened, assigned, or resolved.
 - **Production Readiness**: Alembic migrations, multi-profile configurations (`.env.dev`, `.env.qa`, `.env.prod`), Docker Compose orchestration, and Pylint 10.00/10 code quality.
 
@@ -48,12 +57,12 @@ This system provides:
 | **Backend Framework** | Python 3.11 / 3.12, FastAPI, Uvicorn, Starlette |
 | **Validation & Schemas**| Pydantic v2, Pydantic Settings, Email-Validator |
 | **ORM & Database** | SQLAlchemy 2.0 (Repository & Singleton Pattern), Alembic (Migrations) |
-| **Database Engines** | MySQL 8.0 (PyMySQL), PostgreSQL 15 (psycopg2-binary), SQLite 3 |
-| **Authentication** | OAuth2 Bearer, PyJWT (HMAC-SHA256), Passlib (Bcrypt hashing) |
+| **Database Engines** | **MySQL 8.0** (Primary RDBMS via PyMySQL), PostgreSQL 15 (Tested in QA), SQLite 3 (Unit tests) |
+| **Authentication** | OAuth2 Bearer, PyJWT (HMAC-SHA256), Native Bcrypt (Constant-time hashing & salting) |
 | **Real-Time & Networking** | FastAPI WebSockets, Python `requests` (External API integration) |
-| **Frontend** | React 18, Babel Standalone (No Node.js build dependencies required), Vanilla CSS |
+| **Frontend** | React 18, Babel Standalone (Zero Node/NPM dependencies required), Modern Deep Teal CSS |
 | **Containerization** | Docker, Docker Compose, Nginx Alpine Reverse Proxy |
-| **Testing & Quality** | Pytest, Pytest-Asyncio, Pylint (Score: 10.00/10), SonarLint |
+| **Testing & Quality** | Pytest (**81 Passed**), Pytest-Asyncio, Pylint (Score: 10.00/10), SonarLint |
 
 ---
 
@@ -96,7 +105,7 @@ graph TD
 
 ## 🗄 Database Design & ER Diagram
 
-The database enforces **ACID** properties with foreign key constraints, primary keys, and unique indexes:
+The database enforces strict **ACID** properties with foreign key constraints, primary keys, and unique indexes across **8 relational entities**:
 
 ```mermaid
 erDiagram
@@ -105,8 +114,13 @@ erDiagram
     USERS ||--o{ TICKETS : assigned_to
     USERS ||--o{ TICKET_HISTORY : modifies
     USERS ||--o{ ACTIVITY_LOGS : triggers
+    USERS ||--o{ EQUIPMENT_REQUESTS : requests
+    USERS ||--o{ EQUIPMENT_REQUESTS : approves
     ASSETS ||--o{ ASSET_ASSIGNMENTS : assigned_in
+    ASSETS ||--o{ TICKETS : referenced_in
+    ASSETS ||--o{ EQUIPMENT_REQUESTS : fulfills
     TICKETS ||--o{ TICKET_HISTORY : contains
+    EQUIPMENT_REQUESTS ||--o{ EQUIPMENT_REQUEST_HISTORY : tracks
 
     USERS {
         int id PK
@@ -115,6 +129,9 @@ erDiagram
         string email UK
         string hashed_password
         string role "ADMIN, SUPPORT, EMPLOYEE"
+        string status "ACTIVE, PENDING, DISABLED"
+        string invitation_token_hash "SHA-256 single-use token"
+        datetime invitation_expires_at
         string department
         datetime created_at
     }
@@ -129,15 +146,16 @@ erDiagram
         date purchase_date
         string status "AVAILABLE, ASSIGNED, UNDER_REPAIR, RETIRED"
         string assigned_to FK "Optional User ID"
-        text specs_json "Composed hardware specifications"
+        text specs_json "Hardware specifications"
+        datetime created_at
     }
 
     ASSET_ASSIGNMENTS {
         int id PK
         string asset_id FK
         string employee_id FK
-        date assigned_date
-        date return_date
+        datetime assigned_date
+        datetime returned_date
         string notes
     }
 
@@ -149,9 +167,10 @@ erDiagram
         string category "Hardware, Software, Network, Access, Other"
         string priority "LOW, MEDIUM, HIGH, CRITICAL"
         string status "OPEN, ASSIGNED, IN_PROGRESS, RESOLVED, CLOSED"
-        string created_by FK
-        string assigned_to FK
-        text resolution
+        string created_by FK "Employee User ID"
+        string assigned_to FK "Support Engineer User ID"
+        string asset_id FK "Optional linked asset"
+        text resolution "Diagnostic and resolution remarks"
         datetime created_date
         datetime closed_date
     }
@@ -162,7 +181,10 @@ erDiagram
         string changed_by FK
         string old_status
         string new_status
-        string comment
+        string previous_assignee
+        string new_assignee
+        string assignment_method "AUTOMATIC, MANUAL, REASSIGNED"
+        text comment
         datetime timestamp
     }
 
@@ -173,19 +195,46 @@ erDiagram
         text details
         datetime timestamp
     }
+
+    EQUIPMENT_REQUESTS {
+        int id PK
+        string request_id UK "REQ-2001"
+        string requested_by FK "Employee User ID"
+        string equipment_type "Laptop, Monitor, Keyboard, Mouse, Printer"
+        text reason
+        string status "PENDING, APPROVED, REJECTED, PROVISIONED, COMPLETED"
+        string approved_by FK "Admin User ID"
+        string provisioned_asset_id FK "Assigned inventory asset"
+        text admin_notes
+        text employee_notes
+        datetime created_at
+        datetime updated_at
+    }
+
+    EQUIPMENT_REQUEST_HISTORY {
+        int id PK
+        string request_id FK
+        string actor FK "User ID who performed action"
+        string action "REQUESTED, APPROVED, REJECTED, PROVISIONED, VERIFIED"
+        string old_status
+        string new_status
+        string asset_id FK "Optional asset ID"
+        text notes
+        datetime timestamp
+    }
 ```
 
 ---
 
 ## ⚙️ Database Dialects & Environment Profiles
 
-The project implements a decoupled connection manager [`app/database/connection.py`](file:///c:/Users/Yash/OneDrive/Desktop/CAPSTONE%20PROJECT/app/database/connection.py) adhering to the **Singleton Pattern**:
+The project defines **MySQL 8.0** as its **primary relational database engine** for both local development and containerized production deployments. The connection manager [pp/database/connection.py](app/database/connection.py) adheres to the **Singleton Pattern** with pluggable multi-dialect support:
 
-1. **Development (`.env.dev` / `.env`)**: Configured for local **MySQL 8.0** (`localhost:3306`), accessible via **DBeaver** or MySQL Workbench. Also supports zero-setup **SQLite** for standalone testing.
-2. **QA / Staging (`.env.qa`)**: Configured for **PostgreSQL 15** integration testing.
-3. **Production (`.env.prod`)**: Hardened settings for containerized deployment with strict token expiry and warning-level logging.
+1. **Primary Production & Dev Database — MySQL 8.0 (.env / docker-compose.yml)**: Default database running on port 3306 with utf8mb4 character encoding and persistent storage. Fully managed with Alembic schema migrations and accessible via DBeaver or MySQL Workbench.
+2. **QA / Staging Profile (.env.qa)**: Configured for **PostgreSQL 15** (via psycopg2-binary) to verify multi-dialect portability.
+3. **Automated Test Isolation**: Configured for **SQLite 3** (	est_it_asset.db) for isolated in-memory/file-based unit and regression testing.
 
-> **Professor / Viva Note**: The codebase is database-agnostic. By changing `DB_TYPE=mysql` to `DB_TYPE=postgres` in the configuration, SQLAlchemy automatically switches dialects without requiring a single code modification.
+> **Architecture Note**: SQLAlchemy 2.0 ORM completely decouples business logic from SQL dialect specifics. By configuring DB_TYPE=mysql (default) or DB_TYPE=postgres in environment variables, the system automatically adapts connection pooling and query dialect execution without modifying backend application code.
 
 ### Running Database Migrations (Alembic)
 ```powershell
@@ -216,7 +265,11 @@ Located in [`app/services/ticket_classifier.py`](file:///c:/Users/Yash/OneDrive/
 
 ### 3. SLA Calculation & Breach Engine
 Located in [`app/services/sla_service.py`](file:///c:/Users/Yash/OneDrive/Desktop/CAPSTONE%20PROJECT/app/services/sla_service.py):
-- Computes deadlines: `CRITICAL` (4 hrs), `HIGH` (8 hrs), `MEDIUM` (24 hrs), `LOW` (48 hrs).
+- Computes resolution deadlines strictly based on priority:
+  - **CRITICAL**: **2 hours**
+  - **HIGH**: **4 hours**
+  - **MEDIUM**: **8 hours**
+  - **LOW**: **24 hours**
 - Tracks live status: `WITHIN_SLA`, `APPROACHING_BREACH` (<20% remaining), or `BREACHED`.
 - Generates SLA compliance metrics (% in-SLA, average resolution turnaround minutes).
 
@@ -229,6 +282,32 @@ Located in [`app/main.py`](file:///c:/Users/Yash/OneDrive/Desktop/CAPSTONE%20PRO
 Located in [`app/api/reports.py`](file:///c:/Users/Yash/OneDrive/Desktop/CAPSTONE%20PROJECT/app/api/reports.py):
 - Uses Python `requests` with explicit connection and read timeouts (5s).
 - Implements robust exception handling for `requests.exceptions.Timeout`, `ConnectionError`, and non-200 HTTP responses with reliable fallback telemetry.
+
+
+### 6. Employee Resolution Verification & Closure Workflow
+Implemented in [`app/api/tickets.py`](app/api/tickets.py):
+- **Two-Step Closure Protocol**: IT Support investigates and resolves issues, providing a mandatory resolution summary and setting status to `RESOLVED`.
+- **Employee Authority**: Only the employee who originally created the ticket can verify resolution and close it. Support engineers cannot directly close tickets.
+- **Two Verification Paths**:
+  - **Issue Fixed — Close Ticket**: Confirms the fix, marks status as `CLOSED`, records the verifying employee and server-side timestamp, and writes an audit record in `TicketHistoryDB`.
+  - **Issue Still Exists**: Reopens the ticket back to `IN_PROGRESS`, records employee feedback, and keeps the ticket assigned to the current IT engineer for immediate re-investigation.
+
+### 7. Non-Repairable Asset Replacement & Inventory Swap
+Implemented in [`app/api/tickets.py`](app/api/tickets.py):
+- **Hardware Swap in Resolve Modal**: Support/admin can flag an asset as non-repairable during ticket resolution.
+- **Auto-Assign Engine**: Automatically detects the damaged asset category (e.g. `Laptop`) and auto-selects the first available matching asset from inventory.
+- **Type-Filtered Manual Picker**: Alternatively, specialists can manually select from a dropdown strictly filtered to matching device types (e.g., only laptops shown for a damaged laptop).
+- **Atomic ACID Custody Transfer**: In a single database transaction, the damaged asset is decommissioned (`RETIRED`), old assignment closed, new asset assigned (`ASSIGNED`) to the employee, and ticket updated with complete activity logging.
+
+### 8. Hardware Provisioning & Equipment Requests
+Implemented in [`app/api/equipment_requests.py`](app/api/equipment_requests.py):
+- **Employee Self-Service**: Employees submit hardware requests with business justification.
+- **Admin Review & Provisioning**: Admins review pending requests, approve/reject them, and allocate inventory devices.
+- **Audit Ledger**: Every request lifecycle event is recorded in `EquipmentRequestHistoryDB`.
+
+### 9. Modern Deep Teal Responsive UI
+- **Horizontal Side-Scroll (`.table-responsive`)**: All 6 enterprise data tables are wrapped in responsive containers with enforced minimum width (`min-width: 980px`), ensuring columns and action buttons never clip on window resize or split-screen.
+- **Expandable Descriptions**: Inline `More ⌄` / `Show less ⌃` toggle clamps lengthy incident descriptions to ~80 characters, maintaining uniform, professional table rows.
 
 ---
 
@@ -351,7 +430,9 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```powershell
 pytest tests/ -v
 ```
-**Results**: **59 passed** (100% pass rate in ~9.5s), covering:
+**Results**: **81 passed** (100% pass rate across all suites), covering:
+- **Employee Verification & Closure Lifecycle** (`test_employee_verification.py`): Resolution summary enforcement, employee confirmation & closure, reopening to IN_PROGRESS upon rejection, RBAC closure permission enforcement.
+- **Hardware Replacement on Resolve** (`test_asset_replacement_on_resolve.py`): Non-repairable asset decommissioning (RETIRED), automated replacement inventory allocation (ASSIGNED), custody transfer audit logging.
 - **Authentication & Registration** (`test_auth_registration.py`): Login success/rejection, elimination of placeholder password bypass, pending/disabled account rejection, single-use invitation lifecycle, invitation expiry.
 - **RBAC & Resource Security** (`test_rbac_and_resources.py`): Unauthorized endpoint rejection, IDOR prevention on assets and tickets, support-only assignments, ticket closure rules.
 - **WebSocket Security** (`test_websockets_security.py`): Token query authentication, in-band JSON authentication frame, ticket subscription authorization, event broadcast segregation.
@@ -432,7 +513,7 @@ To run SonarLint in VS Code:
 > **Answer**: The Singleton pattern ensures a class has only one instance and provides a global access point to it. In [`app/database/connection.py`](file:///c:/Users/Yash/OneDrive/Desktop/CAPSTONE%20PROJECT/app/database/connection.py), `DatabaseConnectionManager` is a Singleton. This prevents creating redundant database connection pools, which would exhaust database connections and degrade server performance.
 
 ### Q3: How is password security and authentication handled?
-> **Answer**: Passwords are never stored in plain text. We use **Bcrypt** with a cryptographic salt via `passlib`. During login, the password is verified using `bcrypt.verify()`. On successful authentication, FastAPI issues an **HMAC-SHA256 (HS256) signed JWT** with a 60-minute expiration containing the user ID and role claim.
+> **Answer**: Passwords are never stored in plain text. We use native **Bcrypt** with a cryptographically randomized salt (`bcrypt.gensalt()`). During authentication, credentials are verified using constant-time comparison via `bcrypt.checkpw()`. On successful authentication, FastAPI issues an **HMAC-SHA256 (HS256) signed JWT** with a 60-minute expiration containing the user ID, role claim, and account status.
 
 ### Q4: How does the Automatic Ticket Classifier work?
 > **Answer**: It is implemented in [`app/services/ticket_classifier.py`](file:///c:/Users/Yash/OneDrive/Desktop/CAPSTONE%20PROJECT/app/services/ticket_classifier.py) using pure Python regex and dictionary lookups without external AI dependencies. It matches technical keywords (e.g., `wifi` → `Network`, `screen` → `Hardware`) and scans for emergency triggers (e.g., `down`, `bsod`, `urgent`) to assign an appropriate priority level (`CRITICAL`, `HIGH`, `MEDIUM`).
