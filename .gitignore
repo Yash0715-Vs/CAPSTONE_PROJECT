@@ -41,3 +41,7 @@ dist/
 build/
 
 *.bak
+
+# Database Backups
+backups/
+*.sql
