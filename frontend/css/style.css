@@ -784,6 +784,16 @@ html.dark .btn-nav-logout:hover {
   color: var(--status-open);
   border: 1px solid #c7ebfc;
 }
+.badge-status.assigned {
+  background: var(--primary-subtle, #E6F4F1);
+  color: var(--primary, #0F766E);
+  border: 1px solid var(--primary-border, #B7DAD4);
+}
+.badge-status.in-progress {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
 .badge-status.resolved {
   background: var(--status-active-bg);
   color: var(--status-active);
@@ -2411,6 +2421,18 @@ html.dark .badge-status.open,
   background: rgba(14, 165, 233, 0.2) !important;
   color: #38bdf8 !important;
   border: 1px solid rgba(56, 189, 248, 0.4) !important;
+}
+html.dark .badge-status.assigned,
+[data-theme="dark"] .badge-status.assigned {
+  background: rgba(15, 118, 110, 0.25) !important;
+  color: #2dd4bf !important;
+  border: 1px solid rgba(45, 212, 191, 0.4) !important;
+}
+html.dark .badge-status.in-progress,
+[data-theme="dark"] .badge-status.in-progress {
+  background: rgba(245, 158, 11, 0.2) !important;
+  color: #fbbf24 !important;
+  border: 1px solid rgba(251, 191, 36, 0.4) !important;
 }
 html.dark .badge-status.resolved,
 [data-theme="dark"] .badge-status.resolved {

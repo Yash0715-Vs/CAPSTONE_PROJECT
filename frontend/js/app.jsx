@@ -840,10 +840,11 @@ function App() {
 
   const totalTickets = tickets.length;
   const openTickets = tickets.filter(t => t.status === "OPEN").length;
-  const inProgressTickets = tickets.filter(t => t.status === "IN_PROGRESS" || t.status === "ASSIGNED").length;
   const assignedTickets = tickets.filter(t => t.status === "ASSIGNED").length;
-  const inProgressOnlyTickets = tickets.filter(t => t.status === "IN_PROGRESS").length;
-  const activeQueueTickets = openTickets + inProgressTickets;
+  const inProgressTickets = tickets.filter(t => t.status === "IN_PROGRESS").length;
+  const inProgressOnlyTickets = inProgressTickets;
+  const activeTickets = assignedTickets + inProgressTickets;
+  const activeQueueTickets = openTickets + activeTickets;
   const resolvedTickets = tickets.filter(t => t.status === "RESOLVED").length;
   const closedTickets = tickets.filter(t => t.status === "CLOSED").length;
   const resolvedAndClosed = resolvedTickets + closedTickets;
@@ -1961,8 +1962,8 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                         </div>
                       </div>
                       <div className="mt-3">
-                        <div className="text-2xl font-headline font-medium text-on-surface">{openTickets + inProgressTickets}</div>
-                        <span className="text-[11px] text-on-surface-variant mt-0.5 block">{openTickets} open, {inProgressTickets} active</span>
+                        <div className="text-2xl font-headline font-medium text-on-surface">{activeQueueTickets}</div>
+                        <span className="text-[11px] text-on-surface-variant mt-0.5 block">{openTickets} open, {activeTickets} active ({assignedTickets} assigned, {inProgressTickets} in-prog)</span>
                       </div>
                     </div>
 
@@ -2226,7 +2227,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                       </div>
                       <div className="mt-2.5">
                         <div className="text-2xl font-headline font-medium text-on-surface">{openTickets}</div>
-                        <span className="text-[10px] text-on-surface-variant block mt-0.5">{inProgressTickets} active ({inProgressOnlyTickets} in-prog, {assignedTickets} assigned)</span>
+                        <span className="text-[10px] text-on-surface-variant block mt-0.5">{activeTickets} active ({assignedTickets} assigned, {inProgressTickets} in-prog)</span>
                       </div>
                     </div>
 
@@ -2541,8 +2542,9 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                 </select>
 
                 <select className="filter-select" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
-                  <option value="">All Statuses</option>
+                  <option value="">All Statuses ({totalTickets})</option>
                   <option value="OPEN">Open ({openTickets})</option>
+                  <option value="ASSIGNED">Assigned ({assignedTickets})</option>
                   <option value="IN_PROGRESS">In Progress ({inProgressTickets})</option>
                   <option value="RESOLVED">Resolved ({resolvedTickets})</option>
                   <option value="CLOSED">Closed ({closedTickets})</option>
@@ -2564,7 +2566,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                   <div>
                     <div className="table-header-title">{currentUser.role === 'EMPLOYEE' ? 'My Support Incident Requests' : 'Enterprise Incident Queue'}</div>
                     <div style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginTop: "0.15rem" }}>
-                      Showing {filteredTickets.length} of {tickets.length} total tickets from database ({openTickets} Open, {inProgressTickets} In Progress, {resolvedTickets} Resolved, {closedTickets} Closed)
+                      Showing {filteredTickets.length} of {tickets.length} total tickets from database ({openTickets} Open, {assignedTickets} Assigned, {inProgressTickets} In Progress, {resolvedTickets} Resolved, {closedTickets} Closed)
                     </div>
                   </div>
                   <button
@@ -2657,6 +2659,38 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                                 <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>history</span>
                                 <span>History</span>
                               </button>
+                              {currentUser.role !== "EMPLOYEE" && t.status === "ASSIGNED" && (
+                                <button
+                                  type="button"
+                                  className="table-btn"
+                                  style={{ color: "var(--primary)", borderColor: "var(--primary-border)" }}
+                                  onClick={async () => {
+                                    try {
+                                      const res = await fetch(`${API_BASE}/tickets/${t.ticket_id}`, {
+                                        method: "PUT",
+                                        headers: {
+                                          "Content-Type": "application/json",
+                                          "Authorization": `Bearer ${token}`
+                                        },
+                                        body: JSON.stringify({ status: "IN_PROGRESS" })
+                                      });
+                                      if (res.ok) {
+                                        addToast(`Ticket #${t.ticket_id} moved to In Progress!`, "success");
+                                        fetchData();
+                                      } else {
+                                        const err = await res.json().catch(() => null);
+                                        addToast(parseApiError(err, res.status, "Failed to start ticket"), "error");
+                                      }
+                                    } catch (e) {
+                                      addToast("Network failure.", "error");
+                                    }
+                                  }}
+                                  title="Move status to In Progress"
+                                >
+                                  <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>play_arrow</span>
+                                  <span>Start</span>
+                                </button>
+                              )}
                               {currentUser.role === "ADMIN" && t.status !== "CLOSED" && (
                                 <button className="table-btn" onClick={() => setShowAssignTicketModal(t)}>
                                   <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>person_add</span>
@@ -3994,6 +4028,28 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
           currentUser={currentUser}
           token={token}
           onClose={() => setShowTicketDetailsModal(null)}
+          onStartProgress={async (ticket) => {
+            try {
+              const res = await fetch(`${API_BASE}/tickets/${ticket.ticket_id}`, {
+                method: "PUT",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Authorization": `Bearer ${token}`
+                },
+                body: JSON.stringify({ status: "IN_PROGRESS" })
+              });
+              if (res.ok) {
+                setShowTicketDetailsModal(null);
+                addToast(`Ticket #${ticket.ticket_id} moved to In Progress!`, "success");
+                fetchData();
+              } else {
+                const err = await res.json().catch(() => null);
+                addToast(parseApiError(err, res.status, "Failed to start ticket"), "error");
+              }
+            } catch (e) {
+              addToast("Network failure.", "error");
+            }
+          }}
           onAssign={(ticket) => {
             setShowTicketDetailsModal(null);
             setShowAssignTicketModal(ticket);
@@ -5311,7 +5367,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(<App />);
 // =====================================================================
 // TICKET DETAILS DRAWER / MODAL (Tuesday Requirement)
 // =====================================================================
-function TicketDetailsModal({ ticket, assets = [], currentUser, token, onClose, onAssign, onResolve, onCloseTicket, onViewHistory }) {
+function TicketDetailsModal({ ticket, assets = [], currentUser, token, onClose, onAssign, onResolve, onCloseTicket, onViewHistory, onStartProgress }) {
   if (!ticket) return null;
 
   const matchedAsset = ticket.asset_id ? assets.find(a => a.asset_id === ticket.asset_id) : null;
@@ -5475,6 +5531,19 @@ function TicketDetailsModal({ ticket, assets = [], currentUser, token, onClose, 
               >
                 <span className="material-symbols-outlined" style={{ fontSize: "15px" }}>person_add</span>
                 <span>{ticket.assigned_to ? "Reassign Specialist" : "Assign Specialist"}</span>
+              </button>
+            )}
+
+            {currentUser && currentUser.role !== "EMPLOYEE" && ticket.status === "ASSIGNED" && onStartProgress && (
+              <button
+                type="button"
+                className="table-btn"
+                style={{ borderColor: "var(--primary)", color: "var(--primary)", fontWeight: 600 }}
+                onClick={() => onStartProgress(ticket)}
+                title="Move ticket status to IN_PROGRESS"
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: "15px" }}>play_arrow</span>
+                <span>Start Working</span>
               </button>
             )}
 
