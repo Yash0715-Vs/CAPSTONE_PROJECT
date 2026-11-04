@@ -235,7 +235,11 @@ function ForgotPasswordModal({ isOpen, onClose, initialIdentifier, onPasswordRes
       setUserInfo(data);
       setStep(2);
     } catch (err) {
-      setError(err.message || "Failed to generate password reset code.");
+      if (err.name === "TypeError" && (err.message === "Failed to fetch" || err.message.includes("fetch"))) {
+        setError("Unable to connect to backend server (port 8000). Please verify the server is running.");
+      } else {
+        setError(err.message || "Failed to generate password reset code.");
+      }
     } finally {
       setLoading(false);
     }
@@ -272,7 +276,11 @@ function ForgotPasswordModal({ isOpen, onClose, initialIdentifier, onPasswordRes
         onPasswordResetSuccess(userInfo ? userInfo.user_id : identifier.trim());
       }
     } catch (err) {
-      setError(err.message || "Failed to reset password.");
+      if (err.name === "TypeError" && (err.message === "Failed to fetch" || err.message.includes("fetch"))) {
+        setError("Unable to connect to backend server (port 8000). Please verify the server is running.");
+      } else {
+        setError(err.message || "Failed to reset password.");
+      }
     } finally {
       setLoading(false);
     }

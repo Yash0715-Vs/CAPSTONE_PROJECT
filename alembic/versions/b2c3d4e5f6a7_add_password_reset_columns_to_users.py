@@ -49,3 +49,4 @@ def downgrade() -> None:
         except Exception:
             pass
         op.drop_column('users', 'reset_token_hash')
+
