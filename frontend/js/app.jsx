@@ -2325,8 +2325,8 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
 
   // Modals & Action Error / Submitting States
-
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createTicketInitialData, setCreateTicketInitialData] = useState(null);
 
   const [showResolveModal, setShowResolveModal] = useState(null);
 
@@ -3392,7 +3392,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                 </span>
               </button>
 
-              {/* Hardware Fleet (available to Admin and IT Support) */}
+              {/* Assets (available to Admin and IT Support) */}
               {currentUser && currentUser.role !== 'EMPLOYEE' && (
                 <button
                   type="button"
@@ -3400,8 +3400,8 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                   onClick={() => setActiveTab('assets')}
                 >
                   <div className="flex items-center gap-3">
-                    <span className={`material-symbols-outlined text-[19px] ${activeTab === 'assets' ? 'text-primary' : ''}`}>dns</span>
-                    <span>Hardware Fleet</span>
+                    <span className={`material-symbols-outlined text-[19px] ${activeTab === 'assets' ? 'text-primary' : ''}`}>inventory_2</span>
+                    <span>Assets</span>
                   </div>
                   <span className="px-1.5 py-0.5 text-[11px] font-medium rounded-full bg-surface-container text-on-surface-variant font-mono">
                     {totalAssets}
@@ -3644,7 +3644,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                   {activeTab === 'dashboard' ? (currentUser.role === 'EMPLOYEE' ? 'My Employee Workspace' : currentUser.role === 'SUPPORT' ? 'ServiceDesk Operations Hub' : 'Operations Overview') :
                    activeTab === 'tickets' ? (currentUser.role === 'EMPLOYEE' ? 'My Support Incident Tickets' : 'Support Incident Tickets') :
                    activeTab === 'my-equipment' ? 'My Assigned Equipment' :
-                   activeTab === 'assets' ? (currentUser.role === 'EMPLOYEE' ? 'My Assigned Equipment' : 'Hardware Asset Fleet') :
+                   activeTab === 'assets' ? (currentUser.role === 'EMPLOYEE' ? 'My Assigned Equipment' : 'Assets') :
                    activeTab === 'equipment-requests' ? (currentUser.role === 'EMPLOYEE' ? 'My Hardware Requests' : 'Hardware Provisioning Queue') :
                    activeTab === 'employees' ? 'Enrolled Employee Directory' :
                    activeTab === 'sla' ? 'SLA & MTTR Performance' : 'System Audit Ledger'}
@@ -6190,7 +6190,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                   <div>
 
-                    <div className="table-header-title">{isMyEquipmentView ? 'My Assigned Hardware Equipment' : 'Enterprise Hardware Fleet'}</div>
+                    <div className="table-header-title">{isMyEquipmentView ? 'My Assigned Hardware Equipment' : 'Assets'}</div>
 
                     <div style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginTop: "0.15rem" }}>
 
@@ -6364,12 +6364,11 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                                   type="button"
                                   className="table-btn"
                                   onClick={() => {
-                                    setFormData(prev => ({
-                                      ...prev,
+                                    setCreateTicketInitialData({
                                       asset_id: a.asset_id,
                                       title: `Hardware issue with ${a.brand || ''} ${a.model || a.type} (${a.asset_id})`,
-                                      category: "HARDWARE"
-                                    }));
+                                      desc: `Reporting a hardware issue for device ${a.type} (Asset ID: ${a.asset_id}, Serial: ${a.serial_number || 'N/A'}).`
+                                    });
                                     setShowCreateModal(true);
                                   }}
                                   title="Open Support Ticket for this device"
@@ -8094,23 +8093,24 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
       {/* CREATE TICKET MODAL */}
 
       {showCreateModal && (
-
         <CreateTicketModal
-
-          onClose={() => setShowCreateModal(false)}
-
+          onClose={() => {
+            setShowCreateModal(false);
+            setCreateTicketInitialData(null);
+          }}
           token={token}
-
           currentUser={currentUser}
-
-          userAssets={assets.filter(a => a.assigned_to === currentUser?.user_id)}
-
-          onSuccess={() => { setShowCreateModal(false); fetchData(); addToast("Ticket created successfully!", "success"); }}
-
+          userAssets={myAssignedAssets}
+          allAssets={assets}
+          initialData={createTicketInitialData}
+          onSuccess={() => {
+            setShowCreateModal(false);
+            setCreateTicketInitialData(null);
+            fetchData();
+            addToast("Ticket created successfully!", "success");
+          }}
           addToast={addToast}
-
         />
-
       )}
 
 
@@ -9641,16 +9641,11 @@ function RegisterAssetModal({ onClose, token, onSuccess, addToast }) {
 
 // Modal Component for Creating Tickets with Live Classification Preview
 
-function CreateTicketModal({ onClose, token, onSuccess, addToast, userAssets = [], currentUser = null }) {
-
-  const [title, setTitle] = useState("");
-
-  const [desc, setDesc] = useState("");
-
-  const [selectedAssetId, setSelectedAssetId] = useState("");
-
+function CreateTicketModal({ onClose, token, onSuccess, addToast, userAssets = [], allAssets = [], currentUser = null, initialData = null }) {
+  const [title, setTitle] = useState(initialData?.title || "");
+  const [desc, setDesc] = useState(initialData?.desc || "");
+  const [selectedAssetId, setSelectedAssetId] = useState(initialData?.asset_id || "");
   const [submitting, setSubmitting] = useState(false);
-
   const [apiError, setApiError] = useState("");
 
 
@@ -9927,68 +9922,75 @@ function CreateTicketModal({ onClose, token, onSuccess, addToast, userAssets = [
 
 
 
-          {/* Employee-Specific Asset Dropdown */}
-
-          {currentUser && currentUser.role === 'EMPLOYEE' && (
-
+          {/* Hardware Device Selection (Available for Employee, IT Support, and Admin) */}
+          {currentUser && (
             <div className="form-field-group">
-
               <label className="form-field-label">Assigned Hardware Device (Optional)</label>
-
-              {userAssets && userAssets.length > 0 ? (
-
-                <select
-
-                  className="apex-form-input"
-
-                  style={{ paddingLeft: "1rem" }}
-
-                  value={selectedAssetId}
-
-                  onChange={e => setSelectedAssetId(e.target.value)}
-
-                >
-
-                  <option value="">No specific device (Software / Access / General)</option>
-
-                  {userAssets.map(a => (
-
+              <select
+                className="apex-form-input"
+                style={{ paddingLeft: "1rem" }}
+                value={selectedAssetId}
+                onChange={e => setSelectedAssetId(e.target.value)}
+              >
+                <option value="">No specific device (Software / Access / General)</option>
+                {currentUser.role === 'EMPLOYEE' ? (
+                  userAssets && userAssets.length > 0 && userAssets.map(a => (
                     <option key={a.asset_id} value={a.asset_id}>
-
                       {a.asset_id} — {a.brand} {a.model} ({a.type})
-
                     </option>
+                  ))
+                ) : (
+                  <>
+                    {userAssets && userAssets.length > 0 && (
+                      <optgroup label="My Assigned Equipment">
+                        {userAssets.map(a => (
+                          <option key={`my-${a.asset_id}`} value={a.asset_id}>
+                            {a.asset_id} — {a.brand} {a.model} ({a.type}) [My Equipment]
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {allAssets && allAssets.length > 0 && (
+                      <optgroup label="All Company Assets">
+                        {allAssets.map(a => (
+                          <option key={`all-${a.asset_id}`} value={a.asset_id}>
+                            {a.asset_id} — {a.brand} {a.model} ({a.type}) {a.assigned_to ? `[Assigned: ${a.assigned_to}]` : '[In Depository]'}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </>
+                )}
+              </select>
 
-                  ))}
-
-                </select>
-
-              ) : (
-
+              {currentUser.role === 'EMPLOYEE' && (!userAssets || userAssets.length === 0) && (
                 <div style={{
-
                   padding: "0.6rem 0.85rem",
-
                   background: "var(--bg-subtle)",
-
                   borderRadius: "var(--radius-md)",
-
                   fontSize: "0.82rem",
-
                   color: "var(--text-secondary)",
-
-                  border: "1px dashed var(--border-light)"
-
+                  border: "1px dashed var(--border-light)",
+                  marginTop: "0.4rem"
                 }}>
-
                   No hardware devices currently assigned to your account. You may submit software, network, access, or general tickets.
-
                 </div>
-
               )}
 
+              {selectedAssetId && (
+                <div style={{
+                  fontSize: "0.78rem",
+                  color: "var(--primary)",
+                  marginTop: "0.35rem",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.35rem"
+                }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: "15px" }}>link</span>
+                  <span>Ticket linked to Hardware Asset: <strong>{selectedAssetId}</strong></span>
+                </div>
+              )}
             </div>
-
           )}
 
 
