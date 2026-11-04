@@ -10,6 +10,7 @@ Meets Capstone Specification Section 12, 38, and 41:
 """
 
 import sys
+import asyncio
 from pathlib import Path
 from typing import Optional
 from contextlib import asynccontextmanager
@@ -49,7 +50,6 @@ from app.services.websocket_manager import ws_manager
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: Capture running event loop for threadsafe WebSocket notifications
-    from app.services.websocket_manager import ws_manager
     try:
         ws_manager.set_event_loop(asyncio.get_running_loop())
     except Exception:
@@ -115,7 +115,9 @@ async def domain_exception_handler(request: Request, exc: ITAssetBaseException):
 
 FRONTEND_DIR = ROOT_DIR / "frontend"
 
-# Mount Frontend static assets (CSS, JS)
+# Mount Frontend static assets (CSS, JS, images, full directory)
+if FRONTEND_DIR.exists():
+    app.mount("/frontend", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
 if (FRONTEND_DIR / "css").exists():
     app.mount("/css", StaticFiles(directory=str(FRONTEND_DIR / "css")), name="css")
 if (FRONTEND_DIR / "js").exists():
@@ -129,6 +131,7 @@ if (FRONTEND_DIR / "images").exists():
 # =====================================================================
 @app.get("/", tags=["Dashboard"])
 @app.get("/dashboard", tags=["Dashboard"])
+@app.get("/index.html", tags=["Dashboard"])
 def serve_dashboard():
     """Serves the interactive React Single Page Application (SPA)."""
     index_file = FRONTEND_DIR / "index.html"
@@ -144,6 +147,12 @@ def serve_dashboard():
         "docs": "/docs",
         "redoc": "/redoc",
     }
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    """Silences browser favicon.ico request warnings with HTTP 204."""
+    return JSONResponse(status_code=status.HTTP_204_NO_CONTENT, content=None)
 
 
 @app.get("/health", tags=["Health"])
