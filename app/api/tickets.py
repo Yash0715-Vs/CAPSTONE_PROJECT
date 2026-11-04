@@ -15,6 +15,7 @@ from typing import List, Optional
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from app.database.connection import get_db
 from app.database.repositories import TicketRepository, UserRepository, ActivityLogRepository
@@ -31,7 +32,7 @@ from app.schemas.ticket import (
 )
 from app.services.auth_service import get_current_user, require_roles
 from app.services.ticket_classifier import TicketClassifier
-from app.services.assignment_service import auto_assign_ticket
+from app.services.assignment_service import auto_assign_ticket, get_least_loaded_support_user
 from app.services.websocket_manager import ws_manager
 
 router = APIRouter(prefix="/tickets", tags=["Tickets"])
@@ -137,26 +138,38 @@ def create_ticket(
                 detail=f"Asset '{ticket_in.asset_id}' is not assigned to your account."
             )
 
-    # Generate robust next Ticket ID (e.g. INC-1056)
-    last_ticket = session.query(TicketDB).order_by(TicketDB.id.desc()).first()
-    next_num = (last_ticket.id + 1) if last_ticket else 1
-    generated_ticket_id = f"INC-{1000 + next_num}"
-    while TicketRepository.get_by_ticket_id(session, generated_ticket_id):
-        next_num += 1
+    # Generate robust next Ticket ID with concurrency retry
+    max_retries = 5
+    saved = None
+    for attempt in range(max_retries):
+        last_ticket = session.query(TicketDB).order_by(TicketDB.id.desc()).first()
+        next_num = (last_ticket.id + 1 + attempt) if last_ticket else (1 + attempt)
         generated_ticket_id = f"INC-{1000 + next_num}"
+        while TicketRepository.get_by_ticket_id(session, generated_ticket_id):
+            next_num += 1
+            generated_ticket_id = f"INC-{1000 + next_num}"
 
-    ticket = TicketDB(
-        ticket_id=generated_ticket_id,
-        title=ticket_in.title,
-        description=ticket_in.description,
-        category=category,
-        priority=priority,
-        status="OPEN",
-        created_by=current_user.user_id,
-        asset_id=ticket_in.asset_id,
-        created_date=datetime.now(timezone.utc),
-    )
-    saved = TicketRepository.create(session, ticket)
+        ticket = TicketDB(
+            ticket_id=generated_ticket_id,
+            title=ticket_in.title,
+            description=ticket_in.description,
+            category=category,
+            priority=priority,
+            status="OPEN",
+            created_by=current_user.user_id,
+            asset_id=ticket_in.asset_id,
+            created_date=datetime.now(timezone.utc),
+        )
+        try:
+            saved = TicketRepository.create(session, ticket)
+            break
+        except IntegrityError:
+            session.rollback()
+            if attempt == max_retries - 1:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to generate unique ticket ID under concurrent traffic. Please retry."
+                )
     ActivityLogRepository.log(
         session, "TICKET_CREATED", current_user.user_id, f"Created {saved.ticket_id} ({category}/{priority})"
     )
@@ -526,9 +539,10 @@ def reopen_ticket(
             detail="Support specialists cannot reject resolution. Only the ticket creator or an Administrator can report that the issue still exists."
         )
 
-    # Change status back to IN_PROGRESS, keeping the existing assigned specialist
+    # Change status back to IN_PROGRESS, strictly preserving the existing assigned specialist
     comment = f"Employee reported issue still exists: {reopen_in.reason.strip()}"
     ticket.closed_date = None
+    ticket.resolved_date = None
     TicketRepository.update_status(
         session=session,
         ticket_id=ticket_id,

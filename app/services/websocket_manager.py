@@ -35,6 +35,11 @@ class WebSocketNotificationManager:
     """
     def __init__(self):
         self.connections: Dict[WebSocket, AuthenticatedConnection] = {}
+        self.main_loop: Optional[asyncio.AbstractEventLoop] = None
+
+    def set_event_loop(self, loop: asyncio.AbstractEventLoop):
+        """Registers the primary application event loop for cross-thread broadcasting."""
+        self.main_loop = loop
 
     async def connect(
         self, websocket: WebSocket, user_id: Optional[str] = None, role: Optional[str] = None
@@ -193,12 +198,19 @@ class WebSocketNotificationManager:
                     self.disconnect(ws)
 
     def trigger_ticket_broadcast(self, event_type: str, ticket_data: dict):
-        """Helper to safely schedule an async broadcast from synchronous route handlers."""
+        """Helper to safely schedule an async broadcast from synchronous worker threads or async contexts."""
+        coro = self.broadcast_ticket_event(event_type, ticket_data)
+        if self.main_loop and self.main_loop.is_running():
+            try:
+                asyncio.run_coroutine_threadsafe(coro, self.main_loop)
+                return
+            except Exception:
+                pass
+
         try:
             loop = asyncio.get_running_loop()
-            loop.create_task(self.broadcast_ticket_event(event_type, ticket_data))
+            loop.create_task(coro)
         except RuntimeError:
-            # No running loop in synchronous thread
             pass
 
 

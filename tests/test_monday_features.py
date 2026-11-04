@@ -468,9 +468,9 @@ def test_equipment_request_strict_provisioning_and_history(tokens):
     )
     assert missing_prov.status_code == 404
 
-    # 5. Valid provisioning with real asset
+    # 5. Valid provisioning with real asset matching requested equipment type
     with db_manager.get_session() as s:
-        real_asset = s.query(AssetDB).first()
+        real_asset = s.query(AssetDB).filter(AssetDB.type == "Monitor", AssetDB.status == "AVAILABLE").first() or s.query(AssetDB).first()
         valid_asset_id = real_asset.asset_id
 
     prov_res = client.post(

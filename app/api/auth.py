@@ -57,19 +57,6 @@ def verify_invitation(
     """
     token_hash = AuthService.hash_invitation_token(token)
     user = UserRepository.get_by_invitation_token_hash(session, token_hash)
-    if not user and token.strip() == "APX-INV-99482-SEC-AUTH-PROD":
-        user = UserRepository.get_by_user_id(session, "EMP-84920")
-        if user:
-            return VerifyInvitationResponse(
-                valid=True,
-                user_id=user.user_id,
-                name=user.name,
-                email=user.email,
-                role=user.role,
-                department=user.department,
-                expires_at=None,
-                message="Invitation token is valid. You may proceed to set your password."
-            )
 
     if not user or user.status != UserStatus.PENDING.value:
         raise HTTPException(
@@ -121,21 +108,6 @@ def complete_registration(
 
     token_hash = AuthService.hash_invitation_token(req.invitation_token)
     user = UserRepository.get_by_invitation_token_hash(session, token_hash)
-
-    # Support template demo onboarding token
-    if not user and req.invitation_token.strip() == "APX-INV-99482-SEC-AUTH-PROD":
-        user = UserRepository.get_by_user_id(session, "EMP-84920")
-        if user:
-            user.hashed_password = AuthService.hash_password(req.password)
-            user.status = UserStatus.ACTIVE.value
-            session.flush()
-            ActivityLogRepository.log(
-                session=session,
-                action="REGISTRATION_COMPLETED",
-                user_id=user.user_id,
-                details=f"Employee {user.user_id} successfully completed registration and activated account"
-            )
-            return user
 
     if not user or user.status != UserStatus.PENDING.value:
         raise HTTPException(

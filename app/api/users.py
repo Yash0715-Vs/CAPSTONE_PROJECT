@@ -18,7 +18,15 @@ from sqlalchemy.orm import Session
 
 from app.database.connection import get_db
 from app.database.repositories import UserRepository, ActivityLogRepository
-from app.models.db_models import UserDB, UserStatus, UserRole
+from app.models.db_models import (
+    UserDB,
+    UserStatus,
+    UserRole,
+    TicketDB,
+    AssetDB,
+    EquipmentRequestDB,
+    AssetAssignmentDB,
+)
 from app.schemas.user import UserCreate, UserCreateResponse, UserInviteRequest, UserUpdate, UserResponse
 from app.services.auth_service import AuthService, get_current_user, require_roles
 
@@ -312,6 +320,29 @@ def delete_user(
     user = UserRepository.get_by_user_id(session, user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"User '{user_id}' not found.")
+
+    # Check for historical relations to preserve referential and audit integrity
+    has_tickets = session.query(TicketDB).filter((TicketDB.created_by == user_id) | (TicketDB.assigned_to == user_id)).first()
+    has_assets = session.query(AssetDB).filter(AssetDB.assigned_to == user_id).first()
+    has_assignments = session.query(AssetAssignmentDB).filter(AssetAssignmentDB.employee_id == user_id).first()
+    has_equipment_reqs = session.query(EquipmentRequestDB).filter(
+        (EquipmentRequestDB.requested_by == user_id) | (EquipmentRequestDB.approved_by == user_id)
+    ).first()
+
+    has_history = bool(has_tickets or has_assets or has_assignments or has_equipment_reqs)
+    if has_history:
+        # Soft delete: disable the user account to maintain referential and audit integrity
+        user.status = UserStatus.DISABLED.value
+        session.flush()
+        ActivityLogRepository.log(
+            session,
+            "ADMIN_DISABLE_USER",
+            admin.user_id,
+            f"Disabled user {user_id} (soft-deleted to preserve historical ticket and asset audit records)"
+        )
+        return {
+            "message": f"User '{user_id}' has existing historical tickets or asset assignments. Account has been deactivated (DISABLED) to preserve audit integrity."
+        }
 
     session.delete(user)
     session.flush()

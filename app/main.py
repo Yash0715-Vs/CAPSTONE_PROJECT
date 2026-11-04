@@ -48,33 +48,19 @@ from app.services.websocket_manager import ws_manager
 # =====================================================================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Validate configuration and ensure database tables
+    # Startup: Capture running event loop for threadsafe WebSocket notifications
+    from app.services.websocket_manager import ws_manager
+    try:
+        ws_manager.set_event_loop(asyncio.get_running_loop())
+    except Exception:
+        pass
+
+    # Validate configuration and ensure database tables
     config.validate_production_configuration()
     print("[STARTUP] Checking database connection and initializing tables...")
     try:
         db_manager.init_tables()
         print("[STARTUP] Database connection verified successfully.")
-
-        # Ensure Stitch demo employee EMP-84920 exists for immediate account setup testing
-        from datetime import datetime, timedelta, timezone
-        from app.models.db_models import UserDB, UserStatus
-        from app.services.auth_service import AuthService
-        with db_manager.get_session() as s:
-            if not s.query(UserDB).filter(UserDB.user_id == "EMP-84920").first():
-                demo_hash = AuthService.hash_invitation_token("APX-INV-99482-SEC-AUTH-PROD")
-                s.add(UserDB(
-                    user_id="EMP-84920",
-                    name="Sarah Jenkins",
-                    email="s.jenkins@company.com",
-                    hashed_password=AuthService.hash_password("ValidPassword#123"),
-                    role="EMPLOYEE",
-                    department="Engineering",
-                    status=UserStatus.PENDING.value,
-                    invitation_token_hash=demo_hash,
-                    invitation_expires_at=datetime.now(timezone.utc) + timedelta(days=365),
-                    created_at=datetime.now(timezone.utc)
-                ))
-                s.commit()
     except Exception as err:
         print(f"[STARTUP CRITICAL] Database initialization failed: {err}")
         if config.APP_ENV.lower() not in ("test", "testing"):

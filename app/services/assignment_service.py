@@ -13,7 +13,7 @@ Meets Monday Technical Requirement:
 
 import threading
 from contextlib import contextmanager
-from typing import Optional
+from typing import Optional, List
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
 
@@ -55,9 +55,13 @@ def acquire_assignment_lock(db: Session, timeout_seconds: int = 10):
                 got_mysql_lock = (res == 1)
             except Exception:
                 got_mysql_lock = False
+            if not got_mysql_lock:
+                raise TimeoutError("Failed to acquire distributed lock for ticket auto-assignment")
         elif is_pg:
             try:
                 db.execute(text("SELECT pg_advisory_xact_lock(hashtext('auto_assignment_global_lock'))"))
+            except Exception:
+                pass
             except Exception:
                 pass
 
@@ -72,15 +76,20 @@ def acquire_assignment_lock(db: Session, timeout_seconds: int = 10):
                     pass
 
 
-def get_least_loaded_support_user(db: Session) -> Optional[UserDB]:
+def get_least_loaded_support_user(
+    db: Session, exclude_user_ids: Optional[List[str]] = None
+) -> Optional[UserDB]:
     """
     Finds the active SUPPORT specialist with the minimum number of active tickets.
+    Optionally excludes specified user IDs (e.g. for peer reassignments).
     Tie-breaking:
     1. Furthest time since last ticket assignment (earliest max assignment date)
     2. Deterministic user_id ascending
     """
     db.expire_all()
     support_users_query = db.query(UserDB).filter(UserDB.role == "SUPPORT", UserDB.status == "ACTIVE")
+    if exclude_user_ids:
+        support_users_query = support_users_query.filter(~UserDB.user_id.in_(exclude_user_ids))
     if db.bind and db.bind.dialect.name in ("mysql", "postgresql"):
         support_users_query = support_users_query.with_for_update()
     support_users = support_users_query.all()

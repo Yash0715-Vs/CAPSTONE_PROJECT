@@ -108,6 +108,7 @@ def get_sla_report(
             priority=pri,
             status=stat,
             created_date=dt.created_date,
+            resolved_date=getattr(dt, "resolved_date", None),
             closed_date=dt.closed_date,
         ))
 

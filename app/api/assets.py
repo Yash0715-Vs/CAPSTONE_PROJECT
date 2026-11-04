@@ -12,12 +12,14 @@ Meets Capstone Specification Section 12:
 """
 
 from typing import List, Optional
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import desc
 
 from app.database.connection import get_db
 from app.database.repositories import AssetRepository, UserRepository, ActivityLogRepository
-from app.models.db_models import AssetDB, UserDB
+from app.models.db_models import AssetDB, UserDB, AssetAssignmentDB
 from app.schemas.asset import AssetCreate, AssetUpdate, AssetResponse, AssetAssignRequest
 from app.services.auth_service import get_current_user, require_roles
 
@@ -134,7 +136,22 @@ def update_asset(
             )
         asset.serial_number = update_in.serial_number
     if update_in.status is not None:
+        if asset.status == "ASSIGNED" and update_in.status != "ASSIGNED":
+            # Close active assignment record
+            latest_assignment = (
+                session.query(AssetAssignmentDB)
+                .filter(
+                    AssetAssignmentDB.asset_id == asset_id,
+                    AssetAssignmentDB.returned_date.is_(None)
+                )
+                .order_by(desc(AssetAssignmentDB.assigned_date))
+                .first()
+            )
+            if latest_assignment:
+                latest_assignment.returned_date = datetime.now(timezone.utc)
+            asset.assigned_to = None
         asset.status = update_in.status
+
     if update_in.assigned_to is not None:
         if update_in.assigned_to:
             emp = UserRepository.get_by_user_id(session, update_in.assigned_to)
@@ -142,6 +159,11 @@ def update_asset(
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"Employee '{update_in.assigned_to}' not found."
+                )
+            if emp.status != "ACTIVE":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Employee '{update_in.assigned_to}' has status '{emp.status}'. Assets can only be assigned to ACTIVE employees."
                 )
             asset.assigned_to = update_in.assigned_to
         else:
@@ -165,6 +187,12 @@ def delete_asset(
     if not asset:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Asset '{asset_id}' not found.")
 
+    if asset.status == "ASSIGNED" or asset.assigned_to is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot delete asset '{asset_id}' while it is currently ASSIGNED to employee '{asset.assigned_to}'. Please return the asset first."
+        )
+
     session.delete(asset)
     session.flush()
     ActivityLogRepository.log(session, "ASSET_DELETED", admin.user_id, f"Deleted asset {asset_id}")
@@ -185,6 +213,11 @@ def assign_asset_to_employee(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Employee '{assign_req.employee_id}' not found."
+        )
+    if emp.status != "ACTIVE":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Employee '{assign_req.employee_id}' has status '{emp.status}'. Assets can only be assigned to ACTIVE employees."
         )
 
     try:

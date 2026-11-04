@@ -60,7 +60,8 @@ class Ticket:
         status: TicketStatus = TicketStatus.OPEN,
         created_date: Optional[datetime] = None,
         resolution: Optional[str] = None,
-        closed_date: Optional[datetime] = None
+        closed_date: Optional[datetime] = None,
+        resolved_date: Optional[datetime] = None
     ):
         if not ticket_id or not ticket_id.strip():
             raise InvalidTicketError("Ticket ID cannot be empty.")
@@ -83,6 +84,7 @@ class Ticket:
         self._resolution = resolution
         self.created_date = created_date or datetime.now()
         self.closed_date = closed_date
+        self.resolved_date = resolved_date
 
     @property
     def status(self) -> TicketStatus:
@@ -126,6 +128,7 @@ class Ticket:
 
         self._resolution = resolution_notes.strip()
         self._status = TicketStatus.RESOLVED
+        self.resolved_date = datetime.now()
 
     def close(self) -> None:
         """Close the ticket after resolution."""
@@ -149,6 +152,7 @@ class Ticket:
             "status": self._status.value if isinstance(self._status, TicketStatus) else str(self._status),
             "resolution": self._resolution,
             "created_date": self.created_date.isoformat(),
+            "resolved_date": self.resolved_date.isoformat() if self.resolved_date else None,
             "closed_date": self.closed_date.isoformat() if self.closed_date else None,
         }
 

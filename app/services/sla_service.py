@@ -97,9 +97,10 @@ class SLAService:
             status_text = f"ACTIVE ({hours}h {minutes}m remaining)"
 
         resolution_time_minutes: Optional[float] = None
-        if ticket.closed_date:
-            duration = ticket.closed_date - ticket.created_date
-            resolution_time_minutes = round(duration.total_seconds() / 60.0, 2)
+        comp_date = res_date if (res_date and is_completed) else _to_utc(getattr(ticket, "closed_date", None))
+        if comp_date and created_dt:
+            duration = comp_date - created_dt
+            resolution_time_minutes = round(max(0.0, duration.total_seconds() / 60.0), 2)
 
         is_active_overdue = is_breached and ticket.status not in (TicketStatus.RESOLVED, TicketStatus.CLOSED)
         is_historical_breach = is_breached and ticket.status in (TicketStatus.RESOLVED, TicketStatus.CLOSED)
@@ -124,9 +125,15 @@ class SLAService:
         Calculates the average resolution time in hours and minutes across resolved/closed tickets.
         Uses list comprehensions, lambda, and map/reduce concepts.
         """
+        def _get_res_date(t):
+            return _to_utc(getattr(t, "resolved_date", None)) or _to_utc(getattr(t, "closed_date", None))
+
         valid_closed = [
             t for t in closed_tickets
-            if t.closed_date and t.status in (TicketStatus.RESOLVED, TicketStatus.CLOSED)
+            if _get_res_date(t) and (
+                t.status in (TicketStatus.RESOLVED, TicketStatus.CLOSED) or
+                (isinstance(t.status, str) and t.status in ("RESOLVED", "CLOSED"))
+            )
         ]
 
         if not valid_closed:
@@ -136,8 +143,11 @@ class SLAService:
                 "average_resolution_human": "0m",
             }
 
-        # Calculate duration in seconds for each ticket
-        durations = list(map(lambda t: (t.closed_date - t.created_date).total_seconds(), valid_closed))
+        # Calculate duration in seconds for each ticket from created_date to resolved/closed date
+        durations = list(map(
+            lambda t: max(0.0, (_get_res_date(t) - _to_utc(t.created_date)).total_seconds()),
+            valid_closed
+        ))
         avg_seconds = sum(durations) / len(durations)
         avg_minutes = round(avg_seconds / 60.0, 2)
 

@@ -4,7 +4,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688.svg)](https://fastapi.tiangolo.com/)
 [![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0-red.svg)](https://www.sqlalchemy.org/)
 [![Pylint](https://img.shields.io/badge/Pylint-10.00%2F10-brightgreen.svg)]()
-[![Tests](https://img.shields.io/badge/Pytest-84%20Passed-success.svg)]()
+[![Tests](https://img.shields.io/badge/Pytest-86%20Passed-success.svg)]()
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://www.docker.com/)
 
 An enterprise-grade, production-style **IT Asset Management and Support Ticket Management System** developed with **Python, FastAPI, SQLAlchemy 2, Alembic, MySQL 8.0 (Primary) / PostgreSQL 15, WebSockets, and a React 18 Single Page Application (SPA)**.
@@ -374,7 +374,7 @@ Copy `.env.example` to create your local `.env`:
 ```powershell
 cp .env.example .env
 ```
-Ensure you provide a strong `JWT_SECRET_KEY` (at least 32 characters in production) and configure your database connection string.
+Ensure you provide a strong `SECRET_KEY` (minimum 32 characters in production; `JWT_SECRET_KEY` is also supported) and configure your database credentials.
 
 ### 3. Activate Virtual Environment & Install Dependencies
 ```powershell
@@ -467,7 +467,7 @@ To run SonarLint in VS Code:
 ### User Management (`/users`)
 | Method | Path | Access | Description |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/users/` | Admin, Support | Lists users with pagination and role filtering. |
+| `GET` | `/users/` | Admin, Support | Lists all registered users with optional role filtering. |
 | `POST` | `/users/` | Admin Only | Creates pending user account and generates expiring invitation token. |
 | `GET` | `/users/{user_id}` | Authenticated | Retrieves profile (Employees can only view self; Admin/Support can view all). |
 | `PUT` | `/users/{user_id}` | Admin Only | Updates user details or role. Validates email uniqueness. |
@@ -488,7 +488,7 @@ To run SonarLint in VS Code:
 | `GET` | `/tickets` | Authenticated | Lists tickets. Employees restricted to tickets created by them. |
 | `POST` | `/tickets` | Authenticated | Creates support ticket with automated regex priority classification. |
 | `GET` | `/tickets/{ticket_id}` | Authenticated | Ticket details. Employees denied access to tickets created by others. |
-| `POST` | `/tickets/{ticket_id}/assign` | Admin, Support | Assigns ticket to support engineer. |
+| `POST` | `/tickets/{ticket_id}/assign` | Admin Only | Assigns ticket to an active IT Support specialist. |
 | `POST` | `/tickets/{ticket_id}/resolve`| Admin, Support | Resolves ticket with resolution notes and stops SLA clock. |
 | `POST` | `/tickets/{ticket_id}/close` | Authenticated | Confirms closure. Standard employees can only close own resolved tickets. |
 

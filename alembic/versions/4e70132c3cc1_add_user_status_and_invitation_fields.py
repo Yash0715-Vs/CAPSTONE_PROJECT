@@ -19,11 +19,21 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """Upgrade schema."""
-    op.add_column('users', sa.Column('status', sa.String(length=30), nullable=False, server_default='ACTIVE'))
-    op.add_column('users', sa.Column('invitation_token_hash', sa.String(length=255), nullable=True))
-    op.add_column('users', sa.Column('invitation_expires_at', sa.DateTime(), nullable=True))
-    op.create_index(op.f('ix_users_invitation_token_hash'), 'users', ['invitation_token_hash'], unique=False)
+    """Add user status and invitation fields to users table safely."""
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    existing_cols = [c['name'] for c in inspector.get_columns('users')]
+
+    if 'status' not in existing_cols:
+        op.add_column('users', sa.Column('status', sa.String(length=30), nullable=False, server_default='ACTIVE'))
+    if 'invitation_token_hash' not in existing_cols:
+        op.add_column('users', sa.Column('invitation_token_hash', sa.String(length=255), nullable=True))
+    if 'invitation_expires_at' not in existing_cols:
+        op.add_column('users', sa.Column('invitation_expires_at', sa.DateTime(), nullable=True))
+
+    existing_indices = [idx['name'] for idx in inspector.get_indexes('users')]
+    if 'ix_users_invitation_token_hash' not in existing_indices:
+        op.create_index(op.f('ix_users_invitation_token_hash'), 'users', ['invitation_token_hash'], unique=False)
 
 
 def downgrade() -> None:
@@ -32,4 +42,3 @@ def downgrade() -> None:
     op.drop_column('users', 'invitation_expires_at')
     op.drop_column('users', 'invitation_token_hash')
     op.drop_column('users', 'status')
-

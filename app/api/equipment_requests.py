@@ -21,11 +21,18 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, Field
 
 from app.database.connection import get_db
 from app.database.repositories import ActivityLogRepository
-from app.models.db_models import EquipmentRequestDB, EquipmentRequestHistoryDB, AssetDB, UserDB
+from app.models.db_models import (
+    EquipmentRequestDB,
+    EquipmentRequestHistoryDB,
+    AssetDB,
+    UserDB,
+    AssetAssignmentDB,
+)
 from app.services.auth_service import get_current_user, require_roles
 
 router = APIRouter(prefix="/equipment-requests", tags=["Equipment Requests"])
@@ -70,25 +77,37 @@ def create_equipment_request(
             detail=f"Invalid equipment type. Allowed types: {', '.join(VALID_EQUIPMENT_TYPES)}"
         )
 
-    last = session.query(EquipmentRequestDB).order_by(EquipmentRequestDB.id.desc()).first()
-    next_num = (last.id + 1) if last else 1
-    request_id = f"EQR-{1000 + next_num}"
-    while session.query(EquipmentRequestDB).filter(EquipmentRequestDB.request_id == request_id).first():
-        next_num += 1
-        request_id = f"EQR-{1000 + next_num}"
-
     now = datetime.now(timezone.utc)
-    req = EquipmentRequestDB(
-        request_id=request_id,
-        requested_by=current_user.user_id,
-        equipment_type=req_in.equipment_type,
-        reason=req_in.reason,
-        status="PENDING",
-        created_at=now,
-        updated_at=now,
-    )
-    session.add(req)
-    session.flush()
+    max_retries = 5
+    req = None
+    for attempt in range(max_retries):
+        last = session.query(EquipmentRequestDB).order_by(EquipmentRequestDB.id.desc()).first()
+        next_num = (last.id + 1 + attempt) if last else (1 + attempt)
+        request_id = f"EQR-{1000 + next_num}"
+        while session.query(EquipmentRequestDB).filter(EquipmentRequestDB.request_id == request_id).first():
+            next_num += 1
+            request_id = f"EQR-{1000 + next_num}"
+
+        req = EquipmentRequestDB(
+            request_id=request_id,
+            requested_by=current_user.user_id,
+            equipment_type=req_in.equipment_type,
+            reason=req_in.reason,
+            status="PENDING",
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(req)
+        try:
+            session.flush()
+            break
+        except IntegrityError:
+            session.rollback()
+            if attempt == max_retries - 1:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Could not generate unique equipment request ID due to concurrent traffic. Please retry."
+                )
 
     # Persistent audit history record
     hist = EquipmentRequestHistoryDB(
@@ -321,14 +340,34 @@ def provision_equipment_request(
             detail=f"Asset '{clean_asset_id}' not found in asset inventory."
         )
 
-    if asset.status in ("DECOMMISSIONED", "RETIRED"):
+    if asset.status != "AVAILABLE" or asset.assigned_to is not None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Asset '{clean_asset_id}' has status '{asset.status}' and cannot be provisioned to employees."
+            detail=f"Asset '{clean_asset_id}' is not available for provisioning (current status: '{asset.status}', assigned to: {asset.assigned_to})."
+        )
+
+    # Equipment type matching check
+    if (asset.type or "").strip().lower() != (req.equipment_type or "").strip().lower():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Asset '{clean_asset_id}' type '{asset.type}' does not match requested equipment type '{req.equipment_type}'."
         )
 
     old_status = req.status
     now = datetime.now(timezone.utc)
+
+    # Atomically assign the asset in the inventory system to the requesting employee
+    asset.status = "ASSIGNED"
+    asset.assigned_to = req.requested_by
+
+    assignment = AssetAssignmentDB(
+        asset_id=clean_asset_id,
+        employee_id=req.requested_by,
+        assigned_date=now,
+        notes=f"Provisioned via Equipment Request #{request_id}"
+    )
+    session.add(assignment)
+
     req.provisioned_asset_id = clean_asset_id
     req.status = "PROVISIONED"
     if action.admin_notes:

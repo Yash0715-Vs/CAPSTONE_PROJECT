@@ -169,19 +169,13 @@ class TicketResponse(BaseModel):
     resolution: Optional[str] = None
 
     created_date: Optional[datetime] = None
-
+    resolved_date: Optional[datetime] = None
     closed_date: Optional[datetime] = None
-
     sla_deadline: Optional[datetime] = None
-
     sla_status: Optional[str] = None
-
     is_breached: Optional[bool] = None
 
-
-
-    @field_serializer("created_date", "closed_date", "sla_deadline")
-
+    @field_serializer("created_date", "resolved_date", "closed_date", "sla_deadline")
     def serialize_dates(self, dt: Optional[datetime]) -> Optional[str]:
 
         if dt is None:

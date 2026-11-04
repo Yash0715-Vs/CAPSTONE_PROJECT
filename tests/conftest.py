@@ -61,22 +61,39 @@ def setup_test_database():
     Base.metadata.drop_all(test_engine)
     Base.metadata.create_all(test_engine)
 
-    # 2. Clone demonstration baseline into the test database
+    # 2. Seed baseline deterministic dataset into the isolated test database
     orig_factory = db_manager._session_factory
     test_session = TestSessionLocal()
 
     try:
-        with orig_factory() as live_session:
-            for model in [UserDB, AssetDB, AssetAssignmentDB, TicketDB, TicketHistoryDB, ActivityLogDB, EquipmentRequestDB, EquipmentRequestHistoryDB]:
-                rows = live_session.query(model).all()
-                for row in rows:
-                    live_session.expunge(row)
-                    test_session.merge(row)
-                test_session.flush()
-            test_session.commit()
+        from app.services.auth_service import AuthService
+        hashed_pw = AuthService.hash_password("password")
+        seed_users = [
+            UserDB(user_id="ADM-001", name="System Admin", email="admin@company.com", hashed_password=hashed_pw, role="ADMIN", department="IT Operations", status="ACTIVE"),
+            UserDB(user_id="IT-501", name="Sarah Connor", email="s.connor@company.com", hashed_password=hashed_pw, role="SUPPORT", department="IT Support", status="ACTIVE"),
+            UserDB(user_id="IT-502", name="John Matrix", email="j.matrix@company.com", hashed_password=hashed_pw, role="SUPPORT", department="IT Support", status="ACTIVE"),
+            UserDB(user_id="IT-504", name="Kyle Reese", email="k.reese@company.com", hashed_password=hashed_pw, role="SUPPORT", department="IT Support", status="ACTIVE"),
+            UserDB(user_id="EMP-101", name="Alice Smith", email="a.smith@company.com", hashed_password=hashed_pw, role="EMPLOYEE", department="Marketing", status="ACTIVE"),
+            UserDB(user_id="EMP-102", name="Bob Jones", email="b.jones@company.com", hashed_password=hashed_pw, role="EMPLOYEE", department="Finance", status="ACTIVE"),
+        ]
+        for u in seed_users:
+            if not test_session.query(UserDB).filter(UserDB.user_id == u.user_id).first():
+                test_session.add(u)
+        test_session.flush()
+
+        seed_assets = [
+            AssetDB(asset_id="LAP-1025", type="Laptop", brand="Dell", model="Latitude 5420", serial_number="SN-DEL-1025", status="AVAILABLE"),
+            AssetDB(asset_id="LAP-1026", type="Laptop", brand="Lenovo", model="ThinkPad T14", serial_number="SN-LEN-1026", status="AVAILABLE"),
+            AssetDB(asset_id="MON-2001", type="Monitor", brand="Dell", model="Ultrasharp U2720Q", serial_number="SN-DEL-2001", status="AVAILABLE"),
+        ]
+        for a in seed_assets:
+            if not test_session.query(AssetDB).filter(AssetDB.asset_id == a.asset_id).first():
+                test_session.add(a)
+        test_session.flush()
+        test_session.commit()
     except Exception as err:
         test_session.rollback()
-        print(f"[conftest warning] Could not clone demonstration data to SQLite: {err}")
+        print(f"[conftest error] Could not seed test data to SQLite: {err}")
     finally:
         test_session.close()
 

@@ -33,6 +33,13 @@ target_metadata = Base.metadata
 # ... etc.
 
 
+def _get_database_url() -> str:
+    url = config.get_main_option("sqlalchemy.url")
+    if not url or "user:password" in url:
+        return app_config.get_database_url()
+    return url
+
+
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
 
@@ -45,7 +52,7 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    url = app_config.get_database_url()
+    url = _get_database_url()
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -65,7 +72,7 @@ def run_migrations_online() -> None:
 
     """
     configuration = config.get_section(config.config_ini_section, {})
-    configuration["sqlalchemy.url"] = app_config.get_database_url()
+    configuration["sqlalchemy.url"] = _get_database_url()
     connectable = engine_from_config(
         configuration,
         prefix="sqlalchemy.",

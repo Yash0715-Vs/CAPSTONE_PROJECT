@@ -94,6 +94,11 @@ class AssetRepository:
         if not asset:
             raise ValueError(f"Asset '{asset_id}' not found.")
 
+        if asset.status != "AVAILABLE" or asset.assigned_to is not None:
+            raise ValueError(
+                f"Asset '{asset_id}' cannot be assigned because its status is '{asset.status}' (must be AVAILABLE)."
+            )
+
         asset.assigned_to = employee_id
         asset.status = "ASSIGNED"
 
@@ -113,6 +118,11 @@ class AssetRepository:
         asset = AssetRepository.get_by_asset_id(session, asset_id)
         if not asset:
             raise ValueError(f"Asset '{asset_id}' not found.")
+
+        if asset.status != "ASSIGNED":
+            raise ValueError(
+                f"Asset '{asset_id}' cannot be returned because its status is '{asset.status}' (must be ASSIGNED)."
+            )
 
         # Update assignment record with return date
         latest_assignment = (
