@@ -13,7 +13,7 @@ Meets Capstone Specification Section 7:
 """
 
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 
@@ -24,6 +24,14 @@ if str(ROOT_DIR) not in sys.path:
 
 from app.models.ticket import Ticket, TicketPriority, TicketStatus
 from app.utils.exceptions import SLAConfigurationError
+
+def _to_utc(dt: Optional[datetime]) -> Optional[datetime]:
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
 
 
 class SLAService:
@@ -62,11 +70,16 @@ class SLAService:
         Evaluates current SLA health for a ticket.
         Returns deadline, time remaining or time breached, and breach status.
         """
-        now = current_time or datetime.now()
-        deadline = cls.calculate_deadline(ticket.created_date, ticket.priority)
+        now = _to_utc(current_time) or datetime.now(timezone.utc)
+        created_dt = _to_utc(ticket.created_date)
+        deadline = cls.calculate_deadline(created_dt, ticket.priority)
 
-        # If ticket is already closed/resolved, measure against closed_date
-        comparison_time = ticket.closed_date if (ticket.closed_date and ticket.status in (TicketStatus.RESOLVED, TicketStatus.CLOSED)) else now
+        # Measure against resolved_date (or closed_date) if ticket is resolved/closed
+        res_date = _to_utc(getattr(ticket, "resolved_date", None)) or _to_utc(getattr(ticket, "closed_date", None))
+        is_completed = (ticket.status in (TicketStatus.RESOLVED, TicketStatus.CLOSED)) or (
+            isinstance(ticket.status, str) and ticket.status in ("RESOLVED", "CLOSED")
+        )
+        comparison_time = res_date if (res_date and is_completed) else now
         is_breached = comparison_time > deadline
         time_difference = deadline - comparison_time
 

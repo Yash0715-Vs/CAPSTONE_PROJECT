@@ -205,7 +205,21 @@ def update_ticket(
     if update_in.priority:
         ticket.priority = update_in.priority
     if update_in.status:
-        TicketRepository.update_status(session, ticket_id, update_in.status, staff_user.user_id)
+        if update_in.status != "IN_PROGRESS":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Invalid status transition. Direct updates via PUT /tickets/{id} are strictly limited "
+                    "to moving an ASSIGNED ticket to IN_PROGRESS. Tickets must be resolved via POST /tickets/{id}/resolve, "
+                    "closed via POST /tickets/{id}/close, or reopened via POST /tickets/{id}/reopen."
+                )
+            )
+        if ticket.status != "ASSIGNED":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot start ticket: only tickets in 'ASSIGNED' status can be moved to 'IN_PROGRESS' (current status: '{ticket.status}')."
+            )
+        TicketRepository.update_status(session, ticket_id, "IN_PROGRESS", staff_user.user_id, comment="Work started by engineer")
 
     session.flush()
     ActivityLogRepository.log(session, "TICKET_UPDATED", staff_user.user_id, f"Updated ticket {ticket_id}")
@@ -240,10 +254,15 @@ def assign_ticket(
             detail=f"IT Support user '{assign_req.assigned_to}' not found."
         )
 
-    if support_user.role not in ("SUPPORT", "ADMIN"):
+    if support_user.role != "SUPPORT":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"User '{assign_req.assigned_to}' has role '{support_user.role}'. Tickets can only be assigned to SUPPORT or ADMIN staff."
+            detail=f"User '{assign_req.assigned_to}' has role '{support_user.role}'. Tickets can only be assigned to IT Support specialists (SUPPORT role)."
+        )
+    if (support_user.status or "ACTIVE").upper() != "ACTIVE":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"IT Support engineer '{assign_req.assigned_to}' is not active (current status: '{support_user.status}'). Tickets can only be assigned to ACTIVE staff."
         )
 
     previous_assignee = ticket.assigned_to
@@ -320,9 +339,16 @@ def resolve_ticket(
         now_utc = datetime.now(timezone.utc)
         emp_id = ticket.created_by
 
+        # Validate that replacement asset matches the damaged asset equipment type
+        old_asset = session.query(AssetDB).filter(AssetDB.asset_id == target_old_asset_id).first() if target_old_asset_id else None
+        if old_asset and (old_asset.type or "").strip().lower() != (new_asset.type or "").strip().lower():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Replacement asset type mismatch: Damaged asset '{old_asset.asset_id}' is '{old_asset.type}', but replacement '{new_asset.asset_id}' is '{new_asset.type}'. Replacement hardware must be of the same equipment category."
+            )
+
         # Retire / Decommission old asset if exists
         if target_old_asset_id:
-            old_asset = session.query(AssetDB).filter(AssetDB.asset_id == target_old_asset_id).first()
             if old_asset:
                 latest_assign = (
                     session.query(AssetAssignmentDB)
@@ -374,6 +400,7 @@ def resolve_ticket(
 
     full_resolution = resolve_req.resolution + replacement_note
     ticket.resolution = full_resolution
+    ticket.resolved_date = datetime.now(timezone.utc)
     TicketRepository.update_status(
         session=session,
         ticket_id=ticket_id,

@@ -158,6 +158,7 @@ class TicketDB(Base):
     asset_id = Column(String(50), ForeignKey("assets.asset_id"), nullable=True, index=True)
     resolution = Column(Text, nullable=True)
     created_date = Column(DateTime, default=datetime.utcnow, nullable=False)
+    resolved_date = Column(DateTime, nullable=True)
     closed_date = Column(DateTime, nullable=True)
 
     # Relationships
@@ -180,8 +181,9 @@ class TicketDB(Base):
         deadline = self.sla_deadline
         if not deadline:
             return False
-        is_closed = bool(self.closed_date and self.status in ("RESOLVED", "CLOSED"))
-        comp = self.closed_date if is_closed else datetime.now(timezone.utc)
+        is_completed = bool(self.status in ("RESOLVED", "CLOSED"))
+        stop_timestamp = (self.resolved_date or self.closed_date) if is_completed else None
+        comp = stop_timestamp if stop_timestamp is not None else datetime.now(timezone.utc)
         if deadline.tzinfo is None and comp.tzinfo is not None:
             deadline = deadline.replace(tzinfo=timezone.utc)
         elif deadline.tzinfo is not None and comp.tzinfo is None:
@@ -206,6 +208,7 @@ class TicketDB(Base):
             "asset_id": self.asset_id,
             "resolution": self.resolution,
             "created_date": _iso_utc(self.created_date),
+            "resolved_date": _iso_utc(self.resolved_date),
             "closed_date": _iso_utc(self.closed_date),
             "sla_deadline": _iso_utc(self.sla_deadline),
             "sla_status": self.sla_status,

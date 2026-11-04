@@ -76,7 +76,9 @@ async def lifespan(app: FastAPI):
                 ))
                 s.commit()
     except Exception as err:
-        print(f"[STARTUP WARNING] Database auto-init error: {err}")
+        print(f"[STARTUP CRITICAL] Database initialization failed: {err}")
+        if config.APP_ENV.lower() not in ("test", "testing"):
+            raise RuntimeError(f"Database connection and initialization failed: {err}") from err
     yield
     # Shutdown
     print("[SHUTDOWN] Closing database engine pools...")
@@ -160,14 +162,20 @@ def serve_dashboard():
 
 @app.get("/health", tags=["Health"])
 def health_check():
-    """Returns system status, active database dialect, and OpenAPI links."""
-    return {
+    """Returns system status, active database dialect, and verified connectivity."""
+    db_connected = db_manager.test_connection()
+    status_str = "ONLINE" if db_connected else "DEGRADED"
+    response_data = {
         "system": "Smart IT Asset & Support Ticket Management System",
-        "status": "ONLINE",
+        "status": status_str,
+        "database_connected": db_connected,
+        "database": config.DB_TYPE.upper(),
         "docs": "/docs",
         "redoc": "/redoc",
-        "database": config.DB_TYPE.upper(),
     }
+    if not db_connected:
+        return JSONResponse(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content=response_data)
+    return response_data
 
 
 # =====================================================================

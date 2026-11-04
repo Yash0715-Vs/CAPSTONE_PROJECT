@@ -330,10 +330,11 @@ def test_ticket_assignment_history_audit_fields(tokens):
     assert auto_event["timestamp"] is not None
     initial_assignee = auto_event["new_assignee"]
 
-    # 2. Admin manually reassigns the ticket to ADM-001 (or another support user)
+    # 2. Admin manually reassigns the ticket to another active SUPPORT user (e.g. IT-502 or IT-501)
+    target_support = "IT-502" if initial_assignee != "IT-502" else "IT-501"
     reassign_res = client.post(
         f"/tickets/{ticket_id}/assign",
-        json={"assigned_to": "ADM-001"},
+        json={"assigned_to": target_support},
         headers=admin_headers
     )
     assert reassign_res.status_code == 200
@@ -347,7 +348,7 @@ def test_ticket_assignment_history_audit_fields(tokens):
     assert manual_event is not None, f"Expected MANUAL assignment record, got: {history2}"
     assert manual_event["changed_by"] == "ADM-001"
     assert manual_event["previous_assignee"] == initial_assignee
-    assert manual_event["new_assignee"] == "ADM-001"
+    assert manual_event["new_assignee"] == target_support
     assert manual_event["assignment_method"] == "MANUAL"
     assert manual_event["ticket_id"] == ticket_id
     assert manual_event["timestamp"] is not None

@@ -202,8 +202,16 @@ class TicketRepository:
 
         old_status = ticket.status
         ticket.status = new_status
-        if new_status == "CLOSED":
-            ticket.closed_date = datetime.now(timezone.utc)
+        now_utc = datetime.now(timezone.utc)
+        if new_status == "RESOLVED" and not ticket.resolved_date:
+            ticket.resolved_date = now_utc
+        elif new_status == "CLOSED":
+            ticket.closed_date = now_utc
+            if not ticket.resolved_date:
+                ticket.resolved_date = now_utc
+        elif new_status in ("IN_PROGRESS", "OPEN") and old_status in ("RESOLVED", "CLOSED"):
+            ticket.resolved_date = None
+            ticket.closed_date = None
 
         # Audit log in ticket_history table
         history = TicketHistoryDB(

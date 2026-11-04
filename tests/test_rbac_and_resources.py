@@ -236,7 +236,16 @@ def test_cannot_assign_non_support_user(tokens):
         headers=admin_headers
     )
     assert assign_res.status_code == 400
-    assert "only be assigned to support or admin" in assign_res.json()["detail"].lower()
+    assert "only be assigned to" in assign_res.json()["detail"].lower()
+    assert "support" in assign_res.json()["detail"].lower()
+
+    # Admin also cannot be assigned as assignee (only active SUPPORT specialists allowed)
+    assign_admin_res = client.post(
+        f"/tickets/{ticket_id}/assign",
+        json={"assigned_to": "ADM-001"},
+        headers=admin_headers
+    )
+    assert assign_admin_res.status_code == 400
 
 
 def test_audit_log_access_restricted_to_admin(tokens):
