@@ -68,9 +68,9 @@ class EmployeeActionRequest(BaseModel):
 def create_equipment_request(
     req_in: EquipmentRequestCreate,
     session: Session = Depends(get_db),
-    current_user: UserDB = Depends(require_roles(["EMPLOYEE"]))
+    current_user: UserDB = Depends(require_roles(["EMPLOYEE", "ADMIN", "SUPPORT"]))
 ):
-    """Employee submits a new hardware equipment provisioning request."""
+    """Submits a new hardware equipment provisioning request (Employee, IT Support, or Admin)."""
     if req_in.equipment_type not in VALID_EQUIPMENT_TYPES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -471,16 +471,11 @@ def close_equipment_request(
             detail=f"Equipment request '{request_id}' not found."
         )
 
-    # RBAC check: only requesting employee or Admin
-    if current_user.role == "EMPLOYEE" and req.requested_by != current_user.user_id:
+    # RBAC check: only requesting user or Administrator
+    if current_user.role != "ADMIN" and req.requested_by != current_user.user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You are only authorized to close your own equipment requests."
-        )
-    elif current_user.role not in ("EMPLOYEE", "ADMIN"):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only the requesting employee or an Administrator is authorized to close equipment requests."
+            detail="Only the requesting user or an Administrator is authorized to close equipment requests."
         )
 
     if req.status != "VERIFIED":

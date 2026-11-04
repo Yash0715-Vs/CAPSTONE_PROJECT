@@ -3110,37 +3110,40 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
 
 
-  // Filtered Assets (Search & Status & Type)
-
-  const filteredAssets = useMemo(() => {
-
+  // Assets assigned specifically to the current logged in user (works for Employee, Support, and Admin)
+  const myAssignedAssets = useMemo(() => {
+    if (!currentUser) return [];
+    if (currentUser.role === 'EMPLOYEE') return assets;
+    const uid = (currentUser.user_id || "").trim().toLowerCase();
+    const uemail = (currentUser.email || "").trim().toLowerCase();
+    const uname = (currentUser.name || "").trim().toLowerCase();
     return assets.filter(a => {
+      const assigned = (a.assigned_to || "").trim().toLowerCase();
+      return assigned && (assigned === uid || assigned === uemail || assigned === uname);
+    });
+  }, [assets, currentUser]);
 
+  const isMyEquipmentView = activeTab === 'my-equipment' || currentUser?.role === 'EMPLOYEE';
+  const baseAssetList = isMyEquipmentView ? myAssignedAssets : assets;
+
+  // Filtered Assets (Search & Status & Type)
+  const filteredAssets = useMemo(() => {
+    return baseAssetList.filter(a => {
       const q = (assetSearch || "").trim().toLowerCase();
-
       const matchSearch = !q ||
-
         (a.asset_id && a.asset_id.toLowerCase().includes(q)) ||
-
         (a.brand && a.brand.toLowerCase().includes(q)) ||
-
         (a.model && a.model.toLowerCase().includes(q)) ||
-
         (a.serial_number && a.serial_number.toLowerCase().includes(q)) ||
-
         (a.assigned_to && a.assigned_to.toLowerCase().includes(q)) ||
-
         (a.type && a.type.toLowerCase().includes(q));
 
       const matchStat = !assetStatusFilter || (a.status || "").toUpperCase() === assetStatusFilter.toUpperCase();
-
       const matchType = !assetTypeFilter || (a.type || "").toUpperCase() === assetTypeFilter.toUpperCase();
 
       return matchSearch && matchStat && matchType;
-
     });
-
-  }, [assets, assetSearch, assetStatusFilter, assetTypeFilter]);
+  }, [baseAssetList, assetSearch, assetStatusFilter, assetTypeFilter]);
 
 
 
@@ -3374,31 +3377,37 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
 
 
+              {/* My Equipment (available to all roles: Employee, IT Support, Admin) */}
               <button
-
                 type="button"
-
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors text-left cursor-pointer ${activeTab === 'assets' ? 'bg-primary-fixed text-on-primary-fixed font-semibold border-l-2 border-primary shadow-[0_1px_3px_rgba(0,0,0,0.03)]' : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'}`}
-
-                onClick={() => setActiveTab('assets')}
-
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors text-left cursor-pointer ${activeTab === 'my-equipment' || (currentUser.role === 'EMPLOYEE' && activeTab === 'assets') ? 'bg-primary-fixed text-on-primary-fixed font-semibold border-l-2 border-primary shadow-[0_1px_3px_rgba(0,0,0,0.03)]' : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'}`}
+                onClick={() => setActiveTab('my-equipment')}
               >
-
                 <div className="flex items-center gap-3">
-
-                  <span className={`material-symbols-outlined text-[19px] ${activeTab === 'assets' ? 'text-primary' : ''}`}>devices</span>
-
-                  <span>{currentUser.role === 'EMPLOYEE' ? 'My Equipment' : 'Assets'}</span>
-
+                  <span className={`material-symbols-outlined text-[19px] ${activeTab === 'my-equipment' || (currentUser.role === 'EMPLOYEE' && activeTab === 'assets') ? 'text-primary' : ''}`}>devices</span>
+                  <span>My Equipment</span>
                 </div>
-
                 <span className="px-1.5 py-0.5 text-[11px] font-medium rounded-full bg-surface-container text-on-surface-variant font-mono">
-
-                  {currentUser.role === 'EMPLOYEE' ? assets.length : totalAssets}
-
+                  {myAssignedAssets.length}
                 </span>
-
               </button>
+
+              {/* Hardware Fleet (available to Admin and IT Support) */}
+              {currentUser && currentUser.role !== 'EMPLOYEE' && (
+                <button
+                  type="button"
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors text-left cursor-pointer ${activeTab === 'assets' ? 'bg-primary-fixed text-on-primary-fixed font-semibold border-l-2 border-primary shadow-[0_1px_3px_rgba(0,0,0,0.03)]' : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'}`}
+                  onClick={() => setActiveTab('assets')}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className={`material-symbols-outlined text-[19px] ${activeTab === 'assets' ? 'text-primary' : ''}`}>dns</span>
+                    <span>Hardware Fleet</span>
+                  </div>
+                  <span className="px-1.5 py-0.5 text-[11px] font-medium rounded-full bg-surface-container text-on-surface-variant font-mono">
+                    {totalAssets}
+                  </span>
+                </button>
+              )}
 
 
 
@@ -3633,13 +3642,11 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
               <span className="font-medium text-on-surface">
 
                   {activeTab === 'dashboard' ? (currentUser.role === 'EMPLOYEE' ? 'My Employee Workspace' : currentUser.role === 'SUPPORT' ? 'ServiceDesk Operations Hub' : 'Operations Overview') :
-
                    activeTab === 'tickets' ? (currentUser.role === 'EMPLOYEE' ? 'My Support Incident Tickets' : 'Support Incident Tickets') :
-
+                   activeTab === 'my-equipment' ? 'My Assigned Equipment' :
                    activeTab === 'assets' ? (currentUser.role === 'EMPLOYEE' ? 'My Assigned Equipment' : 'Hardware Asset Fleet') :
-
+                   activeTab === 'equipment-requests' ? (currentUser.role === 'EMPLOYEE' ? 'My Hardware Requests' : 'Hardware Provisioning Queue') :
                    activeTab === 'employees' ? 'Enrolled Employee Directory' :
-
                    activeTab === 'sla' ? 'SLA & MTTR Performance' : 'System Audit Ledger'}
 
                 </span>
@@ -3692,26 +3699,16 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
           <div className="flex items-center gap-3.5">
 
-            {currentUser && currentUser.role === 'EMPLOYEE' && (
-
+            {currentUser && (
               <button
-
                 className="inline-flex items-center gap-1.5 bg-surface-container-high hover:bg-surface-container-highest text-on-surface px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer border border-outline-variant/30"
-
                 type="button"
-
                 onClick={() => setShowEquipmentModal(true)}
-
                 title="Submit a request for company hardware or workstation gear"
-
               >
-
                 <span className="material-symbols-outlined text-[17px] text-primary">inventory_2</span>
-
                 <span>Request Equipment</span>
-
               </button>
-
             )}
 
             <button
@@ -4769,25 +4766,23 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
 
                       <div className="mt-6 pt-3 flex items-center justify-between border-t border-surface-container-highest/40">
-
-                        <span className="text-xs text-on-surface-variant font-body">Hardware inventory management</span>
-
                         <button
-
                           type="button"
-
-                          className="text-xs font-medium text-primary hover:text-primary-container flex items-center gap-1 transition-colors cursor-pointer"
-
-                          onClick={() => setActiveTab('assets')}
-
+                          className="text-xs font-medium text-on-surface hover:text-primary flex items-center gap-1.5 transition-colors cursor-pointer"
+                          onClick={() => setActiveTab('my-equipment')}
                         >
-
-                          <span>Manage Fleet Inventory</span>
-
-                          <span className="material-symbols-outlined text-[15px]">arrow_forward</span>
-
+                          <span className="material-symbols-outlined text-[15px] text-primary">devices</span>
+                          <span>My Equipment ({myAssignedAssets.length})</span>
                         </button>
 
+                        <button
+                          type="button"
+                          className="text-xs font-medium text-primary hover:text-primary-container flex items-center gap-1 transition-colors cursor-pointer"
+                          onClick={() => setActiveTab('assets')}
+                        >
+                          <span>Manage Fleet Inventory</span>
+                          <span className="material-symbols-outlined text-[15px]">arrow_forward</span>
+                        </button>
                       </div>
 
                     </div>
@@ -5205,15 +5200,30 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                           </div>
 
                           <div className="w-full bg-surface-container h-2 rounded-full overflow-hidden">
-
                             <div className="bg-amber-500 h-full rounded-full" style={{ width: `${totalAssets > 0 ? (underRepairAssets/totalAssets)*100 : 0}%` }} />
-
                           </div>
-
                         </div>
-
                       </div>
 
+                      <div className="mt-6 pt-3 flex items-center justify-between border-t border-surface-container-highest/40">
+                        <button
+                          type="button"
+                          className="text-xs font-medium text-on-surface hover:text-primary flex items-center gap-1.5 transition-colors cursor-pointer"
+                          onClick={() => setActiveTab('my-equipment')}
+                        >
+                          <span className="material-symbols-outlined text-[15px] text-primary">devices</span>
+                          <span>My Equipment ({myAssignedAssets.length})</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          className="text-xs font-medium text-primary hover:text-primary-container flex items-center gap-1 transition-colors cursor-pointer"
+                          onClick={() => setActiveTab('assets')}
+                        >
+                          <span>Manage Fleet Inventory</span>
+                          <span className="material-symbols-outlined text-[15px]">arrow_forward</span>
+                        </button>
+                      </div>
                     </div>
 
                   </div>
@@ -6034,9 +6044,9 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
 
 
-          {/* TAB 2: ASSET INVENTORY */}
+          {/* TAB 2: ASSET INVENTORY & MY EQUIPMENT */}
 
-          {(activeTab === "assets" || activeTab === "asset-management") && (
+          {(activeTab === "assets" || activeTab === "asset-management" || activeTab === "my-equipment") && (
 
             <div>
 
@@ -6130,63 +6140,49 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
 
 
-                <select className="filter-select" value={assetStatusFilter} onChange={e => setAssetStatusFilter(e.target.value)}>
-
-                  <option value="">All Statuses ({totalAssets})</option>
-
-                  <option value="ASSIGNED">Assigned ({assignedAssets})</option>
-
-                  <option value="AVAILABLE">Available ({availableAssets})</option>
-
-                  <option value="UNDER_REPAIR">Under Repair ({underRepairAssets})</option>
-
-                  <option value="RETIRED">Retired ({retiredAssets})</option>
-
-                </select>
-
-
+                {!isMyEquipmentView && (
+                  <select className="filter-select" value={assetStatusFilter} onChange={e => setAssetStatusFilter(e.target.value)}>
+                    <option value="">All Statuses ({totalAssets})</option>
+                    <option value="ASSIGNED">Assigned ({assignedAssets})</option>
+                    <option value="AVAILABLE">Available ({availableAssets})</option>
+                    <option value="UNDER_REPAIR">Under Repair ({underRepairAssets})</option>
+                    <option value="RETIRED">Retired ({retiredAssets})</option>
+                  </select>
+                )}
 
                 <select className="filter-select" value={assetTypeFilter} onChange={e => setAssetTypeFilter(e.target.value)}>
-
                   <option value="">All Device Types</option>
-
                   <option value="Laptop">Laptop Workstations</option>
-
                   <option value="Monitor">External Monitors</option>
-
                   <option value="Keyboard">Keyboards</option>
-
                   <option value="Server">Edge Servers</option>
-
                 </select>
 
-
-
-                {currentUser && currentUser.role !== "EMPLOYEE" && (
-
+                {isMyEquipmentView ? (
                   <button
-
                     type="button"
-
                     className="btn-primary-teal"
-
-                    onClick={() => setShowCreateAssetModal(true)}
-
+                    onClick={() => setShowEquipmentModal(true)}
                     style={{ padding: "0.6rem 1.1rem", fontSize: "0.85rem", whiteSpace: "nowrap" }}
-
                   >
-
-                    <span className="material-symbols-outlined" style={{ fontSize: "17px" }}>add_circle</span>
-
-                    <span>+ Register Device</span>
-
+                    <span className="material-symbols-outlined" style={{ fontSize: "17px" }}>inventory_2</span>
+                    <span>+ Request Equipment</span>
                   </button>
-
+                ) : (
+                  currentUser && currentUser.role !== "EMPLOYEE" && (
+                    <button
+                      type="button"
+                      className="btn-primary-teal"
+                      onClick={() => setShowCreateAssetModal(true)}
+                      style={{ padding: "0.6rem 1.1rem", fontSize: "0.85rem", whiteSpace: "nowrap" }}
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: "17px" }}>add_circle</span>
+                      <span>+ Register Device</span>
+                    </button>
+                  )
                 )}
 
               </div>
-
-
 
               <div className="table-card">
 
@@ -6194,11 +6190,15 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                   <div>
 
-                    <div className="table-header-title">{currentUser.role === 'EMPLOYEE' ? 'My Assigned Hardware Equipment' : 'Enterprise Hardware Fleet'}</div>
+                    <div className="table-header-title">{isMyEquipmentView ? 'My Assigned Hardware Equipment' : 'Enterprise Hardware Fleet'}</div>
 
                     <div style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginTop: "0.15rem" }}>
 
-                      Showing {filteredAssets.length} of {assets.length} tracked devices in database ({assignedAssets} Assigned, {availableAssets} In Stock, {underRepairAssets} In Repair, {retiredAssets} Retired)
+                      {isMyEquipmentView ? (
+                        `Showing ${filteredAssets.length} of ${myAssignedAssets.length} devices in your personal custody (${currentUser ? currentUser.user_id : ''})`
+                      ) : (
+                        `Showing ${filteredAssets.length} of ${assets.length} tracked devices in database (${assignedAssets} Assigned, ${availableAssets} In Stock, ${underRepairAssets} In Repair, ${retiredAssets} Retired)`
+                      )}
 
                     </div>
 
@@ -6283,29 +6283,36 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                             <span className="material-symbols-outlined" style={{ fontSize: "32px", color: "var(--text-dim)" }}>devices</span>
 
                             <span style={{ fontSize: "0.92rem", fontWeight: 500, color: "var(--text-secondary)" }}>
-
-                              {assets.length === 0 ? "No hardware devices registered in database" : "No hardware devices match the selected filters"}
-
+                              {isMyEquipmentView ? (
+                                myAssignedAssets.length === 0
+                                  ? `No hardware devices currently assigned to your account (${currentUser ? currentUser.user_id : ''}).`
+                                  : "No assigned devices match the selected filters"
+                              ) : (
+                                assets.length === 0 ? "No hardware devices registered in database" : "No hardware devices match the selected filters"
+                              )}
                             </span>
 
-                            {assets.length > 0 && (assetSearch || assetStatusFilter || assetTypeFilter) && (
-
+                            {isMyEquipmentView && myAssignedAssets.length === 0 ? (
                               <button
-
                                 type="button"
-
-                                className="table-btn"
-
-                                onClick={() => { setAssetSearch(""); setAssetStatusFilter(""); setAssetTypeFilter(""); }}
-
-                                style={{ marginTop: "0.5rem" }}
-
+                                className="btn-primary-teal"
+                                onClick={() => setShowEquipmentModal(true)}
+                                style={{ marginTop: "0.75rem", padding: "0.55rem 1.15rem", fontSize: "0.84rem" }}
                               >
-
-                                Clear Filters
-
+                                <span className="material-symbols-outlined" style={{ fontSize: "16px" }}>inventory_2</span>
+                                <span>Request Equipment</span>
                               </button>
-
+                            ) : (
+                              assets.length > 0 && (assetSearch || assetStatusFilter || assetTypeFilter) && (
+                                <button
+                                  type="button"
+                                  className="table-btn"
+                                  onClick={() => { setAssetSearch(""); setAssetStatusFilter(""); setAssetTypeFilter(""); }}
+                                  style={{ marginTop: "0.5rem" }}
+                                >
+                                  Clear Filters
+                                </button>
+                              )
                             )}
 
                           </div>
@@ -6351,29 +6358,39 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                           <td>
 
                             <div style={{ display: "flex", gap: "0.4rem" }}>
-
-                              {currentUser.role !== "EMPLOYEE" && (
-
-                                <button className="table-btn" onClick={() => setShowEditAssetModal(a)} title="Edit Hardware Details">
-
-                                  <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>edit</span>
-
-                                  <span>Edit</span>
-
+                              {/* Report Issue shortcut for any user viewing their equipment */}
+                              {(isMyEquipmentView || a.assigned_to === currentUser?.user_id) && (
+                                <button
+                                  type="button"
+                                  className="table-btn"
+                                  onClick={() => {
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      asset_id: a.asset_id,
+                                      title: `Hardware issue with ${a.brand || ''} ${a.model || a.type} (${a.asset_id})`,
+                                      category: "HARDWARE"
+                                    }));
+                                    setShowCreateModal(true);
+                                  }}
+                                  title="Open Support Ticket for this device"
+                                >
+                                  <span className="material-symbols-outlined" style={{ fontSize: "14px", color: "var(--status-critical)" }}>report_problem</span>
+                                  <span>Report Issue</span>
                                 </button>
-
                               )}
 
-                              {currentUser.role !== "EMPLOYEE" && a.status === "AVAILABLE" && (
-
-                                <button className="table-btn" onClick={() => setShowAssignModal(a)}>
-
-                                  <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>assignment_ind</span>
-
-                                  <span>Assign</span>
-
+                              {currentUser.role !== "EMPLOYEE" && !isMyEquipmentView && (
+                                <button className="table-btn" onClick={() => setShowEditAssetModal(a)} title="Edit Hardware Details">
+                                  <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>edit</span>
+                                  <span>Edit</span>
                                 </button>
+                              )}
 
+                              {currentUser.role !== "EMPLOYEE" && !isMyEquipmentView && a.status === "AVAILABLE" && (
+                                <button className="table-btn" onClick={() => setShowAssignModal(a)}>
+                                  <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>assignment_ind</span>
+                                  <span>Assign</span>
+                                </button>
                               )}
 
                               {currentUser.role !== "EMPLOYEE" && a.status === "ASSIGNED" && (
