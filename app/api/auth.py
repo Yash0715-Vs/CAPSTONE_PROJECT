@@ -8,7 +8,7 @@ Meets Capstone Specification Section 12:
 - POST /auth/logout
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import HTTPAuthorizationCredentials
@@ -23,6 +23,10 @@ from app.schemas.user import (
     TokenResponse,
     CompleteRegistrationRequest,
     VerifyInvitationResponse,
+    ForgotPasswordRequest,
+    ForgotPasswordResponse,
+    VerifyResetTokenResponse,
+    ResetPasswordRequest,
 )
 from app.services.auth_service import AuthService, get_current_user, security
 
@@ -140,6 +144,144 @@ def complete_registration(
         details=f"Employee {user.user_id} successfully completed registration and activated account"
     )
     return user
+
+
+@router.post("/forgot-password", response_model=ForgotPasswordResponse)
+def forgot_password(req: ForgotPasswordRequest, session: Session = Depends(get_db)):
+    """
+    Self-service password recovery request for any Employee, IT Support, or Admin:
+    1. Looks up the user by User ID or Email.
+    2. Issues a cryptographically signed, expiring (15m) reset token.
+    3. Saves SHA-256 hash in the database.
+    4. Returns verification token to client for demonstration and user self-reset.
+    """
+    clean_id = req.identifier.strip()
+    user = UserRepository.get_by_user_id(session, clean_id) or UserRepository.get_by_email(session, clean_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No account found with identifier '{clean_id}'. Please verify your Employee ID or Work Email."
+        )
+
+    if user.status == UserStatus.DISABLED.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This account has been deactivated. Please contact an Administrator."
+        )
+
+    raw_token = AuthService.generate_reset_token()
+    token_hash = AuthService.hash_reset_token(raw_token)
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+
+    user.reset_token_hash = token_hash
+    user.reset_token_expires_at = expires_at
+    session.flush()
+
+    ActivityLogRepository.log(
+        session=session,
+        action="PASSWORD_RESET_REQUESTED",
+        user_id=user.user_id,
+        details=f"Password reset token requested for {user.user_id} ({user.email})"
+    )
+
+    return ForgotPasswordResponse(
+        message="Password reset instructions and verification code generated successfully.",
+        user_id=user.user_id,
+        email=user.email,
+        reset_token=raw_token,
+        expires_in_minutes=15
+    )
+
+
+@router.get("/verify-reset-token", response_model=VerifyResetTokenResponse)
+def verify_reset_token(
+    token: str = Query(..., min_length=8, description="Password reset verification token"),
+    session: Session = Depends(get_db)
+):
+    """
+    Verifies that a password reset token exists, is active, and has not expired.
+    """
+    token_hash = AuthService.hash_reset_token(token)
+    user = UserRepository.get_by_reset_token_hash(session, token_hash)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid, already used, or non-existent password reset token."
+        )
+
+    if user.reset_token_expires_at:
+        now_utc = datetime.now(timezone.utc)
+        expires_at = user.reset_token_expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at < now_utc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Password reset token has expired (tokens are valid for 15 minutes). Please request a new code."
+            )
+
+    return VerifyResetTokenResponse(
+        valid=True,
+        user_id=user.user_id,
+        name=user.name,
+        email=user.email,
+        message="Reset token verified successfully. You may proceed to set a new password."
+    )
+
+
+@router.post("/reset-password", status_code=status.HTTP_200_OK)
+def reset_password(req: ResetPasswordRequest, session: Session = Depends(get_db)):
+    """
+    Sets a new password using a verified reset token:
+    1. Validates password strength (min 8 characters).
+    2. Matches token against stored SHA-256 hash.
+    3. Hashes new password with Bcrypt.
+    4. Invalidates single-use reset token.
+    5. Logs the audit event.
+    """
+    if len(req.new_password.strip()) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 8 characters long."
+        )
+
+    token_hash = AuthService.hash_reset_token(req.token)
+    user = UserRepository.get_by_reset_token_hash(session, token_hash)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid, already used, or non-existent password reset token."
+        )
+
+    if user.reset_token_expires_at:
+        now_utc = datetime.now(timezone.utc)
+        expires_at = user.reset_token_expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at < now_utc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Password reset token has expired. Please request a new code."
+            )
+
+    user.hashed_password = AuthService.hash_password(req.new_password)
+    user.reset_token_hash = None
+    user.reset_token_expires_at = None
+    if user.status == UserStatus.PENDING.value:
+        user.status = UserStatus.ACTIVE.value
+    session.flush()
+
+    ActivityLogRepository.log(
+        session=session,
+        action="PASSWORD_RESET_COMPLETED",
+        user_id=user.user_id,
+        details=f"User {user.user_id} successfully completed password reset"
+    )
+
+    return {
+        "message": f"Password for {user.name} ({user.user_id}) has been updated successfully. You can now sign in.",
+        "user_id": user.user_id
+    }
 
 
 @router.post("/login", response_model=TokenResponse)

@@ -63,6 +63,8 @@ class UserDB(Base):
     status = Column(String(30), nullable=False, default=UserStatus.ACTIVE.value, server_default=UserStatus.ACTIVE.value)  # ACTIVE, PENDING, DISABLED
     invitation_token_hash = Column(String(255), nullable=True, index=True)
     invitation_expires_at = Column(DateTime, nullable=True)
+    reset_token_hash = Column(String(255), nullable=True, index=True)
+    reset_token_expires_at = Column(DateTime, nullable=True)
     department = Column(String(100), nullable=True, default="General")
     created_at = Column(DateTime, default=datetime.utcnow)
 

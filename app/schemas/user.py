@@ -108,3 +108,32 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     user: UserResponse
 
+
+class ForgotPasswordRequest(BaseModel):
+    """Payload to request a password reset."""
+    identifier: str = Field(..., min_length=2, max_length=150, json_schema_extra={"example": "IT-49799"}, description="Work Email or User ID")
+
+
+class ForgotPasswordResponse(BaseModel):
+    """Response returned upon successful password reset request."""
+    message: str
+    user_id: str
+    email: str
+    reset_token: str
+    expires_in_minutes: int = 15
+
+
+class VerifyResetTokenResponse(BaseModel):
+    """Response returned when validating a reset token."""
+    valid: bool
+    user_id: str
+    name: str
+    email: str
+    message: str = "Reset token is valid."
+
+
+class ResetPasswordRequest(BaseModel):
+    """Payload to complete password reset."""
+    token: str = Field(..., min_length=8, description="Cryptographic password reset token")
+    new_password: str = Field(..., min_length=8, description="New secure password (minimum 8 characters)")
+

@@ -189,6 +189,325 @@ function formatLocalTime(raw) {
 
 
 // =====================================================================
+// Component: Self-Service Password Recovery Modal (Real-World Enterprise Flow)
+// Works for all Employee, IT Support, and Admin accounts
+// =====================================================================
+function ForgotPasswordModal({ isOpen, onClose, initialIdentifier, onPasswordResetSuccess }) {
+  const [step, setStep] = useState(1); // 1: Request Code, 2: Reset Form, 3: Success
+  const [identifier, setIdentifier] = useState(initialIdentifier || "");
+  const [resetToken, setResetToken] = useState("");
+  const [userInfo, setUserInfo] = useState(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [copySuccess, setCopySuccess] = useState(false);
+
+  useEffect(() => {
+    if (initialIdentifier) {
+      setIdentifier(initialIdentifier);
+    }
+  }, [initialIdentifier]);
+
+  if (!isOpen) return null;
+
+  const handleRequestToken = async (e) => {
+    e.preventDefault();
+    if (!identifier.trim()) {
+      setError("Please enter your Work Email or Employee ID.");
+      return;
+    }
+    setError("");
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/forgot-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier: identifier.trim() }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(parseApiError(data, res.status, "Account not found or password reset failed."));
+      }
+      setResetToken(data.reset_token);
+      setUserInfo(data);
+      setStep(2);
+    } catch (err) {
+      setError(err.message || "Failed to generate password reset code.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    setError("");
+    if (!resetToken.trim()) {
+      setError("Reset verification token is required.");
+      return;
+    }
+    if (newPassword.length < 8) {
+      setError("New password must be at least 8 characters long.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError("Passwords do not match. Please re-enter.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/reset-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: resetToken.trim(), new_password: newPassword }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(parseApiError(data, res.status, "Failed to reset password."));
+      }
+      setStep(3);
+      if (onPasswordResetSuccess) {
+        onPasswordResetSuccess(userInfo ? userInfo.user_id : identifier.trim());
+      }
+    } catch (err) {
+      setError(err.message || "Failed to reset password.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCopyToken = () => {
+    if (resetToken) {
+      navigator.clipboard.writeText(resetToken);
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000);
+    }
+  };
+
+  const handleClose = () => {
+    setStep(1);
+    setError("");
+    setResetToken("");
+    setNewPassword("");
+    setConfirmPassword("");
+    onClose();
+  };
+
+  return (
+    <div className="modal-backdrop" style={{ zIndex: 1100 }}>
+      <div className="modal-surface" style={{ maxWidth: "480px", padding: "1.75rem" }}>
+        
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+            <div style={{ width: "38px", height: "38px", borderRadius: "50%", background: "var(--primary-subtle)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--primary)" }}>
+              <span className="material-symbols-outlined" style={{ fontSize: "22px" }}>
+                {step === 3 ? "check_circle" : "lock_reset"}
+              </span>
+            </div>
+            <div>
+              <h2 className="modal-title" style={{ fontSize: "1.35rem", margin: 0, fontWeight: 600 }}>
+                {step === 1 && "Forgot Password?"}
+                {step === 2 && "Set New Password"}
+                {step === 3 && "Password Reset Successful"}
+              </h2>
+              <div style={{ fontSize: "0.78rem", color: "var(--text-secondary)", marginTop: "2px" }}>
+                {step === 1 && "Enterprise Account Self-Service Recovery"}
+                {step === 2 && `Account: ${userInfo ? userInfo.user_id : identifier}`}
+                {step === 3 && "Your credentials have been updated"}
+              </div>
+            </div>
+          </div>
+          <button type="button" className="table-btn" onClick={handleClose} style={{ padding: "0.25rem 0.5rem" }}>
+            <span className="material-symbols-outlined" style={{ fontSize: "16px" }}>close</span>
+          </button>
+        </div>
+
+        {/* Error notification */}
+        {error && (
+          <div className="alert-danger" style={{ marginBottom: "1rem", padding: "0.65rem 0.85rem", fontSize: "0.85rem", display: "flex", alignItems: "center", gap: "0.5rem", borderRadius: "var(--radius-sm)" }}>
+            <span className="material-symbols-outlined" style={{ fontSize: "18px" }}>error</span>
+            <span>{error}</span>
+          </div>
+        )}
+
+        {/* STEP 1: Enter Identifier & Request Code */}
+        {step === 1 && (
+          <form onSubmit={handleRequestToken}>
+            <p style={{ fontSize: "0.88rem", color: "var(--text-secondary)", lineHeight: 1.5, marginBottom: "1.25rem" }}>
+              Enter your registered <strong>Work Email</strong> or <strong>Employee / User ID</strong> (e.g. <code>IT-49799</code>, <code>ADM-001</code>, <code>EMP-101</code>). We'll generate a secure verification code to reset your password.
+            </p>
+
+            <div style={{ marginBottom: "1.25rem" }}>
+              <label className="form-field-label" htmlFor="recovery-id" style={{ display: "block", marginBottom: "0.4rem", fontWeight: 500, fontSize: "0.85rem" }}>
+                Work Email or Employee ID
+              </label>
+              <div className="input-icon-wrap" style={{ position: "relative" }}>
+                <span className="material-symbols-outlined field-icon-left" style={{ position: "absolute", left: "0.85rem", top: "50%", transform: "translateY(-50%)", color: "var(--text-secondary)", fontSize: "18px" }}>badge</span>
+                <input
+                  id="recovery-id"
+                  type="text"
+                  className="form-input"
+                  style={{ width: "100%", paddingLeft: "2.5rem" }}
+                  placeholder="e.g. IT-49799 or tirthg@company.com"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  required
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem", marginTop: "1.5rem" }}>
+              <button type="button" className="table-btn" onClick={handleClose} style={{ padding: "0.6rem 1.1rem" }}>
+                Cancel
+              </button>
+              <button type="submit" className="btn-primary-teal" disabled={loading} style={{ padding: "0.6rem 1.4rem", display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
+                <span>{loading ? "Verifying..." : "Generate Reset Code"}</span>
+                <span className="material-symbols-outlined" style={{ fontSize: "16px" }}>arrow_forward</span>
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* STEP 2: Code verification & New password */}
+        {step === 2 && (
+          <form onSubmit={handleResetPassword}>
+            {/* Token notice banner */}
+            <div style={{ background: "var(--bg-subtle)", border: "1px solid var(--border-light)", borderRadius: "var(--radius-md)", padding: "0.85rem 1rem", marginBottom: "1.25rem" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.35rem" }}>
+                <span style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Verification Code (Valid 15m)
+                </span>
+                <button type="button" onClick={handleCopyToken} style={{ background: "transparent", border: "none", color: "var(--primary)", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: "2px" }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>{copySuccess ? "done" : "content_copy"}</span>
+                  <span>{copySuccess ? "Copied!" : "Copy"}</span>
+                </button>
+              </div>
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.95rem", fontWeight: 600, color: "var(--primary)", wordBreak: "break-all" }}>
+                {resetToken}
+              </div>
+            </div>
+
+            {/* Verification code input */}
+            <div style={{ marginBottom: "1rem" }}>
+              <label className="form-field-label" htmlFor="reset-token-input" style={{ display: "block", marginBottom: "0.35rem", fontWeight: 500, fontSize: "0.85rem" }}>
+                Reset Verification Code
+              </label>
+              <input
+                id="reset-token-input"
+                type="text"
+                className="form-input"
+                style={{ width: "100%", fontFamily: "var(--font-mono)" }}
+                placeholder="RST-..."
+                value={resetToken}
+                onChange={(e) => setResetToken(e.target.value)}
+                required
+              />
+            </div>
+
+            {/* New Password */}
+            <div style={{ marginBottom: "1rem" }}>
+              <label className="form-field-label" htmlFor="new-password" style={{ display: "block", marginBottom: "0.35rem", fontWeight: 500, fontSize: "0.85rem" }}>
+                New Password (minimum 8 characters)
+              </label>
+              <div className="input-icon-wrap" style={{ position: "relative" }}>
+                <span className="material-symbols-outlined field-icon-left" style={{ position: "absolute", left: "0.85rem", top: "50%", transform: "translateY(-50%)", color: "var(--text-secondary)", fontSize: "18px" }}>lock</span>
+                <input
+                  id="new-password"
+                  type={showPassword ? "text" : "password"}
+                  className="form-input"
+                  style={{ width: "100%", paddingLeft: "2.5rem", paddingRight: "2.5rem" }}
+                  placeholder="Enter new password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  style={{ position: "absolute", right: "0.75rem", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)" }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: "18px" }}>
+                    {showPassword ? "visibility_off" : "visibility"}
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            {/* Confirm New Password */}
+            <div style={{ marginBottom: "1.25rem" }}>
+              <label className="form-field-label" htmlFor="confirm-new-password" style={{ display: "block", marginBottom: "0.35rem", fontWeight: 500, fontSize: "0.85rem" }}>
+                Confirm New Password
+              </label>
+              <div className="input-icon-wrap" style={{ position: "relative" }}>
+                <span className="material-symbols-outlined field-icon-left" style={{ position: "absolute", left: "0.85rem", top: "50%", transform: "translateY(-50%)", color: "var(--text-secondary)", fontSize: "18px" }}>lock_reset</span>
+                <input
+                  id="confirm-new-password"
+                  type={showConfirmPassword ? "text" : "password"}
+                  className="form-input"
+                  style={{ width: "100%", paddingLeft: "2.5rem", paddingRight: "2.5rem" }}
+                  placeholder="Re-enter new password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  style={{ position: "absolute", right: "0.75rem", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)" }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: "18px" }}>
+                    {showConfirmPassword ? "visibility_off" : "visibility"}
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            {/* Action buttons */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "1.5rem" }}>
+              <button type="button" className="table-btn" onClick={() => setStep(1)} style={{ padding: "0.6rem 1rem" }}>
+                ← Change ID
+              </button>
+              <button type="submit" className="btn-primary-teal" disabled={loading} style={{ padding: "0.6rem 1.4rem" }}>
+                {loading ? "Updating..." : "Update Password"}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* STEP 3: Success Screen */}
+        {step === 3 && (
+          <div style={{ textAlign: "center", padding: "1rem 0 0.5rem 0" }}>
+            <div style={{ width: "64px", height: "64px", borderRadius: "50%", background: "#ecfdf5", color: "#059669", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1.25rem auto" }}>
+              <span className="material-symbols-outlined" style={{ fontSize: "36px" }}>check_circle</span>
+            </div>
+            <h3 style={{ fontSize: "1.2rem", fontWeight: 600, color: "var(--text-main)", marginBottom: "0.5rem" }}>
+              Password Reset Complete!
+            </h3>
+            <p style={{ fontSize: "0.88rem", color: "var(--text-secondary)", lineHeight: 1.5, marginBottom: "1.75rem" }}>
+              Your account password has been updated and securely hashed with Bcrypt. You can now log into your workspace.
+            </p>
+            <button
+              type="button"
+              className="btn-primary-teal"
+              onClick={handleClose}
+              style={{ width: "100%", padding: "0.75rem", fontSize: "0.95rem", justifyContent: "center" }}
+            >
+              Back to Sign In
+            </button>
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
+
+
+// =====================================================================
 
 // Component: Apex Sentinel Split-Screen Login Page (Matches User Design)
 
@@ -662,71 +981,16 @@ function LoginPage({ onLoginSuccess, onSwitchToRegister, demoAccounts, theme, on
 
 
 
-          {showForgotModal && (
-
-            <div className="modal-backdrop" style={{ zIndex: 1100 }}>
-
-              <div className="modal-surface" style={{ maxWidth: "480px" }}>
-
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "0.75rem" }}>
-
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-
-                    <div style={{ width: "36px", height: "36px", borderRadius: "50%", background: "var(--primary-subtle)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--primary)" }}>
-
-                      <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>lock_reset</span>
-
-                    </div>
-
-                    <h2 className="modal-title" style={{ fontSize: "1.35rem", margin: 0 }}>Password Recovery</h2>
-
-                  </div>
-
-                  <button type="button" className="table-btn" onClick={() => setShowForgotModal(false)} style={{ padding: "0.25rem 0.5rem" }}>
-
-                    <span className="material-symbols-outlined" style={{ fontSize: "16px" }}>close</span>
-
-                  </button>
-
-                </div>
-
-                <p style={{ fontSize: "0.9rem", color: "var(--text-secondary)", lineHeight: 1.5, marginBottom: "1.25rem" }}>
-
-                  Apex IT Systems enforces Enterprise Zero-Trust security protocols. Direct self-service password resetting is restricted to authorized directory controllers.
-
-                </p>
-
-                <div style={{ background: "var(--bg-subtle)", border: "1px solid var(--border-light)", borderRadius: "var(--radius-md)", padding: "1rem", marginBottom: "1.5rem" }}>
-
-                  <div style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--text-main)", marginBottom: "0.35rem" }}>How to regain access:</div>
-
-                  <ul style={{ fontSize: "0.82rem", color: "var(--text-secondary)", paddingLeft: "1.2rem", margin: 0, lineHeight: 1.6 }}>
-
-                    <li>Contact IT HelpDesk Admin at <strong style={{ color: "var(--primary)" }}>admin@apexcorp.internal</strong> (ADM-001)</li>
-
-                    <li>For testing and demonstration, use the <strong>One-Click Demo Credentials</strong> on the login page</li>
-
-                    <li>New hires should use the token provided in their onboarding email to complete registration</li>
-
-                  </ul>
-
-                </div>
-
-                <div style={{ display: "flex", justifyContent: "flex-end" }}>
-
-                  <button type="button" className="btn-primary-teal" onClick={() => setShowForgotModal(false)} style={{ padding: "0.6rem 1.4rem" }}>
-
-                    Understood
-
-                  </button>
-
-                </div>
-
-              </div>
-
-            </div>
-
-          )}
+          <ForgotPasswordModal
+            isOpen={showForgotModal}
+            onClose={() => setShowForgotModal(false)}
+            initialIdentifier={identifier}
+            onPasswordResetSuccess={(resetUserId) => {
+              setIdentifier(resetUserId);
+              setPassword("");
+              setError("");
+            }}
+          />
 
 
 

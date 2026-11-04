@@ -43,6 +43,10 @@ class UserRepository:
         return session.query(UserDB).filter(UserDB.invitation_token_hash == token_hash).first()
 
     @staticmethod
+    def get_by_reset_token_hash(session: Session, token_hash: str) -> Optional[UserDB]:
+        return session.query(UserDB).filter(UserDB.reset_token_hash == token_hash).first()
+
+    @staticmethod
     def list_all(session: Session) -> List[UserDB]:
         return session.query(UserDB).order_by(UserDB.user_id).all()
 

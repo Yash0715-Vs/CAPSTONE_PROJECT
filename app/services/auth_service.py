@@ -62,6 +62,16 @@ class AuthService:
         return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
     @staticmethod
+    def generate_reset_token() -> str:
+        """Generates a secure, human-friendly password reset token."""
+        return f"RST-{secrets.token_hex(16).upper()}"
+
+    @staticmethod
+    def hash_reset_token(token: str) -> str:
+        """Computes SHA-256 hash of a password reset token for safe database storage."""
+        return hashlib.sha256(token.strip().encode("utf-8")).hexdigest()
+
+    @staticmethod
     def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
         """Generates a signed JWT access token using centralized configuration."""
         to_encode = data.copy()
