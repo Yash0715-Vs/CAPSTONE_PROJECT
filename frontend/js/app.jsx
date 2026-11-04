@@ -5,8 +5,21 @@
 
 const { useState, useEffect, useCallback, useMemo, useRef } = React;
 
-const API_BASE = window.location.origin;
-const WS_URL = `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/ws/tickets`;
+const API_BASE = (function() {
+  const loc = window.location;
+  if (!loc.origin || loc.origin === "null" || loc.origin.startsWith("file:") || ["5500", "5501", "3000", "5173"].includes(loc.port)) {
+    return "http://127.0.0.1:8000";
+  }
+  return loc.origin;
+})();
+
+const WS_URL = (function() {
+  const loc = window.location;
+  if (!loc.origin || loc.origin === "null" || loc.origin.startsWith("file:") || ["5500", "5501", "3000", "5173"].includes(loc.port)) {
+    return "ws://127.0.0.1:8000/ws/tickets";
+  }
+  return `${loc.protocol === "https:" ? "wss:" : "ws:"}//${loc.host}/ws/tickets`;
+})();
 
 // Sample Demo Accounts for Instant Switching (Indian Employee Roles)
 const DEMO_ACCOUNTS = [
@@ -110,7 +123,11 @@ function LoginPage({ onLoginSuccess, onSwitchToRegister, demoAccounts, theme, on
 
       onLoginSuccess(data.user, data.access_token);
     } catch (err) {
-      setError(err.message || "Failed to connect to authentication server.");
+      if (err.name === "TypeError" && (err.message === "Failed to fetch" || err.message.includes("fetch"))) {
+        setError(`Unable to connect to backend server at ${API_BASE}. Please verify the FastAPI backend server is running on port 8000.`);
+      } else {
+        setError(err.message || "Failed to connect to authentication server.");
+      }
     } finally {
       setLoading(false);
     }

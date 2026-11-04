@@ -46,7 +46,7 @@ class Config:
 
     # CORS settings (supports ALLOWED_ORIGINS and CORS_ORIGINS)
     _cors_env: str = os.getenv("ALLOWED_ORIGINS") or os.getenv("CORS_ORIGINS") or (
-        "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173,http://localhost:8000,http://127.0.0.1:8000"
+        "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173,http://localhost:5500,http://127.0.0.1:5500,http://localhost:8000,http://127.0.0.1:8000"
     )
     ALLOWED_ORIGINS: list = [origin.strip() for origin in _cors_env.split(",") if origin.strip()]
 
