@@ -12,9 +12,10 @@ Meets Monday Technical Requirement:
 """
 
 import threading
+from contextlib import contextmanager
 from typing import Optional
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, text
 
 from app.models.db_models import UserDB, TicketDB, TicketHistoryDB
 from app.database.repositories import TicketRepository, ActivityLogRepository
@@ -25,6 +26,52 @@ ACTIVE_TICKET_STATUSES = ("OPEN", "ASSIGNED", "IN_PROGRESS")
 _assignment_lock = threading.Lock()
 
 
+@contextmanager
+def acquire_assignment_lock(db: Session, timeout_seconds: int = 10):
+    """
+    Acquires both an in-process thread lock and a distributed database-level lock (MySQL GET_LOCK / Postgres advisory lock)
+    to serialize ticket assignments across multiple Uvicorn/Gunicorn worker processes.
+    Also invalidates SQLAlchemy identity map cache (db.expire_all()) to eliminate stale snapshots under MVCC.
+    """
+    dialect_name = ""
+    try:
+        bind = db.get_bind()
+        if bind and hasattr(bind, "dialect"):
+            dialect_name = bind.dialect.name
+    except Exception:
+        pass
+
+    is_mysql = dialect_name == "mysql"
+    is_pg = dialect_name == "postgresql"
+    got_mysql_lock = False
+
+    with _assignment_lock:
+        if is_mysql:
+            try:
+                res = db.execute(
+                    text("SELECT GET_LOCK('auto_assignment_global_lock', :timeout)"),
+                    {"timeout": timeout_seconds}
+                ).scalar()
+                got_mysql_lock = (res == 1)
+            except Exception:
+                got_mysql_lock = False
+        elif is_pg:
+            try:
+                db.execute(text("SELECT pg_advisory_xact_lock(hashtext('auto_assignment_global_lock'))"))
+            except Exception:
+                pass
+
+        try:
+            db.expire_all()
+            yield
+        finally:
+            if is_mysql and got_mysql_lock:
+                try:
+                    db.execute(text("SELECT RELEASE_LOCK('auto_assignment_global_lock')"))
+                except Exception:
+                    pass
+
+
 def get_least_loaded_support_user(db: Session) -> Optional[UserDB]:
     """
     Finds the active SUPPORT specialist with the minimum number of active tickets.
@@ -32,6 +79,7 @@ def get_least_loaded_support_user(db: Session) -> Optional[UserDB]:
     1. Furthest time since last ticket assignment (earliest max assignment date)
     2. Deterministic user_id ascending
     """
+    db.expire_all()
     support_users_query = db.query(UserDB).filter(UserDB.role == "SUPPORT", UserDB.status == "ACTIVE")
     if db.bind and db.bind.dialect.name in ("mysql", "postgresql"):
         support_users_query = support_users_query.with_for_update()
@@ -83,9 +131,9 @@ def auto_assign_ticket(db: Session, ticket_id: str) -> Optional[str]:
     Executes automated ticket assignment under system policy.
     Sets status to ASSIGNED, assigned_to to least-loaded specialist,
     and logs SYSTEM as the actor in ticket history and activity logs.
-    Concurrency-safe across multi-threaded request handling.
+    Concurrency-safe across multi-worker processes and multi-threaded request handling.
     """
-    with _assignment_lock:
+    with acquire_assignment_lock(db):
         ticket = TicketRepository.get_by_ticket_id(db, ticket_id)
         if not ticket:
             return None

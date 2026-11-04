@@ -60,13 +60,18 @@ class DatabaseConnectionManager:
             if "sqlite" in self.db_url:
                 connect_args["check_same_thread"] = False
 
-            self._engine = create_engine(
-                self.db_url,
-                pool_pre_ping=True,  # Automatically detects and discards stale connections
-                pool_recycle=3600,   # Recycle connections hourly (avoids MySQL 'MySQL server has gone away')
-                connect_args=connect_args,
-                echo=False           # Set to True if detailed SQL queries are desired
-            )
+            engine_kwargs = {
+                "pool_pre_ping": True,  # Automatically detects and discards stale connections
+                "pool_recycle": 3600,   # Recycle connections hourly (avoids MySQL 'MySQL server has gone away')
+                "connect_args": connect_args,
+                "echo": False           # Set to True if detailed SQL queries are desired
+            }
+            if "sqlite" not in self.db_url:
+                # READ COMMITTED guarantees multi-worker transactions always see the latest committed assignments
+                # preventing MySQL REPEATABLE READ snapshot isolation from hiding concurrent assignments across workers
+                engine_kwargs["isolation_level"] = "READ COMMITTED"
+
+            self._engine = create_engine(self.db_url, **engine_kwargs)
             self._session_factory = sessionmaker(
                 autocommit=False,
                 autoflush=False,

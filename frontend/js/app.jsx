@@ -908,6 +908,7 @@ function App() {
   const resolvedTickets = tickets.filter(t => t.status === "RESOLVED").length;
   const closedTickets = tickets.filter(t => t.status === "CLOSED").length;
   const resolvedAndClosed = resolvedTickets + closedTickets;
+  const unassignedTickets = tickets.filter(t => !t.assigned_to && t.status !== "RESOLVED" && t.status !== "CLOSED").length;
 
   const criticalTickets = tickets.filter(t => t.priority === "CRITICAL" && t.status !== "RESOLVED" && t.status !== "CLOSED").length;
   const highTickets = tickets.filter(t => t.priority === "HIGH" && t.status !== "RESOLVED" && t.status !== "CLOSED").length;
@@ -1389,7 +1390,11 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
         (t.assigned_to && t.assigned_to.toLowerCase().includes(q));
       const matchCat = !filterCategory || (t.category || "").toUpperCase() === filterCategory.toUpperCase();
       const matchPri = !filterPriority || (t.priority || "").toUpperCase() === filterPriority.toUpperCase();
-      const matchStat = !filterStatus || (t.status || "").toUpperCase() === filterStatus.toUpperCase();
+      const matchStat = !filterStatus || (
+        filterStatus === "UNASSIGNED"
+          ? (!t.assigned_to && t.status !== "RESOLVED" && t.status !== "CLOSED")
+          : (t.status || "").toUpperCase() === filterStatus.toUpperCase()
+      );
       return matchSearch && matchCat && matchPri && matchStat;
     });
   }, [tickets, search, filterCategory, filterPriority, filterStatus]);
@@ -2604,6 +2609,9 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                 <select className="filter-select" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
                   <option value="">All Statuses ({totalTickets})</option>
+                  {unassignedTickets > 0 && (
+                    <option value="UNASSIGNED" style={{ color: "#dc2626", fontWeight: 600 }}>⚠️ Unassigned Queue ({unassignedTickets})</option>
+                  )}
                   <option value="OPEN">Open ({openTickets})</option>
                   <option value="ASSIGNED">Assigned ({assignedTickets})</option>
                   <option value="IN_PROGRESS">In Progress ({inProgressTickets})</option>
@@ -2622,12 +2630,40 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                 </button>
               </div>
 
+              {currentUser.role === "ADMIN" && unassignedTickets > 0 && filterStatus !== "UNASSIGNED" && (
+                <div style={{
+                  marginBottom: "1rem",
+                  padding: "0.75rem 1.2rem",
+                  borderRadius: "8px",
+                  background: "rgba(239, 68, 68, 0.08)",
+                  border: "1px solid rgba(239, 68, 68, 0.25)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  gap: "0.75rem"
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", color: "#dc2626", fontSize: "0.86rem", fontWeight: 500 }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>warning</span>
+                    <span><strong>Action Required:</strong> {unassignedTickets} active ticket{unassignedTickets > 1 ? 's are' : ' is'} currently unassigned. Please assign to an IT Support specialist.</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="table-btn"
+                    style={{ borderColor: "#dc2626", color: "#dc2626", fontWeight: 600, fontSize: "0.8rem", padding: "0.35rem 0.75rem" }}
+                    onClick={() => setFilterStatus("UNASSIGNED")}
+                  >
+                    View Unassigned Queue
+                  </button>
+                </div>
+              )}
+
               <div className="table-card">
                 <div className="table-header-box">
                   <div>
                     <div className="table-header-title">{currentUser.role === 'EMPLOYEE' ? 'My Support Incident Requests' : currentUser.role === 'SUPPORT' ? 'My Assigned Incident Queue' : 'Enterprise Incident Queue'}</div>
                     <div style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginTop: "0.15rem" }}>
-                      Showing {filteredTickets.length} of {tickets.length} {currentUser.role === 'SUPPORT' ? 'assigned tickets' : 'total tickets from database'} ({openTickets} Open, {assignedTickets} Assigned, {inProgressTickets} In Progress, {resolvedTickets} Resolved, {closedTickets} Closed)
+                      Showing {filteredTickets.length} of {tickets.length} {currentUser.role === 'SUPPORT' ? 'assigned tickets' : 'total tickets from database'} ({openTickets} Open, {assignedTickets} Assigned, {inProgressTickets} In Progress{unassignedTickets > 0 ? `, ${unassignedTickets} Unassigned` : ''}, {resolvedTickets} Resolved, {closedTickets} Closed)
                     </div>
                   </div>
                   <button
@@ -2722,7 +2758,30 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                               )}
                             </div>
                           </td>
-                          <td>{t.assigned_to || "Unassigned"}</td>
+                          <td>
+                            {t.assigned_to ? (
+                              <span>{t.assigned_to}</span>
+                            ) : (
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "3px",
+                                  padding: "2px 8px",
+                                  borderRadius: "4px",
+                                  fontSize: "0.74rem",
+                                  fontWeight: 600,
+                                  backgroundColor: "rgba(239, 68, 68, 0.12)",
+                                  color: "#dc2626",
+                                  border: "1px solid rgba(239, 68, 68, 0.3)"
+                                }}
+                                title="No specialist assigned. Awaiting assignment."
+                              >
+                                <span className="material-symbols-outlined" style={{ fontSize: "12px" }}>warning</span>
+                                Unassigned
+                              </span>
+                            )}
+                          </td>
                           <td>
                             <div style={{ display: "flex", gap: "0.4rem" }}>
                               <button className="table-btn" onClick={() => setShowTicketDetailsModal(t)} title="View Ticket Details">
