@@ -116,7 +116,9 @@ def create_ticket(
     our Rule-Based TicketClassifier (Regex) automatically infers them!
     """
     category = ticket_in.category
-    priority = ticket_in.priority
+    priority = ticket_in.priority.upper() if ticket_in.priority else None
+    if priority == "CRITICAL":
+        priority = "HIGH"
 
     # Automatic Ticket Classification (Section 6)
     if not category or not priority:
@@ -216,7 +218,10 @@ def update_ticket(
     if update_in.category:
         ticket.category = update_in.category
     if update_in.priority:
-        ticket.priority = update_in.priority
+        new_pri = update_in.priority.upper()
+        if new_pri == "CRITICAL":
+            new_pri = "HIGH"
+        ticket.priority = new_pri
     if update_in.status:
         if update_in.status != "IN_PROGRESS":
             raise HTTPException(

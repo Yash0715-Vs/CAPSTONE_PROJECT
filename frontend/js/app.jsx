@@ -4006,9 +4006,9 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                       <div className="mt-3">
 
-                        <div className="text-2xl font-headline font-medium text-on-surface">{criticalTickets + highTickets}</div>
+                        <div className="text-2xl font-headline font-medium text-on-surface">{highTickets}</div>
 
-                        <span className="text-[11px] text-on-surface-variant mt-0.5 block">{criticalTickets} critical, {highTickets} high</span>
+                        <span className="text-[11px] text-on-surface-variant mt-0.5 block">{highTickets} high priority</span>
 
                       </div>
 
@@ -4122,7 +4122,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                         <span className="px-2 py-0.5 rounded-full bg-error-container text-on-error-container text-[11px] font-medium font-mono">
 
-                          {criticalTickets + highTickets} High / Critical
+                          {highTickets} High Priority
 
                         </span>
 
@@ -4524,9 +4524,9 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                       <div className="mt-2.5">
 
-                        <div className="text-2xl font-headline font-medium text-on-surface">{criticalTickets + highTickets}</div>
+                        <div className="text-2xl font-headline font-medium text-on-surface">{highTickets}</div>
 
-                        <span className="text-[10px] text-on-surface-variant block mt-0.5">{criticalTickets} critical, {highTickets} high</span>
+                        <span className="text-[10px] text-on-surface-variant block mt-0.5">{highTickets} high priority</span>
 
                       </div>
 
@@ -4835,7 +4835,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                         <span className="px-2 py-0.5 rounded-full bg-error-container text-on-error-container text-[11px] font-medium font-mono">
 
-                          {criticalTickets + highTickets} High / Critical
+                          {highTickets} High Priority
 
                         </span>
 
@@ -5108,8 +5108,6 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                 <select className="filter-select" value={filterPriority} onChange={e => setFilterPriority(e.target.value)}>
 
                   <option value="">All Priorities</option>
-
-                  <option value="CRITICAL">Critical ({criticalTickets})</option>
 
                   <option value="HIGH">High ({highTickets})</option>
 
@@ -6825,7 +6823,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                         if (sla) return sla.is_breached || sla.is_active_overdue;
 
-                        return t.is_breached || t.sla_status === "BREACHED" || (t.priority === "CRITICAL" && t.status !== "RESOLVED" && t.status !== "CLOSED");
+                        return t.is_breached || t.sla_status === "BREACHED" || (t.priority === "HIGH" && t.status !== "RESOLVED" && t.status !== "CLOSED");
 
                       })
 
@@ -6931,7 +6929,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                       if (sla) return sla.is_breached || sla.is_active_overdue;
 
-                      return t.is_breached || t.sla_status === "BREACHED" || (t.priority === "CRITICAL" && t.status !== "RESOLVED" && t.status !== "CLOSED");
+                      return t.is_breached || t.sla_status === "BREACHED" || (t.priority === "HIGH" && t.status !== "RESOLVED" && t.status !== "CLOSED");
 
                     }).length === 0 && (
 
@@ -9230,6 +9228,8 @@ function CreateTicketModal({ onClose, token, onSuccess, addToast, userAssets = [
   const [title, setTitle] = useState(initialData?.title || "");
   const [desc, setDesc] = useState(initialData?.desc || "");
   const [selectedAssetId, setSelectedAssetId] = useState(initialData?.asset_id || "");
+  const [priority, setPriority] = useState(initialData?.priority || "MEDIUM");
+  const [userSelectedPriority, setUserSelectedPriority] = useState(Boolean(initialData?.priority));
   const [submitting, setSubmitting] = useState(false);
   const [apiError, setApiError] = useState("");
 
@@ -9272,42 +9272,28 @@ function CreateTicketModal({ onClose, token, onSuccess, addToast, userAssets = [
 
 
   const inferredPriority = useMemo(() => {
-
     const text = `${title} ${desc}`.toLowerCase();
-
-    if (text.match(/emergency|outage|downtime|entire\s*(office|floor|team|company)|all\s*(users|systems)|production\s*(down|outage)|servers?\s*(down|dead)|system\s*down|security\s*breach|ransomware|malware|fire|smoke|spark|critical|sev[- ]?1/)) {
-
-      return "CRITICAL";
-
-    }
-
     if (
-
+      text.match(/emergency|outage|downtime|entire\s*(office|floor|team|company)|all\s*(users|systems)|production\s*(down|outage)|servers?\s*(down|dead)|system\s*down|security\s*breach|ransomware|malware|fire|smoke|spark|critical|sev[- ]?1/) ||
       text.match(/(mother\s*boa?r?d|mobo|logic\s*board|cpu|hard\s*drive|ssd|ram)[\s\S]*?(crash|dead|fried|broken|failure)/) ||
-
       text.match(/(crash|dead|fried|broken|failure)[\s\S]*?(mother\s*boa?r?d|mobo|logic\s*board|cpu|hard\s*drive|ssd|ram)/) ||
-
       text.match(/(scre+n|disp?lay|monit[oe]r)[\s\S]*?(not\s*working|blank|black|dead|broken|cracked)/) ||
-
       text.match(/not\s*(turning\s*on|starting|booting|working|charging|responding)|won'?t\s*(turn\s*on|boot|start)|cannot\s*(work|boot|start|login)|can'?t\s*(work|boot|start|login)/) ||
-
       text.match(/black\s*screen|blue\s*screen|bsod|kernel\s*panic|system\s*crash|unusable|locked\s*out|lockout|liquid\s*spill|urgent|asap/)
-
     ) {
-
       return "HIGH";
-
     }
-
     if (text.match(/inquiry|question|request|how\s+to|guidance|setup|suggestion|preference|cosmetic|scratch|ergonomic/)) {
-
       return "LOW";
-
     }
-
     return "MEDIUM";
-
   }, [title, desc]);
+
+  useEffect(() => {
+    if (!userSelectedPriority && inferredPriority) {
+      setPriority(inferredPriority);
+    }
+  }, [inferredPriority, userSelectedPriority]);
 
 
 
@@ -9347,7 +9333,7 @@ function CreateTicketModal({ onClose, token, onSuccess, addToast, userAssets = [
 
       category: inferredCategory,
 
-      priority: inferredPriority,
+      priority: priority,
 
       asset_id: selectedAssetId || null
 
@@ -9580,18 +9566,133 @@ function CreateTicketModal({ onClose, token, onSuccess, addToast, userAssets = [
 
 
 
-          {/* AI Regex Auto-Classification Preview */}
+          {/* Priority Level Selection (Manual Choice & AI Auto-detection) */}
+          <div className="form-field-group">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.45rem" }}>
+              <label className="form-field-label" style={{ marginBottom: 0 }}>
+                Priority Level *
+              </label>
+              <span style={{ fontSize: "0.74rem", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "0.3rem" }}>
+                <span className="material-symbols-outlined" style={{ fontSize: "14px", color: "var(--primary)" }}>auto_awesome</span>
+                <span>Auto-detected: <strong style={{ color: "var(--primary)" }}>{inferredPriority}</strong></span>
+              </span>
+            </div>
 
-          <div style={{ padding: "0.75rem 1rem", background: "var(--bg-subtle)", borderRadius: "var(--radius-md)", marginBottom: "1.25rem", fontSize: "0.82rem", display: "flex", alignItems: "center", gap: "0.75rem", border: "1px solid var(--border-light)" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "0.6rem" }}>
+              {/* LOW */}
+              <button
+                type="button"
+                onClick={() => {
+                  setPriority("LOW");
+                  setUserSelectedPriority(true);
+                }}
+                style={{
+                  padding: "0.65rem 0.75rem",
+                  borderRadius: "var(--radius-md)",
+                  border: priority === "LOW" ? "2px solid #059669" : "1px solid var(--border-light)",
+                  background: priority === "LOW" ? "rgba(5, 150, 105, 0.08)" : "var(--bg-subtle)",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  transition: "all 0.15s ease",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "0.2rem"
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span style={{ fontWeight: 700, fontSize: "0.82rem", color: priority === "LOW" ? "#059669" : "var(--text-main)" }}>
+                    Low
+                  </span>
+                  {priority === "LOW" && (
+                    <span className="material-symbols-outlined" style={{ fontSize: "15px", color: "#059669" }}>check_circle</span>
+                  )}
+                </div>
+                <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                  Minor issue / general inquiry
+                </span>
+              </button>
 
-            <span style={{ fontWeight: 600, color: "var(--primary)" }}>AI Classifier:</span>
+              {/* MEDIUM */}
+              <button
+                type="button"
+                onClick={() => {
+                  setPriority("MEDIUM");
+                  setUserSelectedPriority(true);
+                }}
+                style={{
+                  padding: "0.65rem 0.75rem",
+                  borderRadius: "var(--radius-md)",
+                  border: priority === "MEDIUM" ? "2px solid var(--primary)" : "1px solid var(--border-light)",
+                  background: priority === "MEDIUM" ? "var(--primary-subtle)" : "var(--bg-subtle)",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  transition: "all 0.15s ease",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "0.2rem"
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span style={{ fontWeight: 700, fontSize: "0.82rem", color: priority === "MEDIUM" ? "var(--primary)" : "var(--text-main)" }}>
+                    Medium
+                  </span>
+                  {priority === "MEDIUM" && (
+                    <span className="material-symbols-outlined" style={{ fontSize: "15px", color: "var(--primary)" }}>check_circle</span>
+                  )}
+                </div>
+                <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                  Standard day-to-day issue
+                </span>
+              </button>
 
-            <span>Category: <strong>{inferredCategory}</strong></span>
+              {/* HIGH */}
+              <button
+                type="button"
+                onClick={() => {
+                  setPriority("HIGH");
+                  setUserSelectedPriority(true);
+                }}
+                style={{
+                  padding: "0.65rem 0.75rem",
+                  borderRadius: "var(--radius-md)",
+                  border: priority === "HIGH" ? "2px solid #e11d48" : "1px solid var(--border-light)",
+                  background: priority === "HIGH" ? "rgba(225, 29, 72, 0.08)" : "var(--bg-subtle)",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  transition: "all 0.15s ease",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "0.2rem"
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span style={{ fontWeight: 700, fontSize: "0.82rem", color: priority === "HIGH" ? "#e11d48" : "var(--text-main)" }}>
+                    High
+                  </span>
+                  {priority === "HIGH" && (
+                    <span className="material-symbols-outlined" style={{ fontSize: "15px", color: "#e11d48" }}>check_circle</span>
+                  )}
+                </div>
+                <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                  Urgent / work is blocked
+                </span>
+              </button>
+            </div>
+          </div>
 
-            <span style={{ color: "#d5d2cb" }}>|</span>
-
-            <span>Priority: <strong style={{ color: inferredPriority === 'CRITICAL' ? 'var(--status-critical)' : 'inherit' }}>{inferredPriority}</strong></span>
-
+          {/* AI Auto-Classification & Selected Priority Summary */}
+          <div style={{ padding: "0.75rem 1rem", background: "var(--bg-subtle)", borderRadius: "var(--radius-md)", marginBottom: "1.25rem", fontSize: "0.82rem", display: "flex", alignItems: "center", justifyContent: "space-between", border: "1px solid var(--border-light)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <span className="material-symbols-outlined" style={{ fontSize: "16px", color: "var(--primary)" }}>category</span>
+              <span style={{ fontWeight: 600, color: "var(--primary)" }}>Inferred Category:</span>
+              <strong>{inferredCategory}</strong>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+              <span style={{ color: "var(--text-muted)" }}>Priority:</span>
+              <span className={`badge-priority ${(priority || "").toLowerCase()}`} style={{ fontSize: "0.72rem" }}>
+                {priority}
+              </span>
+            </div>
           </div>
 
 

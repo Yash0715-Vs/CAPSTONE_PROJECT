@@ -63,12 +63,11 @@ class TicketClassifier:
         ],
     }
 
-    # Keyword and phrase patterns for Priority classification using Regex (Evaluated strictly in order: CRITICAL -> HIGH -> MEDIUM -> LOW)
+    # Keyword and phrase patterns for Priority classification using Regex (Evaluated strictly in order: HIGH -> MEDIUM -> LOW)
     PRIORITY_PATTERNS: Dict[TicketPriority, List[str]] = {
-        TicketPriority.CRITICAL: [
-            r"\b(emergency|outage|downtime|entire\s*(office|floor|team|company|department|building)|all\s*(users|employees|systems)|production\s*(down|outage|halted|broken)|servers?\s*(down|crashed?|dead|offline)|system\s*(down|wide|halted)|security\s*breach|ransomware|data\s*leak|hacked|malware|cyber\s*attack|fire|smoke|sparking|burning\s*smell|critical|sev[- ]?1|severity\s*1|halted|immediately|blocker)\b",
-        ],
         TicketPriority.HIGH: [
+            # Emergency / Outage / Complete downtime
+            r"\b(emergency|outage|downtime|entire\s*(office|floor|team|company|department|building)|all\s*(users|employees|systems)|production\s*(down|outage|halted|broken)|servers?\s*(down|crashed?|dead|offline)|system\s*(down|wide|halted)|security\s*breach|ransomware|data\s*leak|hacked|malware|cyber\s*attack|fire|smoke|sparking|burning\s*smell|critical|sev[- ]?1|severity\s*1|halted|immediately|blocker)\b",
             # Component crash / complete failure
             r"\b(mother\s*boa?r?d|mobo|logic\s*board|cpu|processor|hard\s*drive|ssd|ram)\b.*?\b(crash(es|ed|ing)?|dead|fried|burnt|broken|failure|failed)\b",
             r"\b(crash(es|ed|ing)?|dead|fried|burnt|broken|failure|failed)\b.*?\b(mother\s*boa?r?d|mobo|logic\s*board|cpu|processor|hard\s*drive|ssd|ram)\b",
@@ -128,7 +127,7 @@ class TicketClassifier:
             has_match = any(re.search(pat, cleaned_text, re.IGNORECASE) for pat in patterns)
             if has_match:
                 detected_priority = priority
-                break  # Matched highest priority tier in order (CRITICAL -> HIGH -> MEDIUM -> LOW)
+                break  # Matched highest priority tier in order (HIGH -> MEDIUM -> LOW)
 
         return detected_category, detected_priority
 

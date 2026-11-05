@@ -104,7 +104,7 @@ def test_ticket_classifier_network():
     """Tests automatic classification for network outages."""
     category, priority = TicketClassifier.classify_text("Emergency: Entire office WiFi disconnected")
     assert category == TicketCategory.NETWORK
-    assert priority == TicketPriority.CRITICAL
+    assert priority == TicketPriority.HIGH
 
 
 def test_ticket_classifier_access():
