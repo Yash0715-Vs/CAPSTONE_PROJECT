@@ -6721,11 +6721,11 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                   <div>
 
-                    <div className="table-header-title">SLA Escalation Queue &amp; Breached Incidents</div>
+                    <div className="table-header-title">Overdue Tickets</div>
 
                     <div style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginTop: "0.15rem" }}>
 
-                      Active support tickets exceeding standard SLA resolution time limits
+                      Active tickets past their deadline
 
                     </div>
 
@@ -6733,7 +6733,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                   <span className={`px-2.5 py-1 rounded-full text-xs font-mono font-medium ${activeOverdueCount > 0 ? 'bg-error-container text-on-error-container' : 'bg-surface-container text-on-surface'}`}>
 
-                    {activeOverdueCount} Active Overdue ({breachedTicketsCount} Total Breaches)
+                    {activeOverdueCount} Overdue
 
                   </span>
 
