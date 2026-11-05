@@ -4404,8 +4404,6 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                         <div className="text-2xl font-headline font-medium text-on-surface">{totalAssets}</div>
 
-                        <span className="text-[10px] text-on-surface-variant block mt-0.5">{assignedAssets} assigned</span>
-
                       </div>
 
                     </div>
