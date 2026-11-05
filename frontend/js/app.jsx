@@ -11155,30 +11155,6 @@ function TicketDetailsModal({ ticket, assets = [], currentUser, token, onClose, 
 
           </div>
 
-
-
-          <div style={{ background: "var(--bg-subtle)", padding: "0.75rem 1rem", borderRadius: "var(--radius-md)", border: "1px solid var(--border-light)" }}>
-
-            <div style={{ fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)", fontWeight: 600 }}>SLA Status</div>
-
-            <div style={{ fontSize: "0.85rem", marginTop: "0.15rem", display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap" }}>
-
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold font-mono ${ticket.is_breached ? 'bg-error-container text-on-error-container' : 'bg-primary/10 text-primary'}`}>
-
-                {ticket.is_breached ? "SLA BREACHED" : "WITHIN SLA"}
-
-              </span>
-
-              <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>
-
-                Submitted: {createdDate}
-
-              </span>
-
-            </div>
-
-          </div>
-
         </div>
 
 
