@@ -11169,15 +11169,11 @@ function TicketDetailsModal({ ticket, assets = [], currentUser, token, onClose, 
 
               </span>
 
-              {ticket.sla_deadline && (
+              <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>
 
-                <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>
+                Submitted: {createdDate}
 
-                  Target: {formatLocalDateTime(ticket.sla_deadline)}
-
-                </span>
-
-              )}
+              </span>
 
             </div>
 
