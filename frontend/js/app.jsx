@@ -3278,25 +3278,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
           <div className="flex items-center gap-6 min-w-0">
 
-            <div className="flex items-center gap-2 text-xs text-on-surface-variant">
-
-              <span className="hover:text-on-surface transition-colors cursor-pointer" onClick={() => setActiveTab('dashboard')}>Platform</span>
-
-              <span className="material-symbols-outlined text-[14px]">chevron_right</span>
-
-              <span className="font-medium text-on-surface">
-
-                  {activeTab === 'dashboard' ? (currentUser.role === 'EMPLOYEE' ? 'My Employee Workspace' : currentUser.role === 'SUPPORT' ? 'ServiceDesk Operations Hub' : 'Operations Overview') :
-                   activeTab === 'tickets' ? (currentUser.role === 'EMPLOYEE' ? 'My Support Incident Tickets' : 'Support Incident Tickets') :
-                   activeTab === 'my-equipment' ? 'My Assigned Equipment' :
-                   activeTab === 'assets' ? (currentUser.role === 'EMPLOYEE' ? 'My Assigned Equipment' : 'Assets') :
-                   activeTab === 'equipment-requests' ? (currentUser.role === 'EMPLOYEE' ? 'My Hardware Requests' : 'Hardware Provisioning Queue') :
-                   activeTab === 'employees' ? 'Enrolled Employee Directory' :
-                   activeTab === 'sla' ? 'SLA & MTTR Performance' : 'System Audit Ledger'}
-
-                </span>
-
-            </div>
+            
 
             <div className="hidden md:flex items-center bg-surface-container-low px-3 py-1.5 rounded-lg w-80 text-on-surface-variant focus-within:ring-1 focus-within:ring-primary focus-within:bg-surface-container-lowest transition-all">
 
@@ -3414,21 +3396,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
             </button>
 
-            <button
-
-              className="p-2 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors cursor-pointer"
-
-              type="button"
-
-              title="Help & System Info"
-
-              onClick={() => addToast("AssetDesk v2.4 Enterprise Production Gateway", "info")}
-
-            >
-
-              <span className="material-symbols-outlined text-[20px]">help_outline</span>
-
-            </button>
+            
 
             <div
 
@@ -3464,23 +3432,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                 <div className="space-y-2">
 
-                  <div className="flex items-center gap-3">
-
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container text-on-surface-variant font-mono text-[11px] font-medium tracking-wide">
-
-                      <span className={`w-1.5 h-1.5 rounded-full ${wsConnected && wsAuthenticated ? "bg-tertiary animate-pulse" : "bg-amber-500"}`}></span>
-
-                      {wsConnected && wsAuthenticated ? "Live Stream Authenticated" : wsConnected ? "Stream Connecting (Auth Pending)" : "Live Database Connected"}
-
-                    </span>
-
-                    <span className="text-xs text-on-surface-variant font-mono">
-
-                      {currentUser.role === 'ADMIN' ? 'Administrator Gateway' : currentUser.role === 'SUPPORT' ? 'IT ServiceDesk Console' : 'Personal Employee Portal'}
-
-                    </span>
-
-                  </div>
+                  
 
                   <h1 className="font-headline text-3xl lg:text-4xl text-on-surface tracking-tight font-normal">
 
@@ -3488,19 +3440,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                   </h1>
 
-                  <p className="text-sm text-on-surface-variant max-w-2xl font-body leading-relaxed">
-
-                    {currentUser.role === 'EMPLOYEE'
-
-                      ? 'Track your active incident requests, review custody of assigned company equipment, and submit support tickets.'
-
-                      : currentUser.role === 'SUPPORT'
-
-                      ? 'Operational incident queue triage, SLA breach management, and hardware fleet depository status.'
-
-                      : 'Centralized visibility across hardware fleet custody, workforce support queues, and real-time SLA metrics.'}
-
-                  </p>
+                  
 
                 </div>
 
@@ -4490,7 +4430,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                         <div className="text-2xl font-headline font-medium text-on-surface">{totalUsers}</div>
 
-                        <span className="text-[10px] text-on-surface-variant block mt-0.5">{adminUsers} admins, {supportUsers} staff</span>
+                        
 
                       </div>
 
@@ -4514,7 +4454,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                         <div className="text-2xl font-headline font-medium text-on-surface">{totalTickets}</div>
 
-                        <span className="text-[10px] text-on-surface-variant block mt-0.5">All lifecycles</span>
+                        
 
                       </div>
 
@@ -4538,7 +4478,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                         <div className="text-2xl font-headline font-medium text-on-surface">{myOpenTickets}</div>
 
-                        <span className="text-[10px] text-on-surface-variant block mt-0.5">{myOpenTickets} active tickets in your queue</span>
+                        
 
                       </div>
 
