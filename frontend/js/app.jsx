@@ -1647,15 +1647,40 @@ function App() {
 
 
 
-  // Independent in-memory authentication state per tab (no cross-tab session sharing)
-  const [currentUser, setCurrentUser] = useState(null);
-  const [token, setToken] = useState("");
+  // Tab-isolated persistent authentication state (persists across reloads within the same tab, isolated across separate tabs)
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const stored = sessionStorage.getItem("it_user");
+      return stored ? JSON.parse(stored) : null;
+    } catch (e) {
+      return null;
+    }
+  });
+
+  const [token, setToken] = useState(() => {
+    try {
+      return sessionStorage.getItem("it_token") || "";
+    } catch (e) {
+      return "";
+    }
+  });
 
   const [authView, setAuthView] = useState("login"); // "login" | "register"
 
+  const [activeTab, setActiveTabState] = useState(() => {
+    try {
+      return sessionStorage.getItem("it_tab") || "dashboard";
+    } catch (e) {
+      return "dashboard";
+    }
+  });
 
-
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const setActiveTab = useCallback((tab) => {
+    setActiveTabState(tab);
+    try {
+      sessionStorage.setItem("it_tab", tab);
+    } catch (e) { }
+  }, []);
 
   const [timeRange, setTimeRange] = useState("30d");
 
@@ -2109,6 +2134,12 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
     }
 
+    try {
+      sessionStorage.removeItem("it_token");
+      sessionStorage.removeItem("it_user");
+      sessionStorage.removeItem("it_tab");
+    } catch (e) { }
+
     setToken("");
 
     setCurrentUser(null);
@@ -2186,6 +2217,9 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
           if (freshUser) {
 
             setCurrentUser(freshUser);
+            try {
+              sessionStorage.setItem("it_user", JSON.stringify(freshUser));
+            } catch (e) { }
 
           }
 
@@ -2830,6 +2864,11 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
           onRegisterSuccess={(user, tok) => {
 
+            try {
+              sessionStorage.setItem("it_token", tok);
+              sessionStorage.setItem("it_user", JSON.stringify(user));
+            } catch (e) { }
+
             setCurrentUser(user);
 
             setToken(tok);
@@ -2859,6 +2898,11 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
         onToggleTheme={toggleTheme}
 
         onLoginSuccess={(user, tok) => {
+
+          try {
+            sessionStorage.setItem("it_token", tok);
+            sessionStorage.setItem("it_user", JSON.stringify(user));
+          } catch (e) { }
 
           setCurrentUser(user);
 
