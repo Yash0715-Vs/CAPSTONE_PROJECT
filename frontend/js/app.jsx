@@ -7021,7 +7021,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                   <div>
 
-                    <div className="table-header-title">Enrolled Workforce Accounts</div>
+                    <div className="table-header-title">Employees</div>
 
                     <div style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginTop: "0.15rem" }}>
 
