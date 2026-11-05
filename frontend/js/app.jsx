@@ -4036,12 +4036,6 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                         <div className="text-2xl font-headline font-medium text-on-surface">{resolvedAndClosed}</div>
 
-                        <span className="text-[11px] text-on-surface-variant mt-0.5 block">
-
-                          {resolvedTickets > 0 ? `${resolvedTickets} pending verification, ${closedTickets} closed` : `${closedTickets} confirmed closed`}
-
-                        </span>
-
                       </div>
 
                     </div>
@@ -4506,12 +4500,6 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                         <div className="text-2xl font-headline font-medium text-on-surface">{resolvedAndClosed}</div>
 
-                        <span className="text-[10px] text-on-surface-variant block mt-0.5">
-
-                          {resolvedTickets > 0 ? `${resolvedTickets} pending verification, ${closedTickets} closed` : `${closedTickets} confirmed closed`}
-
-                        </span>
-
                       </div>
 
                     </div>
@@ -4533,8 +4521,6 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                       <div className="mt-2.5">
 
                         <div className="text-2xl font-headline font-medium text-on-surface">{highTickets}</div>
-
-                        <span className="text-[10px] text-on-surface-variant block mt-0.5">{highTickets} high priority</span>
 
                       </div>
 
@@ -4558,21 +4544,19 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                         <div className="text-2xl font-headline font-medium text-on-surface">{complianceRate}%</div>
 
-                        <span className="text-[10px] text-on-surface-variant block mt-0.5">{nonBreachedCount} compliant ({activeOnTimeCount} active on-time)</span>
-
                       </div>
 
                     </div>
 
 
 
-                    {/* KPI 8: Active SLA Breaches */}
+                    {/* KPI 8: SLA Overdue */}
 
                     <div className="bg-surface-container-lowest p-3.5 rounded-xl shadow-sm flex flex-col justify-between">
 
                       <div className="flex items-center justify-between">
 
-                        <span className="text-[10px] font-medium uppercase tracking-wider text-on-surface-variant font-label">SLA Breaches</span>
+                        <span className="text-[10px] font-medium uppercase tracking-wider text-on-surface-variant font-label">SLA Overdue</span>
 
                         <span className="material-symbols-outlined text-[16px] text-error">notification_important</span>
 
@@ -4581,8 +4565,6 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                       <div className="mt-2.5">
 
                         <div className="text-2xl font-headline font-medium text-error">{breachedTicketsCount}</div>
-
-                        <span className="text-[10px] text-on-surface-variant block mt-0.5">{activeOverdueCount} active overdue · {historicalBreachCount} past</span>
 
                       </div>
 
