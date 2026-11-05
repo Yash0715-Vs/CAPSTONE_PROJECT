@@ -1829,7 +1829,17 @@ function App() {
 
   const nonBreachedCount = slaReport?.non_breached_count ?? (totalTickets - breachedTicketsCount);
 
-  const complianceRate = totalTickets > 0 ? (((totalTickets - breachedTicketsCount) / totalTickets) * 100).toFixed(1) : "100.0";
+  const complianceRate = useMemo(() => {
+    if (slaReport?.compliance_rate) {
+      const parsed = parseFloat(String(slaReport.compliance_rate).replace('%', ''));
+      if (!isNaN(parsed)) return Math.max(0, parsed).toFixed(1);
+    }
+    if (totalTickets > 0) {
+      const overdue = currentUser?.role === 'SUPPORT' ? activeOverdueCount : breachedTicketsCount;
+      return Math.max(0, (((totalTickets - overdue) / totalTickets) * 100)).toFixed(1);
+    }
+    return "100.0";
+  }, [slaReport, totalTickets, currentUser, activeOverdueCount, breachedTicketsCount]);
 
 
 
@@ -3140,7 +3150,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                   </div>
 
-                  {activeOverdueCount > 0 ? (
+                  {activeOverdueCount > 0 && (
 
                     <span className="px-1.5 py-0.5 text-[11px] font-medium rounded-full bg-error-container text-on-error-container font-mono" title={`${activeOverdueCount} active overdue SLA incident(s)`}>
 
@@ -3148,15 +3158,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                     </span>
 
-                  ) : breachedTicketsCount > 0 ? (
-
-                    <span className="px-1.5 py-0.5 text-[11px] font-medium rounded-full bg-error-container text-on-error-container font-mono">
-
-                      {breachedTicketsCount}
-
-                    </span>
-
-                  ) : null}
+                  )}
 
                 </button>
 
@@ -6651,12 +6653,6 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                   </div>
 
-                  <div className="text-xs text-on-surface-variant mt-1">
-
-                    {totalTickets - breachedTicketsCount} On-Time of {totalTickets} total
-
-                  </div>
-
                 </div>
 
 
@@ -6675,12 +6671,6 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                   </div>
 
-                  <div className="text-xs text-on-surface-variant mt-1">
-
-                    Requiring priority response ({historicalBreachCount} past)
-
-                  </div>
-
                 </div>
 
 
@@ -6695,13 +6685,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                   <div className="text-3xl font-headline font-semibold text-on-surface mt-2">
 
-                    {totalTickets}
-
-                  </div>
-
-                  <div className="text-xs text-on-surface-variant mt-1">
-
-                    Incident tickets in database
+                    {slaReport?.total_tickets_analyzed ?? totalTickets}
 
                   </div>
 
@@ -6720,12 +6704,6 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                   <div className="text-3xl font-headline font-semibold text-primary mt-2">
 
                     {slaReport?.resolution_metrics?.average_resolution_human || "11.5 hours"}
-
-                  </div>
-
-                  <div className="text-xs text-on-surface-variant mt-1">
-
-                    Historical closed incidents
 
                   </div>
 
@@ -6753,7 +6731,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                   </div>
 
-                  <span className="px-2.5 py-1 rounded-full bg-error-container text-on-error-container text-xs font-mono font-medium">
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-mono font-medium ${activeOverdueCount > 0 ? 'bg-error-container text-on-error-container' : 'bg-surface-container text-on-surface'}`}>
 
                     {activeOverdueCount} Active Overdue ({breachedTicketsCount} Total Breaches)
 
