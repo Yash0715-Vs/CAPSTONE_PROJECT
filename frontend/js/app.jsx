@@ -3576,11 +3576,11 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                       <div className="mt-4">
 
-                        <div className="text-3xl font-headline font-medium text-on-surface">{myResolvedTickets}</div>
+                        <div className="text-3xl font-headline font-medium text-on-surface">{myResolvedTickets + myClosedTickets}</div>
 
                         <span className="text-xs text-on-surface-variant mt-1 block">
 
-                          {myClosedTickets} confirmed closed
+                          {myResolvedTickets > 0 ? `${myResolvedTickets} pending verification, ${myClosedTickets} closed` : `${myClosedTickets} confirmed closed`}
 
                         </span>
 
@@ -4034,9 +4034,13 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                       <div className="mt-3">
 
-                        <div className="text-2xl font-headline font-medium text-on-surface">{resolvedTickets}</div>
+                        <div className="text-2xl font-headline font-medium text-on-surface">{resolvedAndClosed}</div>
 
-                        <span className="text-[11px] text-on-surface-variant mt-0.5 block">{closedTickets} confirmed closed</span>
+                        <span className="text-[11px] text-on-surface-variant mt-0.5 block">
+
+                          {resolvedTickets > 0 ? `${resolvedTickets} pending verification, ${closedTickets} closed` : `${closedTickets} confirmed closed`}
+
+                        </span>
 
                       </div>
 
@@ -4500,9 +4504,13 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                       <div className="mt-2.5">
 
-                        <div className="text-2xl font-headline font-medium text-on-surface">{resolvedTickets}</div>
+                        <div className="text-2xl font-headline font-medium text-on-surface">{resolvedAndClosed}</div>
 
-                        <span className="text-[10px] text-on-surface-variant block mt-0.5">{closedTickets} confirmed closed</span>
+                        <span className="text-[10px] text-on-surface-variant block mt-0.5">
+
+                          {resolvedTickets > 0 ? `${resolvedTickets} pending verification, ${closedTickets} closed` : `${closedTickets} confirmed closed`}
+
+                        </span>
 
                       </div>
 
