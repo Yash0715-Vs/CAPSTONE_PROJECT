@@ -307,10 +307,10 @@ def provision_equipment_request(
     request_id: str,
     action: AdminActionRequest,
     session: Session = Depends(get_db),
-    admin: UserDB = Depends(require_roles(["ADMIN"]))
+    staff_user: UserDB = Depends(require_roles(["ADMIN", "SUPPORT"]))
 ):
     """
-    Admin provisions hardware for an approved request, associating a valid verified asset.
+    Admin or IT Support provisions hardware for an approved request, associating a valid verified asset.
     Strictly prohibits transitioning to PROVISIONED without a valid asset.
     """
     req = session.query(EquipmentRequestDB).filter(EquipmentRequestDB.request_id == request_id).first()
@@ -377,7 +377,7 @@ def provision_equipment_request(
 
     hist = EquipmentRequestHistoryDB(
         request_id=request_id,
-        actor=admin.user_id,
+        actor=staff_user.user_id,
         action="PROVISIONED",
         old_status=old_status,
         new_status="PROVISIONED",
@@ -388,11 +388,12 @@ def provision_equipment_request(
     session.add(hist)
     session.flush()
 
+    actor_role_label = "Admin" if staff_user.role == "ADMIN" else "IT Support"
     ActivityLogRepository.log(
         session,
         "EQUIPMENT_REQUEST_PROVISIONED",
-        admin.user_id,
-        f"Admin {admin.user_id} provisioned {request_id} with asset {clean_asset_id}"
+        staff_user.user_id,
+        f"{actor_role_label} {staff_user.user_id} provisioned {request_id} with asset {clean_asset_id}"
     )
     return req.to_dict()
 
@@ -461,7 +462,7 @@ def close_equipment_request(
 ):
     """
     Closes an equipment request following verification.
-    Only the requesting employee or an Administrator can close the request.
+    Only the requesting employee, IT Support, or an Administrator can close the request.
     Strictly requires request status to be VERIFIED.
     """
     req = session.query(EquipmentRequestDB).filter(EquipmentRequestDB.request_id == request_id).first()
@@ -471,11 +472,11 @@ def close_equipment_request(
             detail=f"Equipment request '{request_id}' not found."
         )
 
-    # RBAC check: only requesting user or Administrator
-    if current_user.role != "ADMIN" and req.requested_by != current_user.user_id:
+    # RBAC check: only requesting user, IT Support, or Administrator
+    if current_user.role not in ["ADMIN", "SUPPORT"] and req.requested_by != current_user.user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only the requesting user or an Administrator is authorized to close equipment requests."
+            detail="Only the requesting user, IT Support, or an Administrator is authorized to close equipment requests."
         )
 
     if req.status != "VERIFIED":

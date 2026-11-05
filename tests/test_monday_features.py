@@ -230,6 +230,69 @@ def test_equipment_request_lifecycle(tokens):
     assert close_res.json()["status"] == "CLOSED"
 
 
+def test_support_can_view_users_and_provision_equipment(tokens):
+    """
+    Verifies that IT Support can:
+    1. View users list and total workforce count (GET /users).
+    2. Provision an approved equipment request to the requesting employee.
+    3. Close verified equipment requests.
+    """
+    support_headers = {"Authorization": f"Bearer {tokens['support']}"}
+    emp_headers = {"Authorization": f"Bearer {tokens['emp1']}"}
+    admin_headers = {"Authorization": f"Bearer {tokens['admin']}"}
+
+    # 1. IT Support can list all users and see total count
+    users_res = client.get("/users", headers=support_headers)
+    assert users_res.status_code == 200
+    users = users_res.json()
+    assert isinstance(users, list)
+    assert len(users) >= 4
+
+    # 2. Employee requests a Laptop
+    req_res = client.post(
+        "/equipment-requests",
+        json={"equipment_type": "Laptop", "reason": "Need secondary laptop for dev testing"},
+        headers=emp_headers
+    )
+    assert req_res.status_code == 201
+    req_id = req_res.json()["request_id"]
+
+    # Admin approves the request
+    appr_res = client.post(
+        f"/equipment-requests/{req_id}/approve",
+        json={"admin_notes": "Approved for dev team"},
+        headers=admin_headers
+    )
+    assert appr_res.status_code == 200
+
+    # 3. IT Support provisions the request to the employee
+    prov_res = client.post(
+        f"/equipment-requests/{req_id}/provision",
+        json={"provisioned_asset_id": "LAP-1026", "admin_notes": "Provisioned by IT Support"},
+        headers=support_headers
+    )
+    assert prov_res.status_code == 200
+    assert prov_res.json()["status"] == "PROVISIONED"
+    assert prov_res.json()["provisioned_asset_id"] == "LAP-1026"
+
+    # 4. Employee verifies receipt
+    ver_res = client.post(
+        f"/equipment-requests/{req_id}/verify",
+        json={"employee_notes": "Received and tested laptop"},
+        headers=emp_headers
+    )
+    assert ver_res.status_code == 200
+
+    # 5. IT Support closes request
+    close_res = client.post(
+        f"/equipment-requests/{req_id}/close",
+        json={"employee_notes": "Request completed by IT Support"},
+        headers=support_headers
+    )
+    assert close_res.status_code == 200
+    assert close_res.json()["status"] == "CLOSED"
+
+
 # =====================================================================
 # 5. Ticket Activity History
 # =====================================================================

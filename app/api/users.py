@@ -125,8 +125,8 @@ def get_user_by_id(
     session: Session = Depends(get_db),
     current_user: UserDB = Depends(get_current_user)
 ):
-    """Retrieves specific user details. Employees can view their own profile."""
-    if current_user.role != UserRole.ADMIN.value and current_user.user_id != user_id:
+    """Retrieves specific user details. Employees can view their own profile; Admin and Support can view any profile."""
+    if current_user.role not in [UserRole.ADMIN.value, UserRole.SUPPORT.value] and current_user.user_id != user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You are only authorized to view your own profile."
