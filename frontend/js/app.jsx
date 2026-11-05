@@ -522,472 +522,336 @@ function ForgotPasswordModal({ isOpen, onClose, initialIdentifier, onPasswordRes
 // =====================================================================
 
 function LoginPage({ onLoginSuccess, onSwitchToRegister, demoAccounts, theme, onToggleTheme }) {
-
   const [identifier, setIdentifier] = useState("");
-
   const [password, setPassword] = useState("");
-
   const [showPassword, setShowPassword] = useState(false);
-
   const [rememberMe, setRememberMe] = useState(true);
-
   const [showForgotModal, setShowForgotModal] = useState(false);
-
   const [loading, setLoading] = useState(false);
-
   const [error, setError] = useState("");
 
-
-
   const handleSubmit = async (e) => {
-
     e.preventDefault();
-
     setError("");
-
     setLoading(true);
 
-
-
     try {
-
       const res = await fetch(`${API_BASE}/auth/login`, {
-
         method: "POST",
-
         headers: { "Content-Type": "application/json" },
-
         body: JSON.stringify({ user_id: identifier.trim(), password })
-
       });
 
-
-
       const data = await res.json().catch(() => null);
-
       if (!res.ok) {
-
         throw new Error(parseApiError(data, res.status, "Invalid enterprise credentials or account inactive."));
-
       }
-
-
 
       onLoginSuccess(data.user, data.access_token);
-
     } catch (err) {
-
       if (err.name === "TypeError" && (err.message === "Failed to fetch" || err.message.includes("fetch"))) {
-
         setError(`Unable to connect to backend server at ${API_BASE}. Please verify the FastAPI backend server is running on port 8000.`);
-
       } else {
-
         setError(err.message || "Failed to connect to authentication server.");
-
       }
-
     } finally {
-
       setLoading(false);
-
     }
-
   };
-
-
 
   const handleDemoFill = (acc) => {
-
+    if (!acc) return;
     setIdentifier(acc.user_id);
-
     setPassword("password");
-
     setError("");
-
   };
 
-
-
   return (
+    <div className="apex-auth-viewport">
+      <div className="apex-auth-master-frame">
 
-    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+        {/* LEFT PANEL: Framed Visual Hero Inset Card (Matches Reference Design) */}
+        <div className="apex-auth-visual-card">
+          {/* Embedded High-Precision SVG: Cinematic Twilight Dunes in Deep Teal & Obsidian */}
+          <svg
+            className="hero-dunes-art"
+            viewBox="0 0 540 720"
+            preserveAspectRatio="xMidYMid slice"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-hidden="true"
+          >
+            <defs>
+              {/* Sky Background Gradient */}
+              <linearGradient id="twilightSky" x1="0%" y1="0%" x2="40%" y2="100%">
+                <stop offset="0%" stopColor="#061210" />
+                <stop offset="45%" stopColor="#0B2622" />
+                <stop offset="80%" stopColor="#0F3D36" />
+                <stop offset="100%" stopColor="#081A17" />
+              </linearGradient>
 
-      <div className="apex-auth-container">
+              {/* Distant Dune Gradient */}
+              <linearGradient id="duneDistant" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#0F433C" />
+                <stop offset="60%" stopColor="#0A2C27" />
+                <stop offset="100%" stopColor="#061815" />
+              </linearGradient>
 
-        {/* LEFT PANEL: Enterprise Operations & Security Brand Canvas */}
+              {/* Main Ridge Dune Gradient */}
+              <linearGradient id="duneMain" x1="20%" y1="0%" x2="90%" y2="100%">
+                <stop offset="0%" stopColor="#155D54" />
+                <stop offset="35%" stopColor="#0F3F39" />
+                <stop offset="70%" stopColor="#09221F" />
+                <stop offset="100%" stopColor="#051211" />
+              </linearGradient>
 
-        <div className="apex-auth-left">
+              {/* Foreground Silky Dune Gradient */}
+              <linearGradient id="duneForeground" x1="0%" y1="0%" x2="80%" y2="100%">
+                <stop offset="0%" stopColor="#0C342F" />
+                <stop offset="50%" stopColor="#08201D" />
+                <stop offset="100%" stopColor="#030A09" />
+              </linearGradient>
 
-          {/* Operations Photo Background with Warm Dark Overlay */}
+              {/* Glowing Crest Highlight Gradient */}
+              <linearGradient id="crestGlow" x1="0%" y1="0%" x2="100%" y2="60%">
+                <stop offset="0%" stopColor="rgba(183, 218, 212, 0.75)" />
+                <stop offset="45%" stopColor="rgba(45, 174, 158, 0.45)" />
+                <stop offset="100%" stopColor="rgba(15, 118, 110, 0.05)" />
+              </linearGradient>
 
-          <div className="apex-auth-bg-photo" />
+              {/* Ambient Star/Light Glow */}
+              <radialGradient id="skyAmbientGlow" cx="20%" cy="15%" r="65%">
+                <stop offset="0%" stopColor="rgba(45, 174, 158, 0.18)" />
+                <stop offset="60%" stopColor="rgba(15, 118, 110, 0.04)" />
+                <stop offset="100%" stopColor="transparent" />
+              </radialGradient>
+            </defs>
 
-          <div className="ambient-glow-tl" />
+            {/* Sky Base */}
+            <rect width="540" height="720" fill="url(#twilightSky)" />
+            <rect width="540" height="720" fill="url(#skyAmbientGlow)" />
 
-          <div className="ambient-glow-br" />
+            {/* Ambient Star Specks */}
+            <circle cx="85" cy="95" r="1.2" fill="#ffffff" opacity="0.65" />
+            <circle cx="160" cy="65" r="1" fill="#B7DAD4" opacity="0.45" />
+            <circle cx="280" cy="110" r="1.4" fill="#ffffff" opacity="0.7" />
+            <circle cx="395" cy="80" r="1.1" fill="#B7DAD4" opacity="0.5" />
+            <circle cx="460" cy="140" r="1.3" fill="#ffffff" opacity="0.6" />
+            <circle cx="120" cy="175" r="0.9" fill="#ffffff" opacity="0.4" />
+            <circle cx="340" cy="190" r="1" fill="#B7DAD4" opacity="0.45" />
 
+            {/* Layer 1: Distant Mountain / Dune Ridge */}
+            <path
+              d="M-20 460 Q 90 340, 210 380 T 420 350 Q 480 340, 560 370 L 560 740 L -20 740 Z"
+              fill="url(#duneDistant)"
+              opacity="0.85"
+            />
 
+            {/* Layer 2: Main Majestic Sweeping Dune (Matches Reference Mockup) */}
+            <path
+              d="M-20 490 Q 140 430, 260 340 Q 380 250, 560 410 L 560 740 L -20 740 Z"
+              fill="url(#duneMain)"
+            />
+            {/* Luminous Dune Crest Line */}
+            <path
+              d="M-20 490 Q 140 430, 260 340 Q 380 250, 560 410"
+              fill="none"
+              stroke="url(#crestGlow)"
+              strokeWidth="1.8"
+            />
 
-          {/* Top Brand Header */}
+            {/* Layer 3: Foreground Silky Dune */}
+            <path
+              d="M-20 600 Q 160 520, 310 540 Q 440 560, 560 500 L 560 740 L -20 740 Z"
+              fill="url(#duneForeground)"
+            />
 
-          <div className="apex-auth-left-top">
+            {/* Contrast Vignette to ensure crystal-clear text readability */}
+            <rect y="440" width="540" height="280" fill="url(#duneForeground)" opacity="0.82" />
+          </svg>
 
-            <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-
-              <div className="brand-icon-shield">
-
+          {/* Top Brand Header & Portal Link */}
+          <div className="hero-card-header">
+            <div className="hero-brand-block">
+              <div className="hero-brand-shield">
                 <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>shield</span>
-
-                <div className="brand-ping-dot" />
-
+                <span className="hero-brand-pulse" />
               </div>
-
-              <div className="brand-title-wrap">
-
-                <span className="brand-title">AssetDesk</span>
-
-                <span className="brand-tag">IT ASSET & TICKET MANAGEMENT</span>
-
+              <div className="hero-brand-titles">
+                <span className="hero-brand-name">AssetDesk</span>
+                <span className="hero-brand-sub">IT ASSET & TICKET MANAGEMENT</span>
               </div>
-
             </div>
 
+            <div className="hero-portal-pill">
+              <span>Enterprise Portal</span>
+              <span className="material-symbols-outlined">arrow_forward</span>
+            </div>
           </div>
 
+          {/* Bottom Tagline & Slider Pagination (Matches Reference Mockup) */}
+          <div className="hero-card-bottom">
+            <h2 className="hero-card-tagline">
+              Capturing Precision,<br />
+              Powering IT Infrastructure
+            </h2>
 
-
-          {/* Middle Hero Area */}
-
-          <div className="apex-auth-left-middle">
-
-            <div className="portal-tag-badge">
-
-              <span className="material-symbols-outlined">terminal</span>
-
-              <span>Mission-Critical Operations Portal</span>
-
+            {/* Slider Pagination Dashes */}
+            <div className="hero-slider-pagination" aria-label="Slider Indicators">
+              <span className="slider-dash active" />
+              <span className="slider-dash" />
+              <span className="slider-dash" />
             </div>
-
-
-
-            <h1 className="hero-editorial-title">
-
-              IT Asset & Ticket<br />Management System
-
-            </h1>
-
-
-
-            <p className="hero-editorial-desc">
-
-              A centralized enterprise platform to manage hardware assets, employee accounts, priority support queues, and SLA compliance.
-
-            </p>
-
-
-
-            {/* Feature Highlights & Compliance Badges */}
-
-            <div className="hero-badges-wrap">
-
-              <div className="feature-pill-badge">
-
-                <span className="material-symbols-outlined badge-icon-pace">pace</span>
-
-                <span>Real-time SLA Tracking & Escalation</span>
-
-              </div>
-
-              <div className="feature-pill-badge">
-
-                <span className="material-symbols-outlined badge-icon-inventory">inventory_2</span>
-
-                <span>Automated Asset Lifecycle Auditing</span>
-
-              </div>
-
-            </div>
-
           </div>
-
-
-
-
-
         </div>
 
-
-
         {/* RIGHT PANEL: High-Precision Modern Authentication Form */}
+        <div className="apex-auth-form-panel">
+          {/* Header Row: Title & Theme Switcher */}
+          <div className="auth-form-header-row">
+            <h2 className="auth-card-heading">Welcome Back!</h2>
 
-        <div className="apex-auth-right">
+            <button
+              type="button"
+              className="btn-auth-theme-toggle"
+              onClick={onToggleTheme}
+              title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
+              aria-label="Toggle theme"
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: "15px" }}>
+                {theme === "dark" ? "light_mode" : "dark_mode"}
+              </span>
+              <span>{theme === "dark" ? "Light" : "Dark"}</span>
+            </button>
+          </div>
 
-          <div className="auth-form-card">
+          {error && (
+            <div className="auth-error-banner" style={{ marginTop: "1rem" }}>
+              <span className="material-symbols-outlined" style={{ fontSize: "18px" }}>error</span>
+              <span>{error}</span>
+            </div>
+          )}
 
-            {/* Top Badge & Header */}
-
-            <div className="auth-card-top">
-
-              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "0.5rem" }}>
-
-                <button
-
-                  type="button"
-
-                  className="btn-auth-theme-toggle"
-
-                  onClick={onToggleTheme}
-
-                  title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
-
-                  aria-label="Toggle theme"
-
-                >
-
-                  <span className="material-symbols-outlined" style={{ fontSize: "15px" }}>
-
-                    {theme === "dark" ? "light_mode" : "dark_mode"}
-
-                  </span>
-
-                  <span>{theme === "dark" ? "Light" : "Dark"}</span>
-
-                </button>
-
+          {/* Form */}
+          <form onSubmit={handleSubmit} style={{ marginTop: "1.25rem" }}>
+            {/* Work Email / Employee ID Field */}
+            <div className="form-field-group">
+              <label className="form-field-label" htmlFor="work-email">
+                Work Email or Employee ID
+              </label>
+              <div className="input-icon-wrap">
+                <span className="material-symbols-outlined field-icon-left">badge</span>
+                <input
+                  id="work-email"
+                  type="text"
+                  className="apex-form-input"
+                  placeholder="name@company.com or EMP-101"
+                  value={identifier}
+                  onChange={e => setIdentifier(e.target.value)}
+                  required
+                />
               </div>
-
-
-
-              <div>
-
-                <h2 className="auth-card-heading">Welcome Back!</h2>
-
-                <p className="auth-card-desc">Sign in to access your IT workspace, assets, and active tickets.</p>
-
-              </div>
-
-
-
-              {/* Demo Role Scope Bar */}
-
-              <div className="demo-tiers-bar">
-
-                <span className="material-symbols-outlined" style={{ fontSize: "16px", color: "var(--primary)" }}>groups</span>
-
-                <span style={{ color: "var(--text-muted)" }}>Available Tiers:</span>
-
-                <span
-
-                  className="demo-tier-item admin"
-
-                  onClick={() => handleDemoFill(demoAccounts[0])}
-
-                  title="Auto-fill Rajesh Sharma (ADMIN)"
-
-                >
-
-                  Admin
-
-                </span>
-
-                <span style={{ color: "#d5d2cb" }}>•</span>
-
-                <span
-
-                  className="demo-tier-item support"
-
-                  onClick={() => handleDemoFill(demoAccounts[1])}
-
-                  title="Auto-fill Priya Patel (SUPPORT)"
-
-                >
-
-                  IT Support
-
-                </span>
-
-                <span style={{ color: "#d5d2cb" }}>•</span>
-
-                <span
-
-                  className="demo-tier-item employee"
-
-                  onClick={() => handleDemoFill(demoAccounts[2])}
-
-                  title="Auto-fill Aarav Verma (EMPLOYEE)"
-
-                >
-
-                  Employee
-
-                </span>
-
-              </div>
-
             </div>
 
-
-
-            {error && (
-
-              <div className="auth-error-banner">
-
-                <span className="material-symbols-outlined" style={{ fontSize: "18px" }}>error</span>
-
-                <span>{error}</span>
-
-              </div>
-
-            )}
-
-
-
-            {/* Form */}
-
-            <form onSubmit={handleSubmit}>
-
-              {/* Work Email Field */}
-
-              <div className="form-field-group">
-
-                <label className="form-field-label" htmlFor="work-email">Work Email or Employee ID</label>
-
-                <div className="input-icon-wrap">
-
-                  <span className="material-symbols-outlined field-icon-left">mail</span>
-
-                  <input
-
-                    id="work-email"
-
-                    type="text"
-
-                    className="apex-form-input"
-
-                    placeholder="name@company.com or EMP-101"
-
-                    value={identifier}
-
-                    onChange={e => setIdentifier(e.target.value)}
-
-                    required
-
-                  />
-
-                </div>
-
-              </div>
-
-
-
-              {/* Password Field */}
-
-              <div className="form-field-group">
-
-                <div className="form-field-header-row">
-
-                  <label className="form-field-label" htmlFor="password">Password</label>
-
-                  <span
-
-                    className="forgot-pwd-link"
-
-                    onClick={() => setShowForgotModal(true)}
-
-                  >
-
-                    Forgot Password?
-
-                  </span>
-
-                </div>
-
-                <div className="input-icon-wrap">
-
-                  <span className="material-symbols-outlined field-icon-left">lock_open</span>
-
-                  <input
-
-                    id="password"
-
-                    type={showPassword ? "text" : "password"}
-
-                    className="apex-form-input has-right-btn"
-
-                    placeholder="Enter your enterprise password"
-
-                    value={password}
-
-                    onChange={e => setPassword(e.target.value)}
-
-                    required
-
-                  />
-
-                  <button
-
-                    type="button"
-
-                    className="field-btn-right"
-
-                    onClick={() => setShowPassword(!showPassword)}
-
-                    aria-label="Toggle password visibility"
-
-                  >
-
-                    <span className="material-symbols-outlined">
-
-                      {showPassword ? "visibility_off" : "visibility"}
-
-                    </span>
-
-                  </button>
-
-                </div>
-
-              </div>
-
-
-
-              {/* Options Row (Remember) */}
-
-              <div className="form-options-row">
-
-                <label className="checkbox-label">
-
-                  <input
-
-                    type="checkbox"
-
-                    checked={rememberMe}
-
-                    onChange={e => setRememberMe(e.target.checked)}
-
-                  />
-
-                  <span>Remember this workstation (30d)</span>
-
+            {/* Password Field */}
+            <div className="form-field-group">
+              <div className="form-field-header-row">
+                <label className="form-field-label" htmlFor="password">
+                  Password
                 </label>
-
+                <span
+                  className="forgot-pwd-link"
+                  onClick={() => setShowForgotModal(true)}
+                >
+                  Forgot Password?
+                </span>
               </div>
+              <div className="input-icon-wrap">
+                <span className="material-symbols-outlined field-icon-left">lock</span>
+                <input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  className="apex-form-input has-right-btn"
+                  placeholder="Enter your enterprise password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  required
+                />
+                <button
+                  type="button"
+                  className="field-btn-right"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label="Toggle password visibility"
+                >
+                  <span className="material-symbols-outlined">
+                    {showPassword ? "visibility_off" : "visibility"}
+                  </span>
+                </button>
+              </div>
+            </div>
 
+            {/* Options Row (Remember) */}
+            <div className="form-options-row">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={e => setRememberMe(e.target.checked)}
+                />
+                <span>Remember this workstation (30d)</span>
+              </label>
+            </div>
 
+            {/* Primary Action Button */}
+            <button type="submit" className="btn-submit-workspace" disabled={loading}>
+              <span>{loading ? "AUTHENTICATING..." : "SIGN IN TO WORKSPACE"}</span>
+              <span className="material-symbols-outlined" style={{ fontSize: "18px" }}>arrow_forward</span>
+            </button>
+          </form>
 
-              {/* Primary Action Button */}
+          {/* Quick Demo Access (Matches Google / Apple Outlined Button Style in Reference Mockup) */}
+          <div className="auth-demo-divider">
+            <span>Or quick demo sign-in</span>
+          </div>
 
-              <button type="submit" className="btn-submit-workspace" disabled={loading}>
+          <div className="auth-demo-grid">
+            <button
+              type="button"
+              className="auth-demo-pill-btn"
+              onClick={() => handleDemoFill(demoAccounts && demoAccounts[0])}
+              title="1-Click Fill: Admin (Rajesh Sharma)"
+            >
+              <span className="demo-pill-badge admin">ADM</span>
+              <span className="demo-pill-label">Admin</span>
+            </button>
 
-                <span>{loading ? "AUTHENTICATING..." : "SIGN IN TO WORKSPACE"}</span>
+            <button
+              type="button"
+              className="auth-demo-pill-btn"
+              onClick={() => handleDemoFill(demoAccounts && demoAccounts[1])}
+              title="1-Click Fill: IT Support (Priya Patel)"
+            >
+              <span className="demo-pill-badge support">IT</span>
+              <span className="demo-pill-label">IT Support</span>
+            </button>
 
-                <span className="material-symbols-outlined" style={{ fontSize: "18px" }}>arrow_forward</span>
+            <button
+              type="button"
+              className="auth-demo-pill-btn"
+              onClick={() => handleDemoFill(demoAccounts && demoAccounts[2])}
+              title="1-Click Fill: Employee (Aarav Verma)"
+            >
+              <span className="demo-pill-badge employee">EMP</span>
+              <span className="demo-pill-label">Employee</span>
+            </button>
+          </div>
 
-              </button>
-
-            </form>
-
-
+          {/* Onboarding Token Callout */}
+          <div className="onboarding-box" style={{ marginTop: "1.5rem" }}>
+            <span>Received an onboarding token?</span>
+            <span className="link" onClick={onSwitchToRegister}>
+              Activate Employee Account
+            </span>
+          </div>
 
           <ForgotPasswordModal
             isOpen={showForgotModal}
@@ -999,42 +863,12 @@ function LoginPage({ onLoginSuccess, onSwitchToRegister, demoAccounts, theme, on
               setError("");
             }}
           />
-
-
-
-            {/* Onboarding Token Callout */}
-
-            <div className="onboarding-box" style={{ marginTop: "1.75rem" }}>
-
-              <span>Received an onboarding token?</span>
-
-              <span className="link" onClick={onSwitchToRegister}>
-
-                Activate Employee Account
-
-              </span>
-
-            </div>
-
-
-
-          </div>
-
         </div>
 
       </div>
-
-
-
-
-
     </div>
-
   );
-
 }
-
-
 
 // =====================================================================
 
