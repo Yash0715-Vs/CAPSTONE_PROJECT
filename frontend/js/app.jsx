@@ -384,7 +384,7 @@ function ForgotPasswordModal({ isOpen, onClose, initialIdentifier, onPasswordRes
             <div style={{ background: "var(--bg-subtle)", border: "1px solid var(--border-light)", borderRadius: "var(--radius-md)", padding: "0.85rem 1rem", marginBottom: "1.25rem" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.35rem" }}>
                 <span style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                  Verification Code (Valid 15m)
+                  Reset Verification Code (Valid 15m)
                 </span>
                 <button type="button" onClick={handleCopyToken} style={{ background: "transparent", border: "none", color: "var(--primary)", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: "2px" }}>
                   <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>{copySuccess ? "done" : "content_copy"}</span>
@@ -394,23 +394,6 @@ function ForgotPasswordModal({ isOpen, onClose, initialIdentifier, onPasswordRes
               <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.95rem", fontWeight: 600, color: "var(--primary)", wordBreak: "break-all" }}>
                 {resetToken}
               </div>
-            </div>
-
-            {/* Verification code input */}
-            <div style={{ marginBottom: "1rem" }}>
-              <label className="form-field-label" htmlFor="reset-token-input" style={{ display: "block", marginBottom: "0.35rem", fontWeight: 500, fontSize: "0.85rem" }}>
-                Reset Verification Code
-              </label>
-              <input
-                id="reset-token-input"
-                type="text"
-                className="form-input"
-                style={{ width: "100%", fontFamily: "var(--font-mono)" }}
-                placeholder="RST-..."
-                value={resetToken}
-                onChange={(e) => setResetToken(e.target.value)}
-                required
-              />
             </div>
 
             {/* New Password */}
