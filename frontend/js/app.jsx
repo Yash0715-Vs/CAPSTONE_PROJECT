@@ -3952,8 +3952,6 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                         <div className="text-2xl font-headline font-medium text-on-surface">{activeQueueTickets}</div>
 
-                        <span className="text-[11px] text-on-surface-variant mt-0.5 block">{openTickets} open, {activeTickets} active ({assignedTickets} assigned, {inProgressTickets} in-prog)</span>
-
                       </div>
 
                     </div>
@@ -3980,21 +3978,19 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                         <div className="text-2xl font-headline font-medium text-on-surface">{myAssignedTickets}</div>
 
-                        <span className="text-[11px] text-on-surface-variant mt-0.5 block">Assigned directly to you</span>
-
                       </div>
 
                     </div>
 
 
 
-                    {/* KPI 3: High / Critical Escalations */}
+                    {/* KPI 3: High Priority */}
 
                     <div className="bg-surface-container-lowest p-4 rounded-xl shadow-sm flex flex-col justify-between">
 
                       <div className="flex items-center justify-between">
 
-                        <span className="text-[11px] font-medium uppercase tracking-wider text-on-surface-variant font-label">High / Critical</span>
+                        <span className="text-[11px] font-medium uppercase tracking-wider text-on-surface-variant font-label">High Priority</span>
 
                         <div className="w-7 h-7 rounded-lg bg-error-container/60 flex items-center justify-center text-on-error-container">
 
@@ -4007,8 +4003,6 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                       <div className="mt-3">
 
                         <div className="text-2xl font-headline font-medium text-on-surface">{highTickets}</div>
-
-                        <span className="text-[11px] text-on-surface-variant mt-0.5 block">{highTickets} high priority</span>
 
                       </div>
 
@@ -4062,8 +4056,6 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                         <div className="text-2xl font-headline font-medium text-on-surface">{complianceRate}%</div>
 
-                        <span className="text-[11px] text-on-surface-variant mt-0.5 block">{activeOverdueCount} overdue in queue ({breachedTicketsCount} total)</span>
-
                       </div>
 
                     </div>
@@ -4090,8 +4082,6 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                         <div className="text-2xl font-headline font-medium text-on-surface">{availableAssets}</div>
 
-                        <span className="text-[11px] text-on-surface-variant mt-0.5 block">out of {totalAssets} total fleet</span>
-
                       </div>
 
                     </div>
@@ -4112,9 +4102,9 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                         <div>
 
-                          <h2 className="font-headline text-xl text-on-surface font-normal">Active Operational Triage Queue</h2>
+                          <h2 className="font-headline text-xl text-on-surface font-normal">Urgent Support Tickets</h2>
 
-                          <p className="text-xs text-on-surface-variant mt-0.5">Incidents requiring assignment or diagnosis</p>
+                          <p className="text-xs text-on-surface-variant mt-0.5">Active tickets that need immediate attention</p>
 
                         </div>
 
@@ -4220,9 +4210,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
 
 
-                      <div className="mt-4 pt-3 flex items-center justify-between border-t border-surface-container-highest/40">
-
-                        <span className="text-xs text-on-surface-variant font-body">Operational ticket triage</span>
+                      <div className="mt-4 pt-3 flex items-center justify-end border-t border-surface-container-highest/40">
 
                         <button
 
