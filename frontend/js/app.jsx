@@ -42,6 +42,12 @@ const WS_URL = (function() {
 
 })();
 
+// Purge any legacy shared localStorage auth tokens so every tab is strictly isolated in-memory
+try {
+  localStorage.removeItem("it_token");
+  localStorage.removeItem("it_user");
+} catch (e) {}
+
 
 
 
@@ -1641,15 +1647,9 @@ function App() {
 
 
 
-  const [currentUser, setCurrentUser] = useState(() => {
-
-    const saved = localStorage.getItem("it_user");
-
-    return saved ? JSON.parse(saved) : null;
-
-  });
-
-  const [token, setToken] = useState(() => localStorage.getItem("it_token") || "");
+  // Independent in-memory authentication state per tab (no cross-tab session sharing)
+  const [currentUser, setCurrentUser] = useState(null);
+  const [token, setToken] = useState("");
 
   const [authView, setAuthView] = useState("login"); // "login" | "register"
 
@@ -2109,10 +2109,6 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
     }
 
-    localStorage.removeItem("it_token");
-
-    localStorage.removeItem("it_user");
-
     setToken("");
 
     setCurrentUser(null);
@@ -2190,8 +2186,6 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
           if (freshUser) {
 
             setCurrentUser(freshUser);
-
-            try { localStorage.setItem("it_user", JSON.stringify(freshUser)); } catch (e) {}
 
           }
 
@@ -2840,10 +2834,6 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
             setToken(tok);
 
-            localStorage.setItem("it_token", tok);
-
-            localStorage.setItem("it_user", JSON.stringify(user));
-
             addToast(`Welcome to AssetDesk, ${user.name}!`, "success");
 
           }}
@@ -2873,10 +2863,6 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
           setCurrentUser(user);
 
           setToken(tok);
-
-          localStorage.setItem("it_token", tok);
-
-          localStorage.setItem("it_user", JSON.stringify(user));
 
           addToast(`Authenticated as ${user.name} (${user.role})`, "success");
 
