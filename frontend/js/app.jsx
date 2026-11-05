@@ -9228,6 +9228,8 @@ function CreateTicketModal({ onClose, token, onSuccess, addToast, userAssets = [
   const [title, setTitle] = useState(initialData?.title || "");
   const [desc, setDesc] = useState(initialData?.desc || "");
   const [selectedAssetId, setSelectedAssetId] = useState(initialData?.asset_id || "");
+  const [category, setCategory] = useState(initialData?.category || "Hardware");
+  const [userSelectedCategory, setUserSelectedCategory] = useState(Boolean(initialData?.category));
   const [priority, setPriority] = useState(initialData?.priority || "MEDIUM");
   const [userSelectedPriority, setUserSelectedPriority] = useState(Boolean(initialData?.priority));
   const [submitting, setSubmitting] = useState(false);
@@ -9295,6 +9297,12 @@ function CreateTicketModal({ onClose, token, onSuccess, addToast, userAssets = [
     }
   }, [inferredPriority, userSelectedPriority]);
 
+  useEffect(() => {
+    if (!userSelectedCategory && inferredCategory) {
+      setCategory(inferredCategory);
+    }
+  }, [inferredCategory, userSelectedCategory]);
+
 
 
   const handleSubmit = async (e) => {
@@ -9331,7 +9339,7 @@ function CreateTicketModal({ onClose, token, onSuccess, addToast, userAssets = [
 
       description: desc.trim(),
 
-      category: inferredCategory,
+      category: category,
 
       priority: priority,
 
@@ -9395,9 +9403,7 @@ function CreateTicketModal({ onClose, token, onSuccess, addToast, userAssets = [
 
       <div className="modal-surface">
 
-        <h2 className="modal-title">Create Incident Ticket</h2>
-
-        <p className="modal-desc">Submit a new incident request to the IT ServiceDesk queue.</p>
+        <h2 className="modal-title">Create Ticket</h2>
 
 
 
@@ -9441,7 +9447,7 @@ function CreateTicketModal({ onClose, token, onSuccess, addToast, userAssets = [
 
           <div className="form-field-group">
 
-            <label className="form-field-label">Incident Summary *</label>
+            <label className="form-field-label">Ticket Summary *</label>
 
             <input
 
@@ -9566,6 +9572,63 @@ function CreateTicketModal({ onClose, token, onSuccess, addToast, userAssets = [
 
 
 
+          {/* Category Selection (Manual Choice & Auto-detection) */}
+          <div className="form-field-group">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.45rem" }}>
+              <label className="form-field-label" style={{ marginBottom: 0 }}>
+                Category *
+              </label>
+              <span style={{ fontSize: "0.74rem", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "0.3rem" }}>
+                <span className="material-symbols-outlined" style={{ fontSize: "14px", color: "var(--primary)" }}>auto_awesome</span>
+                <span>Auto-detected: <strong style={{ color: "var(--primary)" }}>{inferredCategory}</strong></span>
+              </span>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: "0.5rem" }}>
+              {[
+                { id: "Hardware", label: "Hardware", icon: "devices" },
+                { id: "Software", label: "Software", icon: "apps" },
+                { id: "Network", label: "Network", icon: "wifi" },
+                { id: "Access", label: "Access", icon: "lock" },
+                { id: "Other", label: "Other", icon: "help_outline" }
+              ].map(cat => {
+                const isSelected = category === cat.id;
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => {
+                      setCategory(cat.id);
+                      setUserSelectedCategory(true);
+                    }}
+                    style={{
+                      padding: "0.6rem 0.5rem",
+                      borderRadius: "var(--radius-md)",
+                      border: isSelected ? "2px solid var(--primary)" : "1px solid var(--border-light)",
+                      background: isSelected ? "var(--primary-subtle)" : "var(--bg-subtle)",
+                      color: isSelected ? "var(--primary)" : "var(--text-main)",
+                      cursor: "pointer",
+                      textAlign: "center",
+                      transition: "all 0.15s ease",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "0.25rem"
+                    }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: "18px", color: isSelected ? "var(--primary)" : "var(--text-muted)" }}>
+                      {cat.icon}
+                    </span>
+                    <span style={{ fontWeight: isSelected ? 700 : 500, fontSize: "0.8rem" }}>
+                      {cat.label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Priority Level Selection (Manual Choice & AI Auto-detection) */}
           <div className="form-field-group">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.45rem" }}>
@@ -9680,20 +9743,7 @@ function CreateTicketModal({ onClose, token, onSuccess, addToast, userAssets = [
             </div>
           </div>
 
-          {/* AI Auto-Classification & Selected Priority Summary */}
-          <div style={{ padding: "0.75rem 1rem", background: "var(--bg-subtle)", borderRadius: "var(--radius-md)", marginBottom: "1.25rem", fontSize: "0.82rem", display: "flex", alignItems: "center", justifyContent: "space-between", border: "1px solid var(--border-light)" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <span className="material-symbols-outlined" style={{ fontSize: "16px", color: "var(--primary)" }}>category</span>
-              <span style={{ fontWeight: 600, color: "var(--primary)" }}>Inferred Category:</span>
-              <strong>{inferredCategory}</strong>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
-              <span style={{ color: "var(--text-muted)" }}>Priority:</span>
-              <span className={`badge-priority ${(priority || "").toLowerCase()}`} style={{ fontSize: "0.72rem" }}>
-                {priority}
-              </span>
-            </div>
-          </div>
+
 
 
 
