@@ -382,7 +382,7 @@ def provision_equipment_request(
         old_status=old_status,
         new_status="PROVISIONED",
         asset_id=clean_asset_id,
-        notes=action.admin_notes or f"Provisioned with asset {clean_asset_id} ({asset.name})",
+        notes=action.admin_notes or f"Provisioned with asset {clean_asset_id} ({asset.brand} {asset.model})",
         timestamp=now
     )
     session.add(hist)
