@@ -321,11 +321,12 @@ function ForgotPasswordModal({ isOpen, onClose, initialIdentifier, onPasswordRes
                 {step === 2 && "Set New Password"}
                 {step === 3 && "Password Reset Successful"}
               </h2>
-              <div style={{ fontSize: "0.78rem", color: "var(--text-secondary)", marginTop: "2px" }}>
-                {step === 1 && "Enterprise Account Self-Service Recovery"}
-                {step === 2 && `Account: ${userInfo ? userInfo.user_id : identifier}`}
-                {step === 3 && "Your credentials have been updated"}
-              </div>
+              {(step === 2 || step === 3) && (
+                <div style={{ fontSize: "0.78rem", color: "var(--text-secondary)", marginTop: "2px" }}>
+                  {step === 2 && `Account: ${userInfo ? userInfo.user_id : identifier}`}
+                  {step === 3 && "Your credentials have been updated"}
+                </div>
+              )}
             </div>
           </div>
           <button type="button" className="table-btn" onClick={handleClose} style={{ padding: "0.25rem 0.5rem" }}>
@@ -343,11 +344,7 @@ function ForgotPasswordModal({ isOpen, onClose, initialIdentifier, onPasswordRes
 
         {/* STEP 1: Enter Identifier & Request Code */}
         {step === 1 && (
-          <form onSubmit={handleRequestToken}>
-            <p style={{ fontSize: "0.88rem", color: "var(--text-secondary)", lineHeight: 1.5, marginBottom: "1.25rem" }}>
-              Enter your registered <strong>Work Email</strong> or <strong>Employee / User ID</strong> (e.g. <code>IT-49799</code>, <code>ADM-001</code>, <code>EMP-101</code>). We'll generate a secure verification code to reset your password.
-            </p>
-
+          <form onSubmit={handleRequestToken} style={{ marginTop: "1rem" }}>
             <div style={{ marginBottom: "1.25rem" }}>
               <label className="form-field-label" htmlFor="recovery-id" style={{ display: "block", marginBottom: "0.4rem", fontWeight: 500, fontSize: "0.85rem" }}>
                 Work Email or Employee ID
