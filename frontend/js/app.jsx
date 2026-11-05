@@ -559,117 +559,21 @@ function LoginPage({ onLoginSuccess, onSwitchToRegister, demoAccounts, theme, on
     }
   };
 
-  const handleDemoFill = (acc) => {
-    if (!acc) return;
-    setIdentifier(acc.user_id);
-    setPassword("password");
-    setError("");
-  };
-
   return (
     <div className="apex-auth-viewport">
       <div className="apex-auth-master-frame">
 
-        {/* LEFT PANEL: Framed Visual Hero Inset Card (Matches Reference Design) */}
+        {/* LEFT PANEL: Framed Visual Hero Inset Card */}
         <div className="apex-auth-visual-card">
-          {/* Embedded High-Precision SVG: Cinematic Twilight Dunes in Deep Teal & Obsidian */}
-          <svg
-            className="hero-dunes-art"
-            viewBox="0 0 540 720"
-            preserveAspectRatio="xMidYMid slice"
-            xmlns="http://www.w3.org/2000/svg"
-            aria-hidden="true"
-          >
-            <defs>
-              {/* Sky Background Gradient */}
-              <linearGradient id="twilightSky" x1="0%" y1="0%" x2="40%" y2="100%">
-                <stop offset="0%" stopColor="#061210" />
-                <stop offset="45%" stopColor="#0B2622" />
-                <stop offset="80%" stopColor="#0F3D36" />
-                <stop offset="100%" stopColor="#081A17" />
-              </linearGradient>
+          {/* Realistic Corporate IT Office Photograph Background with Subtle Motion */}
+          <div className="hero-office-photo-wrap" aria-hidden="true">
+            <div className="hero-office-photo" />
+            <div className="hero-office-overlay" />
+            <div className="hero-office-vignette" />
+            <div className="hero-office-glow" />
+          </div>
 
-              {/* Distant Dune Gradient */}
-              <linearGradient id="duneDistant" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#0F433C" />
-                <stop offset="60%" stopColor="#0A2C27" />
-                <stop offset="100%" stopColor="#061815" />
-              </linearGradient>
-
-              {/* Main Ridge Dune Gradient */}
-              <linearGradient id="duneMain" x1="20%" y1="0%" x2="90%" y2="100%">
-                <stop offset="0%" stopColor="#155D54" />
-                <stop offset="35%" stopColor="#0F3F39" />
-                <stop offset="70%" stopColor="#09221F" />
-                <stop offset="100%" stopColor="#051211" />
-              </linearGradient>
-
-              {/* Foreground Silky Dune Gradient */}
-              <linearGradient id="duneForeground" x1="0%" y1="0%" x2="80%" y2="100%">
-                <stop offset="0%" stopColor="#0C342F" />
-                <stop offset="50%" stopColor="#08201D" />
-                <stop offset="100%" stopColor="#030A09" />
-              </linearGradient>
-
-              {/* Glowing Crest Highlight Gradient */}
-              <linearGradient id="crestGlow" x1="0%" y1="0%" x2="100%" y2="60%">
-                <stop offset="0%" stopColor="rgba(183, 218, 212, 0.75)" />
-                <stop offset="45%" stopColor="rgba(45, 174, 158, 0.45)" />
-                <stop offset="100%" stopColor="rgba(15, 118, 110, 0.05)" />
-              </linearGradient>
-
-              {/* Ambient Star/Light Glow */}
-              <radialGradient id="skyAmbientGlow" cx="20%" cy="15%" r="65%">
-                <stop offset="0%" stopColor="rgba(45, 174, 158, 0.18)" />
-                <stop offset="60%" stopColor="rgba(15, 118, 110, 0.04)" />
-                <stop offset="100%" stopColor="transparent" />
-              </radialGradient>
-            </defs>
-
-            {/* Sky Base */}
-            <rect width="540" height="720" fill="url(#twilightSky)" />
-            <rect width="540" height="720" fill="url(#skyAmbientGlow)" />
-
-            {/* Ambient Star Specks */}
-            <circle cx="85" cy="95" r="1.2" fill="#ffffff" opacity="0.65" />
-            <circle cx="160" cy="65" r="1" fill="#B7DAD4" opacity="0.45" />
-            <circle cx="280" cy="110" r="1.4" fill="#ffffff" opacity="0.7" />
-            <circle cx="395" cy="80" r="1.1" fill="#B7DAD4" opacity="0.5" />
-            <circle cx="460" cy="140" r="1.3" fill="#ffffff" opacity="0.6" />
-            <circle cx="120" cy="175" r="0.9" fill="#ffffff" opacity="0.4" />
-            <circle cx="340" cy="190" r="1" fill="#B7DAD4" opacity="0.45" />
-
-            {/* Layer 1: Distant Mountain / Dune Ridge */}
-            <path
-              d="M-20 460 Q 90 340, 210 380 T 420 350 Q 480 340, 560 370 L 560 740 L -20 740 Z"
-              fill="url(#duneDistant)"
-              opacity="0.85"
-            />
-
-            {/* Layer 2: Main Majestic Sweeping Dune (Matches Reference Mockup) */}
-            <path
-              d="M-20 490 Q 140 430, 260 340 Q 380 250, 560 410 L 560 740 L -20 740 Z"
-              fill="url(#duneMain)"
-            />
-            {/* Luminous Dune Crest Line */}
-            <path
-              d="M-20 490 Q 140 430, 260 340 Q 380 250, 560 410"
-              fill="none"
-              stroke="url(#crestGlow)"
-              strokeWidth="1.8"
-            />
-
-            {/* Layer 3: Foreground Silky Dune */}
-            <path
-              d="M-20 600 Q 160 520, 310 540 Q 440 560, 560 500 L 560 740 L -20 740 Z"
-              fill="url(#duneForeground)"
-            />
-
-            {/* Contrast Vignette to ensure crystal-clear text readability */}
-            <rect y="440" width="540" height="280" fill="url(#duneForeground)" opacity="0.82" />
-          </svg>
-
-          {/* Top Brand Header & Portal Link */}
+          {/* Top Brand Header */}
           <div className="hero-card-header">
             <div className="hero-brand-block">
               <div className="hero-brand-shield">
@@ -681,26 +585,14 @@ function LoginPage({ onLoginSuccess, onSwitchToRegister, demoAccounts, theme, on
                 <span className="hero-brand-sub">IT ASSET & TICKET MANAGEMENT</span>
               </div>
             </div>
-
-            <div className="hero-portal-pill">
-              <span>Enterprise Portal</span>
-              <span className="material-symbols-outlined">arrow_forward</span>
-            </div>
           </div>
 
-          {/* Bottom Tagline & Slider Pagination (Matches Reference Mockup) */}
+          {/* Bottom Tagline */}
           <div className="hero-card-bottom">
             <h2 className="hero-card-tagline">
               Capturing Precision,<br />
               Powering IT Infrastructure
             </h2>
-
-            {/* Slider Pagination Dashes */}
-            <div className="hero-slider-pagination" aria-label="Slider Indicators">
-              <span className="slider-dash active" />
-              <span className="slider-dash" />
-              <span className="slider-dash" />
-            </div>
           </div>
         </div>
 
@@ -808,45 +700,8 @@ function LoginPage({ onLoginSuccess, onSwitchToRegister, demoAccounts, theme, on
             </button>
           </form>
 
-          {/* Quick Demo Access (Matches Google / Apple Outlined Button Style in Reference Mockup) */}
-          <div className="auth-demo-divider">
-            <span>Or quick demo sign-in</span>
-          </div>
-
-          <div className="auth-demo-grid">
-            <button
-              type="button"
-              className="auth-demo-pill-btn"
-              onClick={() => handleDemoFill(demoAccounts && demoAccounts[0])}
-              title="1-Click Fill: Admin (Rajesh Sharma)"
-            >
-              <span className="demo-pill-badge admin">ADM</span>
-              <span className="demo-pill-label">Admin</span>
-            </button>
-
-            <button
-              type="button"
-              className="auth-demo-pill-btn"
-              onClick={() => handleDemoFill(demoAccounts && demoAccounts[1])}
-              title="1-Click Fill: IT Support (Priya Patel)"
-            >
-              <span className="demo-pill-badge support">IT</span>
-              <span className="demo-pill-label">IT Support</span>
-            </button>
-
-            <button
-              type="button"
-              className="auth-demo-pill-btn"
-              onClick={() => handleDemoFill(demoAccounts && demoAccounts[2])}
-              title="1-Click Fill: Employee (Aarav Verma)"
-            >
-              <span className="demo-pill-badge employee">EMP</span>
-              <span className="demo-pill-label">Employee</span>
-            </button>
-          </div>
-
           {/* Onboarding Token Callout */}
-          <div className="onboarding-box" style={{ marginTop: "1.5rem" }}>
+          <div className="onboarding-box" style={{ marginTop: "1.75rem" }}>
             <span>Received an onboarding token?</span>
             <span className="link" onClick={onSwitchToRegister}>
               Activate Employee Account

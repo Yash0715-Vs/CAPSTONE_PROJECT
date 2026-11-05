@@ -944,14 +944,111 @@ html.dark .apex-auth-master-frame {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
 }
 
-.hero-dunes-art {
+/* Realistic Corporate Office Photo Background with Ken Burns Parallax Drift */
+.hero-office-photo-wrap {
   position: absolute;
   inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  overflow: hidden;
   pointer-events: none;
   z-index: 1;
+}
+
+@keyframes heroPhotoKenBurns {
+  0% {
+    transform: scale(1) translate3d(0, 0, 0);
+  }
+  50% {
+    transform: scale(1.05) translate3d(-1.5%, -1%, 0);
+  }
+  100% {
+    transform: scale(1.03) translate3d(1%, -0.5%, 0);
+  }
+}
+
+.hero-office-photo {
+  position: absolute;
+  inset: -6%;
+  width: 112%;
+  height: 112%;
+  background-image: url('/images/auth-hero.jpg');
+  background-size: cover;
+  background-position: center 30%;
+  background-repeat: no-repeat;
+  animation: heroPhotoKenBurns 28s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate;
+  will-change: transform;
+}
+
+/* Subtle Deep Teal & Obsidian Lighting Transitions */
+@keyframes heroLightPulse {
+  0% {
+    opacity: 0.85;
+    filter: brightness(1) contrast(1.02);
+  }
+  50% {
+    opacity: 0.76;
+    filter: brightness(1.06) contrast(1.05);
+  }
+  100% {
+    opacity: 0.86;
+    filter: brightness(0.98) contrast(1.02);
+  }
+}
+
+.hero-office-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    165deg,
+    rgba(8, 20, 18, 0.82) 0%,
+    rgba(15, 118, 110, 0.32) 40%,
+    rgba(6, 18, 16, 0.88) 75%,
+    rgba(4, 12, 11, 0.95) 100%
+  );
+  animation: heroLightPulse 14s ease-in-out infinite alternate;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+
+.hero-office-vignette {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(6, 18, 16, 0.70) 0%,
+    rgba(6, 18, 16, 0.15) 30%,
+    rgba(6, 18, 16, 0.45) 60%,
+    rgba(4, 14, 12, 0.94) 100%
+  );
+  pointer-events: none;
+}
+
+/* Soft Ambient Deep Teal Glowing Accent */
+@keyframes heroTealGlowFloat {
+  0% {
+    opacity: 0.35;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: translate3d(15px, -15px, 0) scale(1.1);
+  }
+  100% {
+    opacity: 0.35;
+    transform: translate3d(-10px, 10px, 0) scale(0.95);
+  }
+}
+
+.hero-office-glow {
+  position: absolute;
+  top: 15%;
+  left: -10%;
+  width: 420px;
+  height: 420px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(15, 118, 110, 0.42) 0%, rgba(183, 218, 212, 0.12) 40%, transparent 70%);
+  filter: blur(55px);
+  animation: heroTealGlowFloat 16s ease-in-out infinite alternate;
+  pointer-events: none;
 }
 
 /* Top Header inside Visual Card */
@@ -960,7 +1057,7 @@ html.dark .apex-auth-master-frame {
   z-index: 5;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 1rem;
 }
 
@@ -970,18 +1067,30 @@ html.dark .apex-auth-master-frame {
   gap: 0.85rem;
 }
 
+/* Gentle Floating Brand Shield */
+@keyframes heroFloatingShield {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
 .hero-brand-shield {
   position: relative;
   width: 38px;
   height: 38px;
   border-radius: 10px;
-  background: rgba(15, 118, 110, 0.28);
-  border: 1px solid rgba(183, 218, 212, 0.35);
-  backdrop-filter: blur(8px);
+  background: rgba(15, 118, 110, 0.35);
+  border: 1px solid rgba(183, 218, 212, 0.4);
+  backdrop-filter: blur(10px);
   display: flex;
   align-items: center;
   justify-content: center;
   color: #B7DAD4;
+  animation: heroFloatingShield 5s ease-in-out infinite;
+  box-shadow: 0 4px 14px rgba(15, 118, 110, 0.25);
 }
 
 .hero-brand-shield .material-symbols-outlined {
@@ -1012,35 +1121,17 @@ html.dark .apex-auth-master-frame {
   letter-spacing: -0.015em;
   color: #ffffff;
   line-height: 1.1;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
 }
 
 .hero-brand-sub {
   font-family: var(--font-mono);
   font-size: 0.62rem;
   letter-spacing: 0.12em;
-  color: rgba(183, 218, 212, 0.85);
+  color: rgba(183, 218, 212, 0.9);
   font-weight: 500;
   text-transform: uppercase;
-}
-
-.hero-portal-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.4rem 0.9rem;
-  border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  color: #ffffff;
-  font-size: 0.74rem;
-  font-weight: 500;
-  font-family: var(--font-sans);
-  transition: all var(--transition-fast);
-  cursor: default;
-}
-.hero-portal-pill .material-symbols-outlined {
-  font-size: 14px;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
 }
 
 /* Bottom Content inside Visual Card */
@@ -1054,31 +1145,11 @@ html.dark .apex-auth-master-frame {
   font-family: var(--font-headline);
   font-size: 1.95rem;
   font-weight: 400;
-  line-height: 1.22;
+  line-height: 1.24;
   letter-spacing: -0.015em;
   color: #ffffff;
-  margin-bottom: 1.35rem;
-  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.6);
-}
-
-.hero-slider-pagination {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.hero-slider-pagination .slider-dash {
-  height: 3.5px;
-  width: 18px;
-  border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.32);
-  transition: all 0.25s ease;
-}
-
-.hero-slider-pagination .slider-dash.active {
-  width: 38px;
-  background: #ffffff;
-  box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+  margin: 0;
+  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.7);
 }
 
 /* RIGHT PANEL: Modern Authentication Form */
@@ -1107,101 +1178,6 @@ html.dark .apex-auth-master-frame {
   line-height: 1.15;
 }
 
-/* Demo Pills Grid (matching Reference Image Google/Apple button layout) */
-.auth-demo-divider {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 1.35rem 0 1rem;
-}
-.auth-demo-divider::before {
-  content: '';
-  position: absolute;
-  width: 100%;
-  height: 1px;
-  background-color: var(--border-light);
-}
-.auth-demo-divider span {
-  position: relative;
-  padding: 0 0.85rem;
-  background-color: var(--bg-card);
-  font-size: 0.72rem;
-  font-family: var(--font-mono);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-muted);
-}
-[data-theme="dark"] .auth-demo-divider span,
-html.dark .auth-demo-divider span {
-  background-color: #17181a;
-}
-
-.auth-demo-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.65rem;
-  margin-bottom: 0.5rem;
-}
-
-.auth-demo-pill-btn {
-  height: 42px;
-  padding: 0 0.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.45rem;
-  border-radius: 10px;
-  background: var(--bg-input);
-  border: 1px solid var(--border-light);
-  color: var(--text-main);
-  font-size: 0.8rem;
-  font-weight: 500;
-  font-family: var(--font-sans);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  box-shadow: var(--shadow-xs);
-}
-
-.auth-demo-pill-btn:hover {
-  background: var(--bg-card-hover);
-  border-color: var(--primary);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 10px rgba(15, 118, 110, 0.12);
-}
-
-.auth-demo-pill-btn:active {
-  transform: translateY(0);
-}
-
-.demo-pill-badge {
-  font-size: 0.68rem;
-  font-weight: 700;
-  font-family: var(--font-mono);
-  padding: 0.15rem 0.35rem;
-  border-radius: 5px;
-  line-height: 1;
-}
-
-.demo-pill-badge.admin {
-  background: rgba(15, 118, 110, 0.15);
-  color: var(--primary);
-}
-.demo-pill-badge.support {
-  background: rgba(184, 115, 51, 0.15);
-  color: #b87333;
-}
-.demo-pill-badge.employee {
-  background: rgba(45, 106, 79, 0.15);
-  color: #2d6a4f;
-}
-
-.demo-pill-label {
-  font-weight: 500;
-  letter-spacing: -0.01em;
-}
-
-/* Responsive adjustments */
 @media (max-width: 900px) {
   .apex-auth-master-frame {
     grid-template-columns: 1fr;
