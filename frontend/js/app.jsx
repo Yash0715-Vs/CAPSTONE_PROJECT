@@ -587,13 +587,7 @@ function LoginPage({ onLoginSuccess, onSwitchToRegister, demoAccounts, theme, on
             </div>
           </div>
 
-          {/* Bottom Tagline */}
-          <div className="hero-card-bottom">
-            <h2 className="hero-card-tagline">
-              Capturing Precision,<br />
-              Powering IT Infrastructure
-            </h2>
-          </div>
+
         </div>
 
         {/* RIGHT PANEL: High-Precision Modern Authentication Form */}

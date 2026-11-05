@@ -1064,7 +1064,7 @@ html.dark .apex-auth-master-frame {
 .hero-brand-block {
   display: flex;
   align-items: center;
-  gap: 0.85rem;
+  gap: 1.1rem;
 }
 
 /* Gentle Floating Brand Shield */
@@ -1079,59 +1079,59 @@ html.dark .apex-auth-master-frame {
 
 .hero-brand-shield {
   position: relative;
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
-  background: rgba(15, 118, 110, 0.35);
-  border: 1px solid rgba(183, 218, 212, 0.4);
-  backdrop-filter: blur(10px);
+  width: 48px;
+  height: 48px;
+  border-radius: 13px;
+  background: rgba(15, 118, 110, 0.40);
+  border: 1.5px solid rgba(183, 218, 212, 0.5);
+  backdrop-filter: blur(12px);
   display: flex;
   align-items: center;
   justify-content: center;
   color: #B7DAD4;
   animation: heroFloatingShield 5s ease-in-out infinite;
-  box-shadow: 0 4px 14px rgba(15, 118, 110, 0.25);
+  box-shadow: 0 6px 18px rgba(15, 118, 110, 0.32);
 }
 
 .hero-brand-shield .material-symbols-outlined {
-  font-size: 20px;
+  font-size: 26px;
 }
 
 .hero-brand-pulse {
   position: absolute;
-  top: 3px;
-  right: 3px;
-  width: 7px;
-  height: 7px;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background-color: #10B981;
-  box-shadow: 0 0 6px #10B981;
+  box-shadow: 0 0 8px #10B981;
 }
 
 .hero-brand-titles {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: 0.3rem;
 }
 
 .hero-brand-name {
   font-family: var(--font-sans);
-  font-size: 1.15rem;
+  font-size: 1.48rem;
   font-weight: 700;
-  letter-spacing: -0.015em;
+  letter-spacing: -0.02em;
   color: #ffffff;
   line-height: 1.1;
-  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.65);
 }
 
 .hero-brand-sub {
   font-family: var(--font-mono);
-  font-size: 0.62rem;
-  letter-spacing: 0.12em;
-  color: rgba(183, 218, 212, 0.9);
-  font-weight: 500;
+  font-size: 0.74rem;
+  letter-spacing: 0.14em;
+  color: rgba(183, 218, 212, 0.95);
+  font-weight: 600;
   text-transform: uppercase;
-  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.65);
 }
 
 /* Bottom Content inside Visual Card */
