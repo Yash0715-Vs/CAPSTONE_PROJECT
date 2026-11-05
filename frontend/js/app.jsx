@@ -1859,9 +1859,9 @@ EXECUTIVE METRICS (REAL DATABASE COUNTS):
 
 - Total Hardware Assets: ${totalAssets}
 
-  * Assigned to Personnel: ${assignedAssets}
+  * Assigned to Employees: ${assignedAssets}
 
-  * Available in Depository: ${availableAssets}
+  * Available in Stock: ${availableAssets}
 
   * Under Maintenance: ${underRepairAssets}
 
@@ -3436,7 +3436,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                   <h1 className="font-headline text-3xl lg:text-4xl text-on-surface tracking-tight font-normal">
 
-                    {currentUser.role === 'EMPLOYEE' ? `Welcome, ${userName}` : currentUser.role === 'SUPPORT' ? 'ServiceDesk Operations Hub' : 'Operations & Infrastructure Overview'}
+                    {currentUser.role === 'EMPLOYEE' ? `Welcome, ${userName}` : currentUser.role === 'SUPPORT' ? 'Support Dashboard' : 'Dashboard Overview'}
 
                   </h1>
 
@@ -4072,7 +4072,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
 
 
-                    {/* KPI 6: Available in Depository */}
+                    {/* KPI 6: Available in Stock */}
 
                     <div className="bg-surface-container-lowest p-4 rounded-xl shadow-sm flex flex-col justify-between">
 
@@ -4256,13 +4256,13 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                         <div>
 
-                          <h2 className="font-headline text-xl text-on-surface font-normal">Hardware Fleet Status</h2>
+                          <h2 className="font-headline text-xl text-on-surface font-normal">Device Status</h2>
 
-                          <p className="text-xs text-on-surface-variant mt-0.5">Depository &amp; deployment breakdown</p>
+                          <p className="text-xs text-on-surface-variant mt-0.5">Current status of all devices</p>
 
                         </div>
 
-                        <span className="text-xs font-mono text-on-surface-variant">{totalAssets} Units</span>
+                        <span className="text-xs font-mono text-on-surface-variant">{totalAssets} Devices</span>
 
                       </div>
 
@@ -4278,7 +4278,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                               <span className="w-2.5 h-2.5 rounded-full bg-primary"></span>
 
-                              Assigned to Personnel
+                              Assigned to Employees
 
                             </span>
 
@@ -4304,7 +4304,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                               <span className="w-2.5 h-2.5 rounded-full bg-tertiary"></span>
 
-                              Available in Depository
+                              Available in Stock
 
                             </span>
 
@@ -4330,7 +4330,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                               <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
 
-                              Maintenance &amp; Diagnostics
+                              In Maintenance
 
                             </span>
 
@@ -4365,7 +4365,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                           className="text-xs font-medium text-primary hover:text-primary-container flex items-center gap-1 transition-colors cursor-pointer"
                           onClick={() => setActiveTab('assets')}
                         >
-                          <span>Manage Fleet Inventory</span>
+                          <span>View All Assets</span>
                           <span className="material-symbols-outlined text-[15px]">arrow_forward</span>
                         </button>
                       </div>
@@ -4596,13 +4596,13 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                         <div>
 
-                          <h2 className="font-headline text-xl text-on-surface font-normal">Incident Category Distribution</h2>
+                          <h2 className="font-headline text-xl text-on-surface font-normal">Tickets by Category</h2>
 
-                          <p className="text-xs text-on-surface-variant mt-0.5">Categorization across {totalTickets} recorded incidents</p>
+                          <p className="text-xs text-on-surface-variant mt-0.5">Breakdown across {totalTickets} recorded tickets</p>
 
                         </div>
 
-                        <span className="text-xs font-mono text-on-surface-variant">{totalTickets} Incidents</span>
+                        <span className="text-xs font-mono text-on-surface-variant">{totalTickets} Tickets</span>
 
                       </div>
 
@@ -4702,13 +4702,13 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                         <div>
 
-                          <h2 className="font-headline text-xl text-on-surface font-normal">Hardware Fleet Status</h2>
+                          <h2 className="font-headline text-xl text-on-surface font-normal">Device Status</h2>
 
-                          <p className="text-xs text-on-surface-variant mt-0.5">Physical device custody distribution</p>
+                          <p className="text-xs text-on-surface-variant mt-0.5">Current status of all devices</p>
 
                         </div>
 
-                        <span className="text-xs font-mono text-on-surface-variant">{totalAssets} Units</span>
+                        <span className="text-xs font-mono text-on-surface-variant">{totalAssets} Devices</span>
 
                       </div>
 
@@ -4724,7 +4724,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                               <span className="w-2.5 h-2.5 rounded-full bg-primary"></span>
 
-                              Assigned to Personnel
+                              Assigned to Employees
 
                             </span>
 
@@ -4750,7 +4750,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                               <span className="w-2.5 h-2.5 rounded-full bg-tertiary"></span>
 
-                              Available in Depository
+                              Available in Stock
 
                             </span>
 
@@ -4776,7 +4776,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                               <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
 
-                              Maintenance &amp; Diagnostics
+                              In Maintenance
 
                             </span>
 
@@ -4805,7 +4805,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                           className="text-xs font-medium text-primary hover:text-primary-container flex items-center gap-1 transition-colors cursor-pointer"
                           onClick={() => setActiveTab('assets')}
                         >
-                          <span>Manage Fleet Inventory</span>
+                          <span>View All Assets</span>
                           <span className="material-symbols-outlined text-[15px]">arrow_forward</span>
                         </button>
                       </div>
@@ -4827,9 +4827,9 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                         <div>
 
-                          <h2 className="font-headline text-xl text-on-surface font-normal">Priority Support Queue</h2>
+                          <h2 className="font-headline text-xl text-on-surface font-normal">Urgent Support Tickets</h2>
 
-                          <p className="text-xs text-on-surface-variant mt-0.5">Active support incidents requiring operational attention</p>
+                          <p className="text-xs text-on-surface-variant mt-0.5">Active tickets that need immediate attention</p>
 
                         </div>
 
@@ -4927,9 +4927,9 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                         <div>
 
-                          <h2 className="font-headline text-xl text-on-surface font-normal">System Audit Trail</h2>
+                          <h2 className="font-headline text-xl text-on-surface font-normal">Recent Activity Log</h2>
 
-                          <p className="text-xs text-on-surface-variant mt-0.5">Chronological record of recent administrative and security actions</p>
+                          <p className="text-xs text-on-surface-variant mt-0.5">Recent actions and events across the system</p>
 
                         </div>
 
