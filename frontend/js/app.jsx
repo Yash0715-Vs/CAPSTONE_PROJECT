@@ -1027,12 +1027,6 @@ function RegisterPage({ onRegisterSuccess, onSwitchToLogin, theme, onToggleTheme
 
             <h1 className="register-card-heading">Complete Your Account Setup</h1>
 
-            <p className="register-card-desc">
-
-              Just a few steps to activate your workspace and access assigned IT hardware and support services.
-
-            </p>
-
           </div>
 
 
@@ -1187,12 +1181,6 @@ function RegisterPage({ onRegisterSuccess, onSwitchToLogin, theme, onToggleTheme
 
                 />
 
-                <span style={{ fontSize: "0.74rem", color: "var(--text-secondary)", marginTop: "0.25rem", display: "block" }}>
-
-                  Assigned ID on your invite token
-
-                </span>
-
               </div>
 
             </div>
@@ -1203,17 +1191,7 @@ function RegisterPage({ onRegisterSuccess, onSwitchToLogin, theme, onToggleTheme
 
             <div className="form-field-group">
 
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.4rem" }}>
-
-                <label className="form-field-label" style={{ marginBottom: 0 }}>Invitation Token</label>
-
-                <span style={{ fontSize: "0.72rem", color: "var(--text-secondary)", fontFamily: "var(--font-mono)" }}>
-
-                  Single-use onboarding token
-
-                </span>
-
-              </div>
+                            <label className="form-field-label">Invitation Token</label>
 
               <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
 
@@ -1431,7 +1409,7 @@ function RegisterPage({ onRegisterSuccess, onSwitchToLogin, theme, onToggleTheme
 
               <label htmlFor="policy-consent" style={{ fontSize: "0.82rem", color: "var(--text-secondary)", lineHeight: 1.5, cursor: "pointer" }}>
 
-                I agree to the <a href="#policy" onClick={e => e.preventDefault()} style={{ color: "var(--primary)", fontWeight: 500, textDecoration: "underline" }}>Company IT Acceptable Use Policy</a>, <a href="#security" onClick={e => e.preventDefault()} style={{ color: "var(--primary)", fontWeight: 500, textDecoration: "underline" }}>Data Security Protocol</a>, and <a href="#custody" onClick={e => e.preventDefault()} style={{ color: "var(--primary)", fontWeight: 500, textDecoration: "underline" }}>Asset Custody Agreement</a>.
+                I agree to the <a href="#policy" onClick={e => e.preventDefault()} style={{ color: "var(--primary)", fontWeight: 500, textDecoration: "underline" }}>Company IT Acceptable Use Policy</a>.
 
               </label>
 
@@ -1460,22 +1438,6 @@ function RegisterPage({ onRegisterSuccess, onSwitchToLogin, theme, onToggleTheme
             </button>
 
           </form>
-
-
-
-          {/* Important Security Policy Notice Box */}
-
-          <div className="register-policy-notice">
-
-            <span className="material-symbols-outlined policy-icon">policy</span>
-
-            <p>
-
-              <strong>Important Security Policy:</strong> Account activation requires an authorized employee invitation issued by your IT Administrator. Self-registration is strictly restricted to valid domain identity tokens.
-
-            </p>
-
-          </div>
 
         </div>
 

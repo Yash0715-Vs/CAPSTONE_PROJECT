@@ -1678,7 +1678,7 @@ html.dark .register-setup-card {
   letter-spacing: -0.015em;
   color: var(--text-main);
   line-height: 1.2;
-  margin-bottom: 0.4rem;
+  margin-bottom: 1.25rem;
 }
 
 .register-card-desc {
