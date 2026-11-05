@@ -347,7 +347,7 @@ function ForgotPasswordModal({ isOpen, onClose, initialIdentifier, onPasswordRes
           <form onSubmit={handleRequestToken} style={{ marginTop: "1rem" }}>
             <div style={{ marginBottom: "1.25rem" }}>
               <label className="form-field-label" htmlFor="recovery-id" style={{ display: "block", marginBottom: "0.4rem", fontWeight: 500, fontSize: "0.85rem" }}>
-                Work Email or Employee ID
+                Enter your Work Email or Employee ID
               </label>
               <div className="input-icon-wrap" style={{ position: "relative" }}>
                 <span className="material-symbols-outlined field-icon-left" style={{ position: "absolute", left: "0.85rem", top: "50%", transform: "translateY(-50%)", color: "var(--text-secondary)", fontSize: "18px" }}>badge</span>
