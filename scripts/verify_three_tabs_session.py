@@ -220,10 +220,29 @@ async def run_three_tabs_test():
         t2_role = await tab2.evaluate("document.body.innerText.includes('ADM-001') || document.body.innerText.includes('Rajesh Sharma')")
         t3_role = await tab3.evaluate("document.body.innerText.includes('EMP-101') || document.body.innerText.includes('Aarav Verma')")
         print(f"\n[TEST 4] Three independent sessions active simultaneously:")
-        print(f"  - Tab 1 IT Support (IT-501): {t1_role}")
+        print(f"  - Tab 1 IT Support (IT-503): {t1_role}")
         print(f"  - Tab 2 Admin (ADM-001): {t2_role}")
         print(f"  - Tab 3 Employee (EMP-101): {t3_role}")
         test_results["three_simultaneous_sessions"] = bool(t1_role and t2_role and t3_role)
+
+        # Step 3b: Refresh all 3 tabs and confirm each tab stays logged in as its own user!
+        print("\n--> Refreshing all 3 tabs (Page.reload) to verify session persistence...")
+        for tab in [tab1, tab2, tab3]:
+            await tab.send_cmd("Page.reload")
+        await asyncio.sleep(1.5)
+        for tab in [tab1, tab2, tab3]:
+            ok_after_reload = await tab.wait_for_authenticated(timeout=15)
+            assert ok_after_reload, f"{tab.name} dropped to login page after reload!"
+        await asyncio.sleep(1.5)
+
+        t1_reload_ok = await tab1.evaluate("(document.body.innerText.includes('IT-503') || document.body.innerText.includes('Karthik Raman')) && !document.getElementById('work-email')")
+        t2_reload_ok = await tab2.evaluate("(document.body.innerText.includes('ADM-001') || document.body.innerText.includes('Rajesh Sharma')) && !document.getElementById('work-email')")
+        t3_reload_ok = await tab3.evaluate("(document.body.innerText.includes('EMP-101') || document.body.innerText.includes('Aarav Verma')) && !document.getElementById('work-email')")
+        print(f"\n[TEST 4b] All 3 tabs remain logged in as their own role after page refresh:")
+        print(f"  - Tab 1 (IT Support) survived refresh: {t1_reload_ok}")
+        print(f"  - Tab 2 (Admin) survived refresh: {t2_reload_ok}")
+        print(f"  - Tab 3 (Employee) survived refresh: {t3_reload_ok}")
+        test_results["three_tabs_preserve_session_on_refresh"] = bool(t1_reload_ok and t2_reload_ok and t3_reload_ok)
 
         # Step 4: Create a ticket from Employee tab (Tab 3)
         print("\n--> Creating a ticket from Tab 3 (Employee Aarav Verma)...")

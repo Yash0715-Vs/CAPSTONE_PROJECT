@@ -42,10 +42,11 @@ const WS_URL = (function () {
 
 })();
 
-// Purge any legacy shared localStorage auth tokens so every tab is strictly isolated in-memory
+// Purge legacy shared localStorage auth keys so each tab maintains an isolated sessionStorage session
 try {
   localStorage.removeItem("it_token");
   localStorage.removeItem("it_user");
+  localStorage.removeItem("it_tab");
 } catch (e) { }
 
 
@@ -1647,7 +1648,7 @@ function App() {
 
 
 
-  // Tab-isolated persistent authentication state (persists across reloads within the same tab, isolated across separate tabs)
+  // Tab-isolated persistent authentication state (persists across page refreshes within each tab via sessionStorage, isolated across tabs)
   const [currentUser, setCurrentUser] = useState(() => {
     try {
       const stored = sessionStorage.getItem("it_user");
@@ -2162,7 +2163,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
     setWsAuthenticated(false);
 
-    setActiveTab("dashboard");
+    setActiveTabState("dashboard");
 
     if (wsRef.current) {
 
@@ -2216,10 +2217,15 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
           if (freshUser) {
 
-            setCurrentUser(freshUser);
             try {
               sessionStorage.setItem("it_user", JSON.stringify(freshUser));
             } catch (e) { }
+            setCurrentUser(prev => {
+              try {
+                if (prev && JSON.stringify(prev) === JSON.stringify(freshUser)) return prev;
+              } catch (e) { }
+              return freshUser;
+            });
 
           }
 
@@ -2497,11 +2503,16 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
 
 
+  const fetchDataRef = useRef(fetchData);
+  fetchDataRef.current = fetchData;
+  const addToastRef = useRef(addToast);
+  addToastRef.current = addToast;
+
   // WebSocket Real-Time Connection with JWT Auth & Heartbeat Protocol (Section 38)
 
   useEffect(() => {
 
-    if (!token || !currentUser) {
+    if (!token || !currentUser?.user_id) {
 
       if (wsRef.current) {
 
@@ -2631,13 +2642,13 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
             setWsAuthenticated(true);
 
-            addToast("Real-Time Event Stream Authenticated", "success");
+            addToastRef.current("Real-Time Event Stream Authenticated", "success");
 
           } else if (data.event === "AUTH_FAILED") {
 
             setWsAuthenticated(false);
 
-            addToast(`WebSocket auth failed: ${data.message}`, "error");
+            addToastRef.current(`WebSocket auth failed: ${data.message}`, "error");
 
           } else {
 
@@ -2649,9 +2660,9 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
             const evLabel = (data.event || "").replace("TICKET_", "");
 
-            addToast(`⚡ Incident ${ticket?.ticket_id || ""}: ${evLabel} (${ticket?.title || data.message || ""})`, "info");
+            addToastRef.current(`⚡ Incident ${ticket?.ticket_id || ""}: ${evLabel} (${ticket?.title || data.message || ""})`, "info");
 
-            fetchData();
+            fetchDataRef.current();
 
           }
 
@@ -2727,7 +2738,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
     };
 
-  }, [token, currentUser, fetchData, addToast]);
+  }, [token, currentUser?.user_id]);
 
 
 
@@ -2847,6 +2858,18 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
   }, [slaReport, tickets]);
 
 
+
+  // If token exists in sessionStorage while profile is hydrating via /auth/me, show brief restoring state
+  if (token && !currentUser) {
+    return (
+      <div className="min-h-screen bg-surface flex items-center justify-center p-6">
+        <div className="flex flex-col items-center gap-3 text-on-surface-variant">
+          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          <span className="text-sm font-medium">Restoring workspace session...</span>
+        </div>
+      </div>
+    );
+  }
 
   // If not logged in, render Login or Register page
 

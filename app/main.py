@@ -92,6 +92,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def prevent_stale_frontend_cache(request: Request, call_next):
+    """Ensure frontend JS/CSS updates are always revalidated across browser reloads."""
+    response = await call_next(request)
+    if request.url.path.startswith(("/js/", "/css/", "/frontend/")):
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+    return response
+
 # Register API Routers
 app.include_router(auth_router)
 app.include_router(users_router)
