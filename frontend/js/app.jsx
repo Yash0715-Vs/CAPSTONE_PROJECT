@@ -354,7 +354,7 @@ function ForgotPasswordModal({ isOpen, onClose, initialIdentifier, onPasswordRes
           <form onSubmit={handleRequestToken} style={{ marginTop: "1rem" }}>
             <div style={{ marginBottom: "1.25rem" }}>
               <label className="form-field-label" htmlFor="recovery-id" style={{ display: "block", marginBottom: "0.4rem", fontWeight: 500, fontSize: "0.85rem" }}>
-                Enter your Work Email or Employee ID
+                Work Email or Employee ID
               </label>
               <div className="input-icon-wrap" style={{ position: "relative" }}>
                 <span className="material-symbols-outlined field-icon-left" style={{ position: "absolute", left: "0.85rem", top: "50%", transform: "translateY(-50%)", color: "var(--text-secondary)", fontSize: "18px" }}>badge</span>
@@ -391,7 +391,7 @@ function ForgotPasswordModal({ isOpen, onClose, initialIdentifier, onPasswordRes
             <div style={{ background: "var(--bg-subtle)", border: "1px solid var(--border-light)", borderRadius: "var(--radius-md)", padding: "0.85rem 1rem", marginBottom: "1.25rem" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.35rem" }}>
                 <span style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                  Reset Verification Code (Valid 15m)
+                  Verification Code (Valid 15m)
                 </span>
                 <button type="button" onClick={handleCopyToken} style={{ background: "transparent", border: "none", color: "var(--primary)", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: "2px" }}>
                   <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>{copySuccess ? "done" : "content_copy"}</span>
@@ -401,6 +401,23 @@ function ForgotPasswordModal({ isOpen, onClose, initialIdentifier, onPasswordRes
               <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.95rem", fontWeight: 600, color: "var(--primary)", wordBreak: "break-all" }}>
                 {resetToken}
               </div>
+            </div>
+
+            {/* Verification code input */}
+            <div style={{ marginBottom: "1rem" }}>
+              <label className="form-field-label" htmlFor="reset-token-input" style={{ display: "block", marginBottom: "0.35rem", fontWeight: 500, fontSize: "0.85rem" }}>
+                Reset Verification Code
+              </label>
+              <input
+                id="reset-token-input"
+                type="text"
+                className="form-input"
+                style={{ width: "100%", fontFamily: "var(--font-mono)" }}
+                placeholder="RST-..."
+                value={resetToken}
+                onChange={(e) => setResetToken(e.target.value)}
+                required
+              />
             </div>
 
             {/* New Password */}
@@ -1697,6 +1714,10 @@ function App() {
 
   const [ticketMetrics, setTicketMetrics] = useState(null);
 
+  const [autoAssignEnabled, setAutoAssignEnabled] = useState(false);
+
+  const [updatingAutoAssign, setUpdatingAutoAssign] = useState(false);
+
   const [loading, setLoading] = useState(false);
 
 
@@ -2463,7 +2484,13 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
             .then(r => r.ok ? r.json() : null)
 
-            .then(data => setTicketMetrics(data))
+            .then(data => setTicketMetrics(data)),
+
+          fetch(`${API_BASE}/tickets/policies/auto-assign`, { headers })
+
+            .then(r => r.ok ? r.json() : null)
+
+            .then(data => { if (data && typeof data.enabled === "boolean") setAutoAssignEnabled(data.enabled); })
 
         );
 
@@ -3361,7 +3388,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
           <div className="flex items-center gap-3.5">
 
-            {currentUser && (
+            {currentUser && currentUser.role === "EMPLOYEE" && (
               <button
                 className="inline-flex items-center gap-1.5 bg-surface-container-high hover:bg-surface-container-highest text-on-surface px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer border border-outline-variant/30"
                 type="button"
@@ -5248,23 +5275,109 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                   </div>
 
-                  <button
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
 
-                    type="button"
+                    {currentUser.role === "ADMIN" && (
 
-                    className="table-btn"
+                      <button
 
-                    onClick={fetchData}
+                        type="button"
 
-                    title="Refresh tickets from database"
+                        className="table-btn"
 
-                  >
+                        disabled={updatingAutoAssign}
 
-                    <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>refresh</span>
+                        style={{
 
-                    <span>Sync</span>
+                          borderColor: autoAssignEnabled ? "var(--primary)" : "var(--border-light)",
 
-                  </button>
+                          color: autoAssignEnabled ? "var(--primary)" : "var(--text-secondary)",
+
+                          fontWeight: 600,
+
+                        }}
+
+                        onClick={async () => {
+
+                          setUpdatingAutoAssign(true);
+
+                          try {
+
+                            const nextVal = !autoAssignEnabled;
+
+                            const res = await fetch(`${API_BASE}/tickets/policies/auto-assign`, {
+
+                              method: "PUT",
+
+                              headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+
+                              body: JSON.stringify({ enabled: nextVal }),
+
+                            });
+
+                            if (res.ok) {
+
+                              const data = await res.json();
+
+                              setAutoAssignEnabled(Boolean(data.enabled));
+
+                              addToast(`Automatic least-load assignment ${data.enabled ? "authorized" : "disabled"}.`, "success");
+
+                            } else {
+
+                              const err = await res.json().catch(() => null);
+
+                              addToast(parseApiError(err, res.status, "Failed to update auto-assign policy"), "error");
+
+                            }
+
+                          } catch (e) {
+
+                            addToast("Network failure updating policy.", "error");
+
+                          } finally {
+
+                            setUpdatingAutoAssign(false);
+
+                          }
+
+                        }}
+
+                        title="Admin policy: authorize or disable automatic least-load assignment on new tickets"
+
+                      >
+
+                        <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>
+
+                          {autoAssignEnabled ? "auto_awesome" : "person_outline"}
+
+                        </span>
+
+                        <span>{autoAssignEnabled ? "Auto-Assign: Authorized" : "Auto-Assign: Manual Only"}</span>
+
+                      </button>
+
+                    )}
+
+                    <button
+
+                      type="button"
+
+                      className="table-btn"
+
+                      onClick={fetchData}
+
+                      title="Refresh tickets from database"
+
+                    >
+
+                      <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>refresh</span>
+
+                      <span>Sync</span>
+
+                    </button>
+
+                  </div>
 
                 </div>
 
@@ -5588,7 +5701,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                                 )}
 
-                                {t.status === "RESOLVED" && (currentUser.role === "ADMIN" || currentUser.user_id === t.created_by) && (
+                                {t.status === "RESOLVED" && currentUser && currentUser.user_id === t.created_by && (
 
                                   <button
 
@@ -5763,7 +5876,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                     <span>+ Request Equipment</span>
                   </button>
                 ) : (
-                  currentUser && currentUser.role !== "EMPLOYEE" && (
+                  currentUser && currentUser.role === "ADMIN" && (
                     <button
                       type="button"
                       className="btn-primary-teal"
@@ -5972,21 +6085,21 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
                                   </button>
                                 )}
 
-                                {currentUser.role !== "EMPLOYEE" && !isMyEquipmentView && (
+                                {currentUser.role === "ADMIN" && !isMyEquipmentView && (
                                   <button className="table-btn" onClick={() => setShowEditAssetModal(a)} title="Edit Hardware Details">
                                     <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>edit</span>
                                     <span>Edit</span>
                                   </button>
                                 )}
 
-                                {currentUser.role !== "EMPLOYEE" && !isMyEquipmentView && a.status === "AVAILABLE" && (
+                                {currentUser.role === "ADMIN" && !isMyEquipmentView && a.status === "AVAILABLE" && (
                                   <button className="table-btn" onClick={() => setShowAssignModal(a)}>
                                     <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>assignment_ind</span>
                                     <span>Assign</span>
                                   </button>
                                 )}
 
-                                {currentUser.role !== "EMPLOYEE" && a.status === "ASSIGNED" && (
+                                {currentUser.role === "ADMIN" && !isMyEquipmentView && a.status === "ASSIGNED" && (
 
                                   <button className="table-btn" onClick={async () => {
 
@@ -11408,7 +11521,7 @@ function TicketDetailsModal({ ticket, assets = [], currentUser, token, onClose, 
 
 
 
-            {ticket.status === "RESOLVED" && (currentUser.role === "ADMIN" || currentUser.user_id === ticket.created_by) && (
+            {ticket.status === "RESOLVED" && currentUser && currentUser.user_id === ticket.created_by && (
 
               <button
 

@@ -353,3 +353,36 @@ class EquipmentRequestHistoryDB(Base):
             "timestamp": _iso_utc(self.timestamp),
         }
 
+
+class RevokedTokenDB(Base):
+    """
+    Persistent JWT revocation registry (`revoked_tokens` table).
+    Shared across workers and preserved across backend restarts.
+    """
+    __tablename__ = "revoked_tokens"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    token_hash = Column(String(64), unique=True, nullable=False, index=True)
+    jti = Column(String(64), nullable=True, index=True)
+    user_id = Column(String(50), nullable=True, index=True)
+    expires_at = Column(DateTime, nullable=True, index=True)
+    revoked_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+
+class SystemSettingDB(Base):
+    """
+    Persistent Admin-controlled system policies (`system_settings` table).
+    """
+    __tablename__ = "system_settings"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    setting_key = Column(String(100), unique=True, nullable=False, index=True)
+    setting_value = Column(String(255), nullable=False)
+    updated_by = Column(String(50), nullable=True)
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+

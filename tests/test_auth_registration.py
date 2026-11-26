@@ -335,8 +335,19 @@ def test_server_side_logout_revokes_token():
         me_after = client.get("/auth/me", headers=headers)
         assert me_after.status_code == 401
         assert "revoked" in me_after.json()["detail"].lower()
-    finally:
+
+        # 5. Confirm revocation is persisted in the database table
+        from app.models.db_models import RevokedTokenDB
         from app.services.auth_service import AuthService
-        AuthService._revoked_tokens.clear()
+        with db_manager.get_session() as s:
+            row = s.query(RevokedTokenDB).filter(
+                RevokedTokenDB.token_hash == AuthService.hash_access_token(token)
+            ).first()
+            assert row is not None
+    finally:
+        from app.models.db_models import RevokedTokenDB
+        with db_manager.get_session() as s:
+            s.query(RevokedTokenDB).delete()
+            s.commit()
 
 

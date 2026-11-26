@@ -83,6 +83,18 @@ class TicketCloseRequest(BaseModel):
     feedback: Optional[str] = Field(None, max_length=500, json_schema_extra={"example": "Verified and confirmed issue fixed."})
 
 
+class AutoAssignPolicyUpdate(BaseModel):
+
+    enabled: bool = Field(..., description="Whether Admin authorizes automatic least-load ticket assignment")
+
+
+class AutoAssignPolicyResponse(BaseModel):
+
+    enabled: bool
+    updated_by: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
 
 
 

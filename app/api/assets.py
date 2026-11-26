@@ -76,9 +76,9 @@ def get_asset_by_id(
 def create_asset(
     asset_in: AssetCreate,
     session: Session = Depends(get_db),
-    staff_user: UserDB = Depends(require_roles(["ADMIN", "SUPPORT"]))
+    admin: UserDB = Depends(require_roles(["ADMIN"]))
 ):
-    """Creates a new hardware asset inventory record (Admin / Support only)."""
+    """Creates a new hardware asset inventory record (Admin only)."""
     if AssetRepository.get_by_asset_id(session, asset_in.asset_id):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -104,7 +104,7 @@ def create_asset(
         specs_json=asset_in.specs_json,
     )
     saved = AssetRepository.create(session, asset)
-    ActivityLogRepository.log(session, "ASSET_CREATED", staff_user.user_id, f"Added asset {saved.asset_id}")
+    ActivityLogRepository.log(session, "ASSET_CREATED", admin.user_id, f"Added asset {saved.asset_id}")
     return saved
 
 
@@ -114,9 +114,9 @@ def update_asset(
     asset_id: str,
     update_in: AssetUpdate,
     session: Session = Depends(get_db),
-    staff_user: UserDB = Depends(require_roles(["ADMIN", "SUPPORT"]))
+    admin: UserDB = Depends(require_roles(["ADMIN"]))
 ):
-    """Updates asset details, brand, model, or status."""
+    """Updates asset details and atomically tracks any custody changes in asset_assignments (Admin only)."""
     asset = AssetRepository.get_by_asset_id(session, asset_id)
     if not asset:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Asset '{asset_id}' not found.")
@@ -135,44 +135,96 @@ def update_asset(
                 detail=f"Serial number '{update_in.serial_number}' is already registered to asset '{existing_serial.asset_id}'."
             )
         asset.serial_number = update_in.serial_number
-    if update_in.status is not None:
-        if asset.status == "ASSIGNED" and update_in.status != "ASSIGNED":
-            # Close active assignment record
-            latest_assignment = (
-                session.query(AssetAssignmentDB)
-                .filter(
-                    AssetAssignmentDB.asset_id == asset_id,
-                    AssetAssignmentDB.returned_date.is_(None)
-                )
-                .order_by(desc(AssetAssignmentDB.assigned_date))
-                .first()
+    if update_in.specs_json is not None:
+        asset.specs_json = update_in.specs_json
+
+    now_utc = datetime.now(timezone.utc)
+
+    def _close_open_assignment(note: str) -> None:
+        latest_assignment = (
+            session.query(AssetAssignmentDB)
+            .filter(
+                AssetAssignmentDB.asset_id == asset_id,
+                AssetAssignmentDB.returned_date.is_(None)
             )
-            if latest_assignment:
-                latest_assignment.returned_date = datetime.now(timezone.utc)
-            asset.assigned_to = None
-        asset.status = update_in.status
+            .order_by(desc(AssetAssignmentDB.assigned_date))
+            .first()
+        )
+        if latest_assignment:
+            latest_assignment.returned_date = now_utc
+            if not latest_assignment.notes:
+                latest_assignment.notes = note
 
     if update_in.assigned_to is not None:
-        if update_in.assigned_to:
-            emp = UserRepository.get_by_user_id(session, update_in.assigned_to)
+        target_assignee = update_in.assigned_to.strip() or None
+        if target_assignee:
+            emp = UserRepository.get_by_user_id(session, target_assignee)
             if not emp:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Employee '{update_in.assigned_to}' not found."
+                    detail=f"Employee '{target_assignee}' not found."
                 )
             if emp.status != "ACTIVE":
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Employee '{update_in.assigned_to}' has status '{emp.status}'. Assets can only be assigned to ACTIVE employees."
+                    detail=f"Employee '{target_assignee}' has status '{emp.status}'. Assets can only be assigned to ACTIVE employees."
                 )
-            asset.assigned_to = update_in.assigned_to
+
+            effective_status = update_in.status if update_in.status is not None else "ASSIGNED"
+            if effective_status != "ASSIGNED":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Cannot assign asset '{asset_id}' to '{target_assignee}' while status is '{effective_status}'."
+                )
+
+            if target_assignee != asset.assigned_to:
+                previous_owner = asset.assigned_to
+                _close_open_assignment(f"Reassigned to {target_assignee} by Admin {admin.user_id}")
+                session.add(
+                    AssetAssignmentDB(
+                        asset_id=asset_id,
+                        employee_id=target_assignee,
+                        assigned_date=now_utc,
+                        notes=f"Assigned by Admin {admin.user_id} via asset update"
+                        + (f" (previous: {previous_owner})" if previous_owner else ""),
+                    )
+                )
+                asset.assigned_to = target_assignee
+                asset.status = "ASSIGNED"
+                ActivityLogRepository.log(
+                    session,
+                    "ASSET_REASSIGNED" if previous_owner else "ASSET_ASSIGNED",
+                    admin.user_id,
+                    f"Admin {admin.user_id} assigned {asset_id} to {target_assignee}"
+                    + (f" from {previous_owner}" if previous_owner else ""),
+                )
         else:
+            if asset.assigned_to is not None:
+                previous_owner = asset.assigned_to
+                _close_open_assignment(f"Unassigned by Admin {admin.user_id} via asset update")
+                asset.assigned_to = None
+                ActivityLogRepository.log(
+                    session,
+                    "ASSET_RETURNED",
+                    admin.user_id,
+                    f"Admin {admin.user_id} unassigned {asset_id} from {previous_owner}",
+                )
+            if update_in.status is None and asset.status == "ASSIGNED":
+                asset.status = "AVAILABLE"
+
+    if update_in.status is not None:
+        if update_in.status == "ASSIGNED" and not asset.assigned_to:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot set asset status to ASSIGNED without specifying assigned_to."
+            )
+        if asset.status == "ASSIGNED" and update_in.status != "ASSIGNED":
+            _close_open_assignment(f"Status changed to {update_in.status} by Admin {admin.user_id}")
             asset.assigned_to = None
-    if update_in.specs_json is not None:
-        asset.specs_json = update_in.specs_json
+        asset.status = update_in.status
 
     session.flush()
-    ActivityLogRepository.log(session, "ASSET_UPDATED", staff_user.user_id, f"Updated asset {asset_id}")
+    ActivityLogRepository.log(session, "ASSET_UPDATED", admin.user_id, f"Updated asset {asset_id}")
     return asset
 
 
@@ -204,9 +256,9 @@ def assign_asset_to_employee(
     asset_id: str,
     assign_req: AssetAssignRequest,
     session: Session = Depends(get_db),
-    staff_user: UserDB = Depends(require_roles(["ADMIN", "SUPPORT"]))
+    admin: UserDB = Depends(require_roles(["ADMIN"]))
 ):
-    """Assigns an available hardware asset to an employee."""
+    """Assigns an available hardware asset to an employee (Admin only)."""
     # Verify employee exists
     emp = UserRepository.get_by_user_id(session, assign_req.employee_id)
     if not emp:
@@ -230,7 +282,7 @@ def assign_asset_to_employee(
         ActivityLogRepository.log(
             session,
             "ASSET_ASSIGNED",
-            staff_user.user_id,
+            admin.user_id,
             f"Assigned {asset_id} to {assign_req.employee_id}"
         )
         return updated_asset
@@ -242,13 +294,13 @@ def assign_asset_to_employee(
 def return_asset_to_inventory(
     asset_id: str,
     session: Session = Depends(get_db),
-    staff_user: UserDB = Depends(require_roles(["ADMIN", "SUPPORT"]))
+    admin: UserDB = Depends(require_roles(["ADMIN"]))
 ):
-    """Returns an assigned asset back to AVAILABLE inventory."""
+    """Returns an assigned asset back to AVAILABLE inventory (Admin only)."""
     try:
         updated_asset = AssetRepository.return_asset(session=session, asset_id=asset_id)
         ActivityLogRepository.log(
-            session, "ASSET_RETURNED", staff_user.user_id, f"Returned {asset_id} to inventory"
+            session, "ASSET_RETURNED", admin.user_id, f"Returned {asset_id} to inventory"
         )
         return updated_asset
     except ValueError as err:

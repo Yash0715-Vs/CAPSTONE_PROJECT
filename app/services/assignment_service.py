@@ -13,17 +13,85 @@ Meets Monday Technical Requirement:
 
 import threading
 from contextlib import contextmanager
-from typing import Optional, List
+from datetime import datetime, timezone
+from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
 
-from app.models.db_models import UserDB, TicketDB, TicketHistoryDB
+from app.models.db_models import UserDB, TicketDB, TicketHistoryDB, SystemSettingDB
 from app.database.repositories import TicketRepository, ActivityLogRepository
 
 ACTIVE_TICKET_STATUSES = ("OPEN", "ASSIGNED", "IN_PROGRESS")
+AUTO_ASSIGN_POLICY_KEY = "auto_assign_enabled"
 
 # Concurrency lock to serialize in-process auto-assignments and eliminate stale-calculation race conditions
 _assignment_lock = threading.Lock()
+
+
+def is_auto_assign_enabled(db: Session) -> bool:
+    """
+    Returns True only when an Administrator has explicitly authorized automatic ticket assignment.
+    Defaults to False when no policy record exists.
+    """
+    setting = (
+        db.query(SystemSettingDB)
+        .filter(SystemSettingDB.setting_key == AUTO_ASSIGN_POLICY_KEY)
+        .first()
+    )
+    if not setting or not setting.setting_value:
+        return False
+    return setting.setting_value.strip().lower() == "true"
+
+
+def get_auto_assign_policy(db: Session) -> Dict[str, Any]:
+    """Returns the current Admin-controlled automatic assignment policy metadata."""
+    setting = (
+        db.query(SystemSettingDB)
+        .filter(SystemSettingDB.setting_key == AUTO_ASSIGN_POLICY_KEY)
+        .first()
+    )
+    if not setting:
+        return {"enabled": False, "updated_by": None, "updated_at": None}
+    updated_at = setting.updated_at
+    if updated_at and updated_at.tzinfo is None:
+        updated_at = updated_at.replace(tzinfo=timezone.utc)
+    return {
+        "enabled": (setting.setting_value or "").strip().lower() == "true",
+        "updated_by": setting.updated_by,
+        "updated_at": updated_at.isoformat() if updated_at else None,
+    }
+
+
+def set_auto_assign_policy(db: Session, enabled: bool, admin_user_id: str) -> Dict[str, Any]:
+    """Creates or updates the Admin-authorized automatic assignment policy."""
+    now_utc = datetime.now(timezone.utc)
+    setting = (
+        db.query(SystemSettingDB)
+        .filter(SystemSettingDB.setting_key == AUTO_ASSIGN_POLICY_KEY)
+        .first()
+    )
+    val = "true" if enabled else "false"
+    if setting:
+        setting.setting_value = val
+        setting.updated_by = admin_user_id
+        setting.updated_at = now_utc
+    else:
+        setting = SystemSettingDB(
+            setting_key=AUTO_ASSIGN_POLICY_KEY,
+            setting_value=val,
+            updated_by=admin_user_id,
+            updated_at=now_utc,
+        )
+        db.add(setting)
+    db.flush()
+
+    ActivityLogRepository.log(
+        session=db,
+        action="AUTO_ASSIGN_POLICY_UPDATED",
+        user_id=admin_user_id,
+        details=f"Admin {admin_user_id} {'authorized' if enabled else 'disabled'} automatic ticket assignment",
+    )
+    return get_auto_assign_policy(db)
 
 
 @contextmanager
@@ -135,13 +203,21 @@ def get_least_loaded_support_user(
     return sorted_specialists[0] if sorted_specialists else None
 
 
-def auto_assign_ticket(db: Session, ticket_id: str) -> Optional[str]:
+def auto_assign_ticket(
+    db: Session,
+    ticket_id: str,
+    require_policy: bool = False,
+) -> Optional[str]:
     """
-    Executes automated ticket assignment under system policy.
+    Executes automated ticket assignment under Admin-authorized system policy.
+    When `require_policy=True`, skips assignment unless an Admin has explicitly enabled it.
     Sets status to ASSIGNED, assigned_to to least-loaded specialist,
     and logs SYSTEM as the actor in ticket history and activity logs.
     Concurrency-safe across multi-worker processes and multi-threaded request handling.
     """
+    if require_policy and not is_auto_assign_enabled(db):
+        return None
+
     with acquire_assignment_lock(db):
         ticket = TicketRepository.get_by_ticket_id(db, ticket_id)
         if not ticket:

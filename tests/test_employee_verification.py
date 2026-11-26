@@ -9,7 +9,7 @@ Validates:
 5. Employee reports 'Issue Still Exists' -> status reverts to IN_PROGRESS, assigned specialist preserved.
 6. Closed tickets cannot be reopened (400 Bad Request).
 7. Unresolved tickets cannot be closed (400 Bad Request).
-8. Admin can confirm and close on behalf of employee.
+8. Admin cannot close a ticket created by another employee without employee verification (403 Forbidden).
 """
 
 import pytest
@@ -74,6 +74,11 @@ def test_employee_verification_and_closure_lifecycle(tokens):
     # 4. Another employee (EMP-102) attempts to close EMP-101's ticket -> 403 Forbidden
     emp2_close = client.post(f"/tickets/{t_id}/close", headers=emp2_h)
     assert emp2_close.status_code == 403
+
+    # 4b. Admin also cannot close EMP-101's ticket -> 403 Forbidden
+    admin_close = client.post(f"/tickets/{t_id}/close", headers=admin_h)
+    assert admin_close.status_code == 403
+    assert "only authorized to close support tickets created by you" in admin_close.json()["detail"].lower()
 
     # 5. EMP-101 verifies and confirms closure with feedback
     emp1_close = client.post(

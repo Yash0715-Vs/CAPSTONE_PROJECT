@@ -26,9 +26,9 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from app.config import config
-from app.database.connection import get_db
+from app.database.connection import get_db, db_manager
 from app.database.repositories import UserRepository
-from app.models.db_models import UserDB, UserStatus
+from app.models.db_models import UserDB, UserStatus, RevokedTokenDB
 
 security = HTTPBearer(auto_error=False)
 
@@ -78,41 +78,100 @@ class AuthService:
         expire = datetime.now(timezone.utc) + (
             expires_delta or timedelta(minutes=config.ACCESS_TOKEN_EXPIRE_MINUTES)
         )
-        to_encode.update({"exp": expire})
+        to_encode.update({"exp": expire, "jti": secrets.token_hex(16)})
         return jwt.encode(to_encode, config.SECRET_KEY, algorithm=config.ALGORITHM)
 
-    # In-Memory Token Revocation Store (Process-Bound)
-    #
-    # ARCHITECTURAL DESIGN & LIMITATIONS:
-    # 1. Scope: In-memory set effective within the running process for the local demo.
-    # 2. Expiration Handling: Tokens have an `exp` claim. Expired tokens are rejected
-    #    via jwt.ExpiredSignatureError. Revoked tokens are rejected with HTTP 401 "Token has been revoked".
-    # 3. Operational Integrity: The set persists across requests and is never cleared during normal execution.
-    # 4. Multi-Worker / Clustered Limitations: In-memory state is isolated per OS process. If deploying with
-    #    multiple Uvicorn worker processes (--workers N) or multi-node clusters, a shared cache (e.g., Redis
-    #    with TTL matching token expiration) or a database table (`revoked_tokens`) is required for cross-worker visibility.
-    _revoked_tokens: set = set()
+    @staticmethod
+    def hash_access_token(token: str) -> str:
+        """Computes SHA-256 hash of a JWT token for persistent revocation lookup."""
+        return hashlib.sha256(token.strip().encode("utf-8")).hexdigest()
 
     @classmethod
-    def revoke_token(cls, token: str) -> None:
+    def revoke_token(
+        cls,
+        token: str,
+        session: Optional[Session] = None,
+        user_id: Optional[str] = None,
+    ) -> None:
         """
-        Revokes a JWT token on the server side upon logout.
-        Adds the token to the server-side revocation registry.
+        Revokes a JWT token persistently in the `revoked_tokens` database table.
+        Shared across all backend workers and preserved across server restarts.
         """
-        if token:
-            cls._revoked_tokens.add(token.strip())
+        if not token or not token.strip():
+            return
+
+        clean_token = token.strip()
+        token_hash = cls.hash_access_token(clean_token)
+        jti: Optional[str] = None
+        sub: Optional[str] = user_id
+        expires_at: Optional[datetime] = None
+
+        try:
+            unverified = jwt.decode(
+                clean_token,
+                options={"verify_signature": False, "verify_exp": False},
+            )
+            jti = unverified.get("jti")
+            sub = sub or unverified.get("sub")
+            exp_ts = unverified.get("exp")
+            if isinstance(exp_ts, (int, float)):
+                expires_at = datetime.fromtimestamp(exp_ts, tz=timezone.utc)
+        except Exception:
+            pass
+
+        def _persist(db: Session) -> None:
+            now_utc = datetime.now(timezone.utc)
+            # Prune expired revocations opportunistically
+            db.query(RevokedTokenDB).filter(
+                RevokedTokenDB.expires_at.isnot(None),
+                RevokedTokenDB.expires_at < now_utc,
+            ).delete(synchronize_session=False)
+
+            exists = db.query(RevokedTokenDB).filter(
+                RevokedTokenDB.token_hash == token_hash
+            ).first()
+            if not exists:
+                db.add(
+                    RevokedTokenDB(
+                        token_hash=token_hash,
+                        jti=jti,
+                        user_id=sub,
+                        expires_at=expires_at,
+                        revoked_at=now_utc,
+                    )
+                )
+                db.flush()
+
+        if session is not None:
+            _persist(session)
+        else:
+            with db_manager.get_session() as db:
+                _persist(db)
 
     @classmethod
-    def is_token_revoked(cls, token: str) -> bool:
-        """
-        Checks whether token has been revoked on the server side.
-        """
-        return bool(token and token.strip() in cls._revoked_tokens)
+    def is_token_revoked(cls, token: str, session: Optional[Session] = None) -> bool:
+        """Checks whether token has been revoked in the persistent database store."""
+        if not token or not token.strip():
+            return False
+        token_hash = cls.hash_access_token(token)
+
+        def _check(db: Session) -> bool:
+            return (
+                db.query(RevokedTokenDB.id)
+                .filter(RevokedTokenDB.token_hash == token_hash)
+                .first()
+                is not None
+            )
+
+        if session is not None:
+            return _check(session)
+        with db_manager.get_session() as db:
+            return _check(db)
 
     @classmethod
-    def decode_token(cls, token: str) -> Dict[str, Any]:
-        """Decodes and validates a JWT token using centralized configuration."""
-        if cls.is_token_revoked(token):
+    def decode_token(cls, token: str, session: Optional[Session] = None) -> Dict[str, Any]:
+        """Decodes and validates a JWT token using centralized configuration and DB revocation store."""
+        if cls.is_token_revoked(token, session=session):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token has been revoked. Please log in again.",
@@ -151,7 +210,7 @@ def get_current_user(
         )
 
     token = credentials.credentials
-    payload = AuthService.decode_token(token)
+    payload = AuthService.decode_token(token, session=session)
     user_id: str = payload.get("sub")
     if not user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload.")

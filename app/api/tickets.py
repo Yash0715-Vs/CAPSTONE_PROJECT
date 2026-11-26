@@ -29,13 +29,40 @@ from app.schemas.ticket import (
     TicketCloseRequest,
     TicketReopenRequest,
     TicketHistoryResponse,
+    AutoAssignPolicyUpdate,
+    AutoAssignPolicyResponse,
 )
 from app.services.auth_service import get_current_user, require_roles
 from app.services.ticket_classifier import TicketClassifier
-from app.services.assignment_service import auto_assign_ticket, get_least_loaded_support_user
+from app.services.assignment_service import (
+    auto_assign_ticket,
+    get_least_loaded_support_user,
+    is_auto_assign_enabled,
+    get_auto_assign_policy,
+    set_auto_assign_policy,
+)
 from app.services.websocket_manager import ws_manager
 
 router = APIRouter(prefix="/tickets", tags=["Tickets"])
+
+
+@router.get("/policies/auto-assign", response_model=AutoAssignPolicyResponse)
+def read_auto_assign_policy(
+    session: Session = Depends(get_db),
+    current_user: UserDB = Depends(get_current_user),
+):
+    """Returns whether automatic least-load ticket assignment is currently authorized by Admin."""
+    return get_auto_assign_policy(session)
+
+
+@router.put("/policies/auto-assign", response_model=AutoAssignPolicyResponse)
+def update_auto_assign_policy(
+    policy_in: AutoAssignPolicyUpdate,
+    session: Session = Depends(get_db),
+    admin_user: UserDB = Depends(require_roles(["ADMIN"])),
+):
+    """Explicitly authorizes or disables automatic least-load ticket assignment (Admin only)."""
+    return set_auto_assign_policy(session, policy_in.enabled, admin_user.user_id)
 
 
 
@@ -176,16 +203,24 @@ def create_ticket(
         session, "TICKET_CREATED", current_user.user_id, f"Created {saved.ticket_id} ({category}/{priority})"
     )
 
-    # Automatic least-load assignment under admin-authorized system policy
-    assigned_specialist = auto_assign_ticket(session, saved.ticket_id)
-    session.flush()
+    # Automatic least-load assignment only runs when explicitly authorized by Admin policy
+    if is_auto_assign_enabled(session):
+        assigned_specialist = auto_assign_ticket(session, saved.ticket_id, require_policy=True)
+        session.flush()
 
-    if not assigned_specialist:
+        if not assigned_specialist:
+            ActivityLogRepository.log(
+                session,
+                "TICKET_UNASSIGNED_NO_SPECIALIST",
+                "SYSTEM",
+                f"Ticket {saved.ticket_id} remains in OPEN status: No active Support specialist available for auto-assignment. Ticket is routed to Admin unassigned queue."
+            )
+    else:
         ActivityLogRepository.log(
             session,
-            "TICKET_UNASSIGNED_NO_SPECIALIST",
+            "TICKET_AWAITING_MANUAL_ASSIGNMENT",
             "SYSTEM",
-            f"Ticket {saved.ticket_id} remains in OPEN status: No active Support specialist available for auto-assignment. Ticket is routed to Admin unassigned queue."
+            f"Ticket {saved.ticket_id} remains in OPEN status: Automatic assignment is disabled by Admin policy; awaiting Admin manual assignment."
         )
 
     ws_manager.trigger_ticket_broadcast("TICKET_CREATED", saved.to_dict())
@@ -441,9 +476,7 @@ def close_ticket(
 ):
     """
     Closes a ticket after resolution verification.
-    - Employees can only close their own tickets, and only after the ticket is RESOLVED.
-    - Support specialists cannot close tickets.
-    - Administrators can also close tickets if permitted.
+    Enforces: IT Support resolves -> Ticket creator verifies -> Ticket creator closes.
     """
     ticket = TicketRepository.get_by_ticket_id(session, ticket_id)
     if not ticket:
@@ -455,28 +488,23 @@ def close_ticket(
             detail=f"Ticket '{ticket_id}' is already CLOSED."
         )
 
-    if current_user.role == "EMPLOYEE":
-        if ticket.created_by != current_user.user_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You are only authorized to close support tickets created by you."
-            )
-        if ticket.status != "RESOLVED":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Cannot close ticket '{ticket_id}' before it is RESOLVED (current status: {ticket.status})."
-            )
-    elif current_user.role == "SUPPORT":
+    if current_user.role == "SUPPORT":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Support specialists cannot close tickets. Only the ticket creator or an Administrator can confirm and close."
+            detail="Support specialists cannot close tickets. Only the ticket creator can confirm resolution and close."
         )
-    else:  # ADMIN
-        if ticket.status != "RESOLVED":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Cannot close ticket '{ticket_id}' before it is RESOLVED (current status: {ticket.status})."
-            )
+
+    if ticket.created_by != current_user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are only authorized to close support tickets created by you."
+        )
+
+    if ticket.status != "RESOLVED":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot close ticket '{ticket_id}' before it is RESOLVED (current status: {ticket.status})."
+        )
 
     feedback_text = (
         close_in.feedback.strip()
@@ -532,16 +560,15 @@ def reopen_ticket(
             detail=f"Cannot report issue exists on ticket '{ticket_id}' because its status is '{ticket.status}' (expected RESOLVED)."
         )
 
-    if current_user.role == "EMPLOYEE":
-        if ticket.created_by != current_user.user_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You are only authorized to verify or reopen support tickets created by you."
-            )
-    elif current_user.role == "SUPPORT":
+    if current_user.role == "SUPPORT":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Support specialists cannot reject resolution. Only the ticket creator or an Administrator can report that the issue still exists."
+            detail="Support specialists cannot reject resolution. Only the ticket creator can report that the issue still exists."
+        )
+    if ticket.created_by != current_user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are only authorized to verify or reopen support tickets created by you."
         )
 
     # Change status back to IN_PROGRESS, strictly preserving the existing assigned specialist

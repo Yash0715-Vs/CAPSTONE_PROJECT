@@ -102,13 +102,36 @@ class DatabaseConnectionManager:
 
     def init_tables(self) -> None:
         """
-        Creates all defined database tables (Base.metadata.create_all).
-        Tables will immediately be visible inside DBeaver.
+        Ensures database schema is at the latest Alembic migration head.
+        Falls back to SQLAlchemy metadata creation only if alembic.ini is unavailable.
         """
+        alembic_ini = ROOT_DIR / "alembic.ini"
+        if alembic_ini.exists():
+            self.run_migrations()
+            return
         try:
             Base.metadata.create_all(bind=self._engine)
         except Exception as err:
             raise DatabaseConnectionError(f"Failed to initialize database tables: {err}")
+
+    def run_migrations(self, target_url: Optional[str] = None) -> None:
+        """
+        Applies pending Alembic migrations (`alembic upgrade head`) before serving requests.
+        """
+        from alembic import command
+        from alembic.config import Config as AlembicConfig
+
+        alembic_ini = ROOT_DIR / "alembic.ini"
+        if not alembic_ini.exists():
+            raise DatabaseConnectionError(f"Alembic configuration not found at {alembic_ini}")
+
+        try:
+            alembic_cfg = AlembicConfig(str(alembic_ini))
+            alembic_cfg.set_main_option("script_location", str(ROOT_DIR / "alembic"))
+            alembic_cfg.set_main_option("sqlalchemy.url", target_url or self.db_url)
+            command.upgrade(alembic_cfg, "head")
+        except Exception as err:
+            raise DatabaseConnectionError(f"Failed to apply Alembic migrations: {err}")
 
     @contextmanager
     def get_session(self) -> Generator[Session, None, None]:

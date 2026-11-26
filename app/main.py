@@ -55,16 +55,16 @@ async def lifespan(app: FastAPI):
     except Exception:
         pass
 
-    # Validate configuration and ensure database tables
+    # Validate configuration and apply Alembic database migrations before serving requests
     config.validate_production_configuration()
-    print("[STARTUP] Checking database connection and initializing tables...")
-    try:
-        db_manager.init_tables()
-        print("[STARTUP] Database connection verified successfully.")
-    except Exception as err:
-        print(f"[STARTUP CRITICAL] Database initialization failed: {err}")
-        if config.APP_ENV.lower() not in ("test", "testing"):
-            raise RuntimeError(f"Database connection and initialization failed: {err}") from err
+    if config.APP_ENV.lower() not in ("test", "testing"):
+        print("[STARTUP] Checking database connection and applying Alembic migrations (upgrade head)...")
+        try:
+            db_manager.run_migrations()
+            print("[STARTUP] Database migrations verified and applied successfully.")
+        except Exception as err:
+            print(f"[STARTUP CRITICAL] Database migration failed: {err}")
+            raise RuntimeError(f"Database connection and migration failed: {err}") from err
     yield
     # Shutdown
     print("[SHUTDOWN] Closing database engine pools...")
@@ -202,9 +202,9 @@ async def websocket_tickets_endpoint(
         try:
             from app.services.auth_service import AuthService
             from app.database.repositories import UserRepository
-            payload = AuthService.decode_token(token)
-            uid = payload.get("sub")
             with db_manager.get_session() as session:
+                payload = AuthService.decode_token(token, session=session)
+                uid = payload.get("sub")
                 user = UserRepository.get_by_user_id(session, uid)
                 if user and user.status == "ACTIVE":
                     auth_user_id = user.user_id

@@ -10,7 +10,7 @@ Meets Capstone Specification Section 12:
 
 from datetime import datetime, timezone, timedelta
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
@@ -29,6 +29,7 @@ from app.schemas.user import (
     ResetPasswordRequest,
 )
 from app.services.auth_service import AuthService, get_current_user, security
+from app.utils.rate_limiter import auth_rate_limiter
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -146,16 +147,34 @@ def complete_registration(
     return user
 
 
+def _enforce_reset_rate_limit(request: Request, scope: str, extra_key: Optional[str] = None) -> None:
+    """Applies sliding-window rate limiting to password recovery endpoints."""
+    client_ip = (request.client.host if request.client else None) or "unknown"
+    keys = [f"{scope}:ip:{client_ip}"]
+    if extra_key:
+        keys.append(f"{scope}:id:{extra_key.strip().lower()}")
+    for key in keys:
+        allowed, retry_after = auth_rate_limiter.check_and_record(key, max_requests=10, window_seconds=900)
+        if not allowed:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many password reset requests. Please try again later.",
+                headers={"Retry-After": str(retry_after)},
+            )
+
+
 @router.post("/forgot-password", response_model=ForgotPasswordResponse)
-def forgot_password(req: ForgotPasswordRequest, session: Session = Depends(get_db)):
+def forgot_password(req: ForgotPasswordRequest, request: Request, session: Session = Depends(get_db)):
     """
     Self-service password recovery request for any Employee, IT Support, or Admin:
-    1. Looks up the user by User ID or Email.
-    2. Issues a cryptographically signed, expiring (15m) reset token.
-    3. Saves SHA-256 hash in the database.
-    4. Returns verification token to client for demonstration and user self-reset.
+    1. Applies rate limiting.
+    2. Looks up the user by User ID or Email.
+    3. Issues a cryptographically signed, expiring (15m) reset token.
+    4. Saves SHA-256 hash in the database.
+    5. Returns verification token to client for demonstration and user self-reset.
     """
     clean_id = req.identifier.strip()
+    _enforce_reset_rate_limit(request, "forgot_password", extra_key=clean_id)
     user = UserRepository.get_by_user_id(session, clean_id) or UserRepository.get_by_email(session, clean_id)
     if not user:
         raise HTTPException(
@@ -195,12 +214,14 @@ def forgot_password(req: ForgotPasswordRequest, session: Session = Depends(get_d
 
 @router.get("/verify-reset-token", response_model=VerifyResetTokenResponse)
 def verify_reset_token(
+    request: Request,
     token: str = Query(..., min_length=8, description="Password reset verification token"),
     session: Session = Depends(get_db)
 ):
     """
     Verifies that a password reset token exists, is active, and has not expired.
     """
+    _enforce_reset_rate_limit(request, "verify_reset_token")
     token_hash = AuthService.hash_reset_token(token)
     user = UserRepository.get_by_reset_token_hash(session, token_hash)
     if not user:
@@ -230,7 +251,7 @@ def verify_reset_token(
 
 
 @router.post("/reset-password", status_code=status.HTTP_200_OK)
-def reset_password(req: ResetPasswordRequest, session: Session = Depends(get_db)):
+def reset_password(req: ResetPasswordRequest, request: Request, session: Session = Depends(get_db)):
     """
     Sets a new password using a verified reset token:
     1. Validates password strength (min 8 characters).
@@ -239,6 +260,7 @@ def reset_password(req: ResetPasswordRequest, session: Session = Depends(get_db)
     4. Invalidates single-use reset token.
     5. Logs the audit event.
     """
+    _enforce_reset_rate_limit(request, "reset_password")
     if len(req.new_password.strip()) < 8:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -357,9 +379,13 @@ def logout(
     current_user: UserDB = Depends(get_current_user),
     session: Session = Depends(get_db)
 ):
-    """Logs out the current session and revokes the access token on the server side."""
+    """Logs out the current session and revokes the access token persistently in the database."""
     if credentials and credentials.credentials:
-        AuthService.revoke_token(credentials.credentials)
+        AuthService.revoke_token(
+            credentials.credentials,
+            session=session,
+            user_id=current_user.user_id,
+        )
     ActivityLogRepository.log(session, "USER_LOGOUT", current_user.user_id, "User logged out")
     return {"message": f"User {current_user.user_id} logged out successfully."}
 

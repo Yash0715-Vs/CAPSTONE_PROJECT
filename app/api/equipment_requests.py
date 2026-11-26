@@ -68,9 +68,9 @@ class EmployeeActionRequest(BaseModel):
 def create_equipment_request(
     req_in: EquipmentRequestCreate,
     session: Session = Depends(get_db),
-    current_user: UserDB = Depends(require_roles(["EMPLOYEE", "ADMIN", "SUPPORT"]))
+    current_user: UserDB = Depends(require_roles(["EMPLOYEE"]))
 ):
-    """Submits a new hardware equipment provisioning request (Employee, IT Support, or Admin)."""
+    """Submits a new hardware equipment provisioning request (Employee only)."""
     if req_in.equipment_type not in VALID_EQUIPMENT_TYPES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

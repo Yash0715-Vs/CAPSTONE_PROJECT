@@ -82,30 +82,39 @@ def test_ticket_assignment_admin_only(tokens):
 # 2. Automatic Least-Load Assignment & SYSTEM Actor
 # =====================================================================
 def test_automatic_least_load_assignment(tokens):
-    """Verifies newly created tickets are automatically assigned via least-load policy with SYSTEM actor."""
+    """Verifies newly created tickets are automatically assigned when Admin authorizes the policy."""
+    admin_headers = {"Authorization": f"Bearer {tokens['admin']}"}
     emp_headers = {"Authorization": f"Bearer {tokens['emp1']}"}
 
-    create_res = client.post(
-        "/tickets",
-        json={"title": "Least Load Auto Assign Test", "description": "Auto assignment verification"},
-        headers=emp_headers
-    )
-    assert create_res.status_code == 201
-    ticket_data = create_res.json()
-    ticket_id = ticket_data["ticket_id"]
+    # Explicitly authorize automatic assignment as Admin
+    policy_res = client.put("/tickets/policies/auto-assign", json={"enabled": True}, headers=admin_headers)
+    assert policy_res.status_code == 200
+    assert policy_res.json()["enabled"] is True
 
-    # Ticket should be assigned to an active SUPPORT specialist
-    assert ticket_data["status"] == "ASSIGNED"
-    assert ticket_data["assigned_to"] is not None
+    try:
+        create_res = client.post(
+            "/tickets",
+            json={"title": "Least Load Auto Assign Test", "description": "Auto assignment verification"},
+            headers=emp_headers
+        )
+        assert create_res.status_code == 201
+        ticket_data = create_res.json()
+        ticket_id = ticket_data["ticket_id"]
 
-    # Verify history records SYSTEM as actor
-    hist_res = client.get(f"/tickets/{ticket_id}/history", headers=emp_headers)
-    assert hist_res.status_code == 200
-    history = hist_res.json()
-    assert len(history) >= 2  # Created + Auto-assigned
-    auto_event = [h for h in history if h["changed_by"] == "SYSTEM"]
-    assert len(auto_event) >= 1
-    assert "least-load" in auto_event[0]["comment"].lower()
+        # Ticket should be assigned to an active SUPPORT specialist
+        assert ticket_data["status"] == "ASSIGNED"
+        assert ticket_data["assigned_to"] is not None
+
+        # Verify history records SYSTEM as actor
+        hist_res = client.get(f"/tickets/{ticket_id}/history", headers=emp_headers)
+        assert hist_res.status_code == 200
+        history = hist_res.json()
+        assert len(history) >= 2  # Created + Auto-assigned
+        auto_event = [h for h in history if h["changed_by"] == "SYSTEM"]
+        assert len(auto_event) >= 1
+        assert "least-load" in auto_event[0]["comment"].lower()
+    finally:
+        client.put("/tickets/policies/auto-assign", json={"enabled": False}, headers=admin_headers)
 
 
 # =====================================================================
@@ -369,52 +378,56 @@ def test_ticket_assignment_history_audit_fields(tokens):
     admin_headers = {"Authorization": f"Bearer {tokens['admin']}"}
     emp_headers = {"Authorization": f"Bearer {tokens['emp1']}"}
 
-    # 1. Create ticket -> Triggers automatic assignment
-    c_res = client.post(
-        "/tickets",
-        json={"title": "Assignment History Audit Ticket", "description": "Verifying complete history columns"},
-        headers=emp_headers
-    )
-    assert c_res.status_code == 201
-    ticket_id = c_res.json()["ticket_id"]
+    client.put("/tickets/policies/auto-assign", json={"enabled": True}, headers=admin_headers)
+    try:
+        # 1. Create ticket -> Triggers automatic assignment
+        c_res = client.post(
+            "/tickets",
+            json={"title": "Assignment History Audit Ticket", "description": "Verifying complete history columns"},
+            headers=emp_headers
+        )
+        assert c_res.status_code == 201
+        ticket_id = c_res.json()["ticket_id"]
 
-    # Retrieve history
-    hist_res = client.get(f"/tickets/{ticket_id}/history", headers=emp_headers)
-    assert hist_res.status_code == 200
-    history = hist_res.json()
+        # Retrieve history
+        hist_res = client.get(f"/tickets/{ticket_id}/history", headers=emp_headers)
+        assert hist_res.status_code == 200
+        history = hist_res.json()
 
-    # Find the auto-assignment record
-    auto_event = next((h for h in history if h.get("assignment_method") == "AUTOMATIC"), None)
-    assert auto_event is not None, f"Expected AUTOMATIC assignment record, got: {history}"
-    assert auto_event["changed_by"] == "SYSTEM"
-    assert auto_event["new_assignee"] is not None
-    assert auto_event["assignment_method"] == "AUTOMATIC"
-    assert auto_event["ticket_id"] == ticket_id
-    assert auto_event["timestamp"] is not None
-    initial_assignee = auto_event["new_assignee"]
+        # Find the auto-assignment record
+        auto_event = next((h for h in history if h.get("assignment_method") == "AUTOMATIC"), None)
+        assert auto_event is not None, f"Expected AUTOMATIC assignment record, got: {history}"
+        assert auto_event["changed_by"] == "SYSTEM"
+        assert auto_event["new_assignee"] is not None
+        assert auto_event["assignment_method"] == "AUTOMATIC"
+        assert auto_event["ticket_id"] == ticket_id
+        assert auto_event["timestamp"] is not None
+        initial_assignee = auto_event["new_assignee"]
 
-    # 2. Admin manually reassigns the ticket to another active SUPPORT user (e.g. IT-502 or IT-501)
-    target_support = "IT-502" if initial_assignee != "IT-502" else "IT-501"
-    reassign_res = client.post(
-        f"/tickets/{ticket_id}/assign",
-        json={"assigned_to": target_support},
-        headers=admin_headers
-    )
-    assert reassign_res.status_code == 200
+        # 2. Admin manually reassigns the ticket to another active SUPPORT user (e.g. IT-502 or IT-501)
+        target_support = "IT-502" if initial_assignee != "IT-502" else "IT-501"
+        reassign_res = client.post(
+            f"/tickets/{ticket_id}/assign",
+            json={"assigned_to": target_support},
+            headers=admin_headers
+        )
+        assert reassign_res.status_code == 200
 
-    # Retrieve history after manual reassignment
-    hist_res2 = client.get(f"/tickets/{ticket_id}/history", headers=admin_headers)
-    assert hist_res2.status_code == 200
-    history2 = hist_res2.json()
+        # Retrieve history after manual reassignment
+        hist_res2 = client.get(f"/tickets/{ticket_id}/history", headers=admin_headers)
+        assert hist_res2.status_code == 200
+        history2 = hist_res2.json()
 
-    manual_event = next((h for h in history2 if h.get("assignment_method") == "MANUAL"), None)
-    assert manual_event is not None, f"Expected MANUAL assignment record, got: {history2}"
-    assert manual_event["changed_by"] == "ADM-001"
-    assert manual_event["previous_assignee"] == initial_assignee
-    assert manual_event["new_assignee"] == target_support
-    assert manual_event["assignment_method"] == "MANUAL"
-    assert manual_event["ticket_id"] == ticket_id
-    assert manual_event["timestamp"] is not None
+        manual_event = next((h for h in history2 if h.get("assignment_method") == "MANUAL"), None)
+        assert manual_event is not None, f"Expected MANUAL assignment record, got: {history2}"
+        assert manual_event["changed_by"] == "ADM-001"
+        assert manual_event["previous_assignee"] == initial_assignee
+        assert manual_event["new_assignee"] == target_support
+        assert manual_event["assignment_method"] == "MANUAL"
+        assert manual_event["ticket_id"] == ticket_id
+        assert manual_event["timestamp"] is not None
+    finally:
+        client.put("/tickets/policies/auto-assign", json={"enabled": False}, headers=admin_headers)
 
 
 def test_concurrency_safe_auto_assignment():
