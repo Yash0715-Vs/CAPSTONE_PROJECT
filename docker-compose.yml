@@ -46,11 +46,13 @@ services:
       db:
         condition: service_healthy
     environment:
-      APP_ENV: ${APP_ENV:-prod}
+      # Defaults to dev profile so Compose boots cleanly out-of-the-box;
+      # setting APP_ENV=prod requires non-default DB_PASSWORD and a 32+ char SECRET_KEY.
+      APP_ENV: ${APP_ENV:-dev}
       DEBUG: ${DEBUG:-False}
       DB_TYPE: ${DB_TYPE:-mysql}
-      DB_HOST: ${DB_HOST:-db}
-      DB_PORT: ${DB_PORT:-3306}
+      DB_HOST: db
+      DB_PORT: 3306
       DB_NAME: ${DB_NAME:-it_asset_db}
       DB_USER: ${DB_USER:-root}
       DB_PASSWORD: ${DB_PASSWORD:-root}
@@ -65,7 +67,7 @@ services:
       interval: 15s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 15s
     networks:
       - it_asset_network
 
@@ -77,12 +79,19 @@ services:
     container_name: it_asset_frontend
     restart: unless-stopped
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     ports:
       - "3000:80"
     volumes:
       - ./frontend:/usr/share/nginx/html:ro
       - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -q --spider http://127.0.0.1/ || exit 1" ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
     networks:
       - it_asset_network
 

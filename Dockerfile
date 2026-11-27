@@ -1,10 +1,10 @@
 # =====================================================================
 # Dockerfile - Smart IT Asset & Support Ticket Management System
-# Production-ready Python 3.11 container with FastAPI and Uvicorn
+# Production-ready Python 3.12 container with FastAPI and Uvicorn
 # Meets Capstone Requirements (Section 16, 45)
 # =====================================================================
 
-FROM python:3.11-slim AS base
+FROM python:3.12-slim AS base
 
 # Prevent Python from writing .pyc files and enable unbuffered logging
 ENV PYTHONDONTWRITEBYTECODE=1 \

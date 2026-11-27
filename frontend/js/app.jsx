@@ -16,7 +16,7 @@ const API_BASE = (function () {
 
   const loc = window.location;
 
-  if (!loc.origin || loc.origin === "null" || loc.origin.startsWith("file:") || ["5500", "5501", "3000", "5173"].includes(loc.port)) {
+  if (!loc.origin || loc.origin === "null" || loc.origin.startsWith("file:") || ["5500", "5501", "5173"].includes(loc.port)) {
 
     return "http://127.0.0.1:8000";
 
@@ -32,7 +32,7 @@ const WS_URL = (function () {
 
   const loc = window.location;
 
-  if (!loc.origin || loc.origin === "null" || loc.origin.startsWith("file:") || ["5500", "5501", "3000", "5173"].includes(loc.port)) {
+  if (!loc.origin || loc.origin === "null" || loc.origin.startsWith("file:") || ["5500", "5501", "5173"].includes(loc.port)) {
 
     return "ws://127.0.0.1:8000/ws/tickets";
 
@@ -82,6 +82,8 @@ const DEMO_ACCOUNTS = [
 function parseApiError(errData, status, defaultMsg = "An unexpected error occurred.") {
 
   if (status === 401) {
+
+    if (errData && typeof errData.detail === "string") return errData.detail;
 
     return "Session expired or unauthorized credentials. Please sign in again.";
 
@@ -343,7 +345,7 @@ function ForgotPasswordModal({ isOpen, onClose, initialIdentifier, onPasswordRes
 
         {/* Error notification */}
         {error && (
-          <div className="alert-danger" style={{ marginBottom: "1rem", padding: "0.65rem 0.85rem", fontSize: "0.85rem", display: "flex", alignItems: "center", gap: "0.5rem", borderRadius: "var(--radius-sm)" }}>
+          <div className="auth-error-banner" style={{ marginBottom: "1rem", padding: "0.65rem 0.85rem", fontSize: "0.85rem", display: "flex", alignItems: "center", gap: "0.5rem", borderRadius: "var(--radius-sm)" }}>
             <span className="material-symbols-outlined" style={{ fontSize: "18px" }}>error</span>
             <span>{error}</span>
           </div>
@@ -361,7 +363,7 @@ function ForgotPasswordModal({ isOpen, onClose, initialIdentifier, onPasswordRes
                 <input
                   id="recovery-id"
                   type="text"
-                  className="form-input"
+                  className="apex-form-input"
                   style={{ width: "100%", paddingLeft: "2.5rem" }}
                   placeholder="e.g. IT-49799 or tirthg@company.com"
                   value={identifier}
@@ -411,8 +413,8 @@ function ForgotPasswordModal({ isOpen, onClose, initialIdentifier, onPasswordRes
               <input
                 id="reset-token-input"
                 type="text"
-                className="form-input"
-                style={{ width: "100%", fontFamily: "var(--font-mono)" }}
+                className="apex-form-input"
+                style={{ width: "100%", paddingLeft: "1rem", fontFamily: "var(--font-mono)" }}
                 placeholder="RST-..."
                 value={resetToken}
                 onChange={(e) => setResetToken(e.target.value)}
@@ -430,8 +432,8 @@ function ForgotPasswordModal({ isOpen, onClose, initialIdentifier, onPasswordRes
                 <input
                   id="new-password"
                   type={showPassword ? "text" : "password"}
-                  className="form-input"
-                  style={{ width: "100%", paddingLeft: "2.5rem", paddingRight: "2.5rem" }}
+                  className="apex-form-input has-right-btn"
+                  style={{ width: "100%" }}
                   placeholder="Enter new password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
@@ -459,8 +461,8 @@ function ForgotPasswordModal({ isOpen, onClose, initialIdentifier, onPasswordRes
                 <input
                   id="confirm-new-password"
                   type={showConfirmPassword ? "text" : "password"}
-                  className="form-input"
-                  style={{ width: "100%", paddingLeft: "2.5rem", paddingRight: "2.5rem" }}
+                  className="apex-form-input has-right-btn"
+                  style={{ width: "100%" }}
                   placeholder="Re-enter new password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
@@ -493,7 +495,7 @@ function ForgotPasswordModal({ isOpen, onClose, initialIdentifier, onPasswordRes
         {/* STEP 3: Success Screen */}
         {step === 3 && (
           <div style={{ textAlign: "center", padding: "1rem 0 0.5rem 0" }}>
-            <div style={{ width: "64px", height: "64px", borderRadius: "50%", background: "#ecfdf5", color: "#059669", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1.25rem auto" }}>
+            <div style={{ width: "64px", height: "64px", borderRadius: "50%", background: "var(--status-active-bg)", color: "var(--status-active)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1.25rem auto" }}>
               <span className="material-symbols-outlined" style={{ fontSize: "36px" }}>check_circle</span>
             </div>
             <h3 style={{ fontSize: "1.2rem", fontWeight: 600, color: "var(--text-main)", marginBottom: "0.5rem" }}>
@@ -1600,68 +1602,41 @@ function ExpandableDescription({ text, maxLength = 80 }) {
 function App() {
 
   const [theme, setTheme] = useState(() => {
-
     try {
-
-      return localStorage.getItem("apex_theme") || "light";
-
+      const saved = localStorage.getItem("apex_theme");
+      return saved === "dark" ? "dark" : "light";
     } catch (e) {
-
       return "light";
-
     }
-
   });
 
-
-
   const toggleTheme = useCallback(() => {
-
-    setTheme(prev => {
-
-      const next = prev === "dark" ? "light" : "dark";
-
-      try {
-
-        localStorage.setItem("apex_theme", next);
-
-      } catch (e) { }
-
-      document.documentElement.setAttribute("data-theme", next);
-
-      if (next === "dark") {
-
-        document.documentElement.classList.add("dark");
-
-      } else {
-
-        document.documentElement.classList.remove("dark");
-
-      }
-
-      return next;
-
-    });
-
+    setTheme(prev => (prev === "dark" ? "light" : "dark"));
   }, []);
 
-
+  useEffect(() => {
+    const normalized = theme === "dark" ? "dark" : "light";
+    try {
+      localStorage.setItem("apex_theme", normalized);
+    } catch (e) { }
+    document.documentElement.setAttribute("data-theme", normalized);
+    document.documentElement.style.colorScheme = normalized;
+    if (normalized === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+  }, [theme]);
 
   useEffect(() => {
-
-    document.documentElement.setAttribute("data-theme", theme);
-
-    if (theme === "dark") {
-
-      document.documentElement.classList.add("dark");
-
-    } else {
-
-      document.documentElement.classList.remove("dark");
-
-    }
-
-  }, [theme]);
+    const onStorage = (e) => {
+      if (e.key === "apex_theme") {
+        setTheme(e.newValue === "dark" ? "dark" : "light");
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
 
 
@@ -2133,6 +2108,37 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
     }, 4500);
 
   }, []);
+
+  const [verifyInitialMode, setVerifyInitialMode] = useState("confirm_close");
+
+  const openVerifyModal = useCallback((ticket, mode = "confirm_close") => {
+    setVerifyInitialMode(mode === "still_exists" ? "still_exists" : "confirm_close");
+    setShowVerifyModal(ticket);
+  }, []);
+
+  const handleToggleAutoAssign = useCallback(async () => {
+    setUpdatingAutoAssign(true);
+    try {
+      const nextVal = !autoAssignEnabled;
+      const res = await fetch(`${API_BASE}/tickets/policies/auto-assign`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify({ enabled: nextVal }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAutoAssignEnabled(Boolean(data.enabled));
+        addToast(`Automatic least-load assignment ${data.enabled ? "authorized" : "disabled"}.`, "success");
+      } else {
+        const err = await res.json().catch(() => null);
+        addToast(parseApiError(err, res.status, "Failed to update auto-assign policy"), "error");
+      }
+    } catch (e) {
+      addToast("Network failure updating policy.", "error");
+    } finally {
+      setUpdatingAutoAssign(false);
+    }
+  }, [autoAssignEnabled, token, addToast]);
 
 
 
@@ -3540,6 +3546,34 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                       type="button"
 
+                      className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium transition-colors shadow-sm cursor-pointer ${autoAssignEnabled ? 'bg-primary-fixed text-on-primary-fixed border border-primary/40' : 'bg-surface-container-low hover:bg-surface-container-highest text-on-surface border border-surface-container-highest/60'}`}
+
+                      disabled={updatingAutoAssign}
+
+                      onClick={handleToggleAutoAssign}
+
+                      title="Admin policy: authorize or disable automatic least-load assignment on new tickets"
+
+                    >
+
+                      <span className="material-symbols-outlined text-[17px] text-primary">
+
+                        {autoAssignEnabled ? 'auto_awesome' : 'person_outline'}
+
+                      </span>
+
+                      <span>{autoAssignEnabled ? 'Auto-Assign: ON' : 'Auto-Assign: Manual'}</span>
+
+                    </button>
+
+                  )}
+
+                  {currentUser.role === 'ADMIN' && (
+
+                    <button
+
+                      type="button"
+
                       className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-surface-container-low hover:bg-surface-container-highest text-on-surface text-xs font-medium transition-colors shadow-sm cursor-pointer"
 
                       onClick={() => setShowCreateAssetModal(true)}
@@ -3714,6 +3748,88 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
 
 
+                  {/* Employee Pending Resolution Verification Section */}
+                  {(() => {
+                    const pendingVerifications = (tickets || []).filter(
+                      t => t.status === "RESOLVED" && currentUser && t.created_by === currentUser.user_id
+                    );
+                    if (pendingVerifications.length === 0) return null;
+                    return (
+                      <div className="verification-alert-card p-5 mb-6 shadow-sm">
+                        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                          <div className="flex items-center gap-2.5">
+                            <span className="material-symbols-outlined text-[22px] text-primary">verified_user</span>
+                            <div>
+                              <h2 className="font-headline text-lg text-on-surface font-medium">
+                                Resolution Verification Required ({pendingVerifications.length})
+                              </h2>
+                              <p className="text-xs text-on-surface-variant">
+                                Confirm whether the IT Support fix resolved your issue to close the ticket, or reopen it if the issue persists.
+                              </p>
+                            </div>
+                          </div>
+                          <span className="badge-status resolved">Awaiting Your Confirmation</span>
+                        </div>
+                        <div className="space-y-3">
+                          {pendingVerifications.map(t => (
+                            <div
+                              key={t.id || t.ticket_id}
+                              className="bg-surface-container-lowest p-4 rounded-xl border border-surface-container-highest/60 flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+                            >
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2 mb-1">
+                                  <button
+                                    type="button"
+                                    className="font-mono text-xs font-semibold text-primary hover:underline cursor-pointer"
+                                    onClick={() => setShowTicketDetailsModal(t)}
+                                  >
+                                    #{t.ticket_id}
+                                  </button>
+                                  <span className="font-semibold text-sm text-on-surface">{t.title}</span>
+                                  {t.assigned_to && (
+                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-surface-container text-on-surface-variant">
+                                      Specialist: {t.assigned_to}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-xs text-on-surface-variant line-clamp-2">
+                                  <strong className="text-on-surface">Resolution Note:</strong>{" "}
+                                  {t.resolution || "IT Support marked this ticket as resolved."}
+                                </div>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                                <button
+                                  type="button"
+                                  className="btn-primary-teal"
+                                  style={{ padding: "0.48rem 0.9rem", fontSize: "0.78rem" }}
+                                  onClick={() => openVerifyModal(t, "confirm_close")}
+                                >
+                                  <span className="material-symbols-outlined" style={{ fontSize: "15px" }}>task_alt</span>
+                                  <span>Issue Resolved &ndash; Confirm &amp; Close</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  className="table-btn"
+                                  style={{
+                                    borderColor: "var(--status-critical)",
+                                    color: "var(--status-critical)",
+                                    fontWeight: 600,
+                                    padding: "0.48rem 0.9rem",
+                                    fontSize: "0.78rem",
+                                  }}
+                                  onClick={() => openVerifyModal(t, "still_exists")}
+                                >
+                                  <span className="material-symbols-outlined" style={{ fontSize: "15px" }}>restart_alt</span>
+                                  <span>Issue Not Resolved &ndash; Reopen</span>
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   {/* Employee Content Split: My Incidents (7 Cols) & My Equipment (5 Cols) */}
 
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -3794,27 +3910,51 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                                 <td className="py-3 px-3 text-right">
 
-                                  {t.status === "RESOLVED" && (
+                                  {t.status === "RESOLVED" && currentUser && t.created_by === currentUser.user_id && (
 
-                                    <button
+                                    <div style={{ display: "inline-flex", gap: "0.35rem", flexWrap: "wrap", justifyContent: "flex-end" }}>
 
-                                      type="button"
+                                      <button
 
-                                      className="table-btn"
+                                        type="button"
 
-                                      style={{ borderColor: "var(--primary)", color: "var(--primary)", fontWeight: 600 }}
+                                        className="table-btn"
 
-                                      onClick={() => setShowVerifyModal(t)}
+                                        style={{ borderColor: "var(--primary)", color: "var(--primary)", fontWeight: 600 }}
 
-                                      title="Verify resolution and close ticket or report issue still exists"
+                                        onClick={() => openVerifyModal(t, "confirm_close")}
 
-                                    >
+                                        title="Confirm issue resolved and close ticket"
 
-                                      <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>verified</span>
+                                      >
 
-                                      <span>Verify Resolution</span>
+                                        <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>task_alt</span>
 
-                                    </button>
+                                        <span>Confirm &amp; Close</span>
+
+                                      </button>
+
+                                      <button
+
+                                        type="button"
+
+                                        className="table-btn"
+
+                                        style={{ borderColor: "var(--status-critical)", color: "var(--status-critical)", fontWeight: 600 }}
+
+                                        onClick={() => openVerifyModal(t, "still_exists")}
+
+                                        title="Report issue not resolved and reopen ticket"
+
+                                      >
+
+                                        <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>restart_alt</span>
+
+                                        <span>Reopen</span>
+
+                                      </button>
+
+                                    </div>
 
                                   )}
 
@@ -5297,51 +5437,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                         }}
 
-                        onClick={async () => {
-
-                          setUpdatingAutoAssign(true);
-
-                          try {
-
-                            const nextVal = !autoAssignEnabled;
-
-                            const res = await fetch(`${API_BASE}/tickets/policies/auto-assign`, {
-
-                              method: "PUT",
-
-                              headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-
-                              body: JSON.stringify({ enabled: nextVal }),
-
-                            });
-
-                            if (res.ok) {
-
-                              const data = await res.json();
-
-                              setAutoAssignEnabled(Boolean(data.enabled));
-
-                              addToast(`Automatic least-load assignment ${data.enabled ? "authorized" : "disabled"}.`, "success");
-
-                            } else {
-
-                              const err = await res.json().catch(() => null);
-
-                              addToast(parseApiError(err, res.status, "Failed to update auto-assign policy"), "error");
-
-                            }
-
-                          } catch (e) {
-
-                            addToast("Network failure updating policy.", "error");
-
-                          } finally {
-
-                            setUpdatingAutoAssign(false);
-
-                          }
-
-                        }}
+                        onClick={handleToggleAutoAssign}
 
                         title="Admin policy: authorize or disable automatic least-load assignment on new tickets"
 
@@ -5703,25 +5799,49 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                                 {t.status === "RESOLVED" && currentUser && currentUser.user_id === t.created_by && (
 
-                                  <button
+                                  <>
 
-                                    type="button"
+                                    <button
 
-                                    className="table-btn"
+                                      type="button"
 
-                                    style={{ color: "var(--primary)", borderColor: "var(--primary-border)", fontWeight: 600 }}
+                                      className="table-btn"
 
-                                    onClick={() => setShowVerifyModal(t)}
+                                      style={{ color: "var(--primary)", borderColor: "var(--primary-border)", fontWeight: 600 }}
 
-                                    title="Verify resolution and close ticket or report issue still exists"
+                                      onClick={() => openVerifyModal(t, "confirm_close")}
 
-                                  >
+                                      title="Issue Resolved - Confirm & Close ticket"
 
-                                    <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>verified</span>
+                                    >
 
-                                    <span>Verify Resolution</span>
+                                      <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>task_alt</span>
 
-                                  </button>
+                                      <span>Confirm &amp; Close</span>
+
+                                    </button>
+
+                                    <button
+
+                                      type="button"
+
+                                      className="table-btn"
+
+                                      style={{ color: "var(--status-critical)", borderColor: "var(--status-critical)", fontWeight: 600 }}
+
+                                      onClick={() => openVerifyModal(t, "still_exists")}
+
+                                      title="Issue Not Resolved - Reopen ticket"
+
+                                    >
+
+                                      <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>restart_alt</span>
+
+                                      <span>Reopen</span>
+
+                                    </button>
+
+                                  </>
 
                                 )}
 
@@ -7788,11 +7908,15 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
             userAssets={myAssignedAssets}
             allAssets={assets}
             initialData={createTicketInitialData}
-            onSuccess={() => {
+            onSuccess={(created) => {
               setShowCreateModal(false);
               setCreateTicketInitialData(null);
               fetchData();
-              addToast("Ticket created successfully!", "success");
+              if (created && created.assigned_to) {
+                addToast(`Ticket #${created.ticket_id} created and auto-assigned to ${created.assigned_to}.`, "success");
+              } else {
+                addToast(`Ticket ${created?.ticket_id ? `#${created.ticket_id} ` : ""}created (status: ${created?.status || "OPEN"}, awaiting specialist assignment).`, "info");
+              }
             }}
             addToast={addToast}
           />
@@ -8190,13 +8314,13 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                       usersList
 
-                        .filter(u => u.role === "SUPPORT" || u.role === "ADMIN")
+                        .filter(u => u.role === "SUPPORT" && (u.status || "ACTIVE").toUpperCase() === "ACTIVE")
 
                         .map(u => (
 
                           <option key={u.user_id} value={u.user_id}>
 
-                            {u.user_id} - {u.name} ({u.role} | {u.department || "IT Support"})
+                            {u.user_id} - {u.name} (IT Support | {u.department || "IT Support"})
 
                           </option>
 
@@ -8204,7 +8328,7 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
                     ) : (
 
-                      <option value="" disabled>No IT Support engineers currently available</option>
+                      <option value="" disabled>No eligible active IT Support engineers available</option>
 
                     )}
 
@@ -8360,11 +8484,11 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
             }}
 
-            onVerify={(ticket) => {
+            onVerify={(ticket, mode = "confirm_close") => {
 
               setShowTicketDetailsModal(null);
 
-              setShowVerifyModal(ticket);
+              openVerifyModal(ticket, mode);
 
             }}
 
@@ -8382,15 +8506,25 @@ ${tickets.filter(t => (t.priority === 'CRITICAL' || t.priority === 'HIGH') && t.
 
             ticket={showVerifyModal}
 
+            initialMode={verifyInitialMode}
+
             currentUser={currentUser}
 
             token={token}
 
-            onClose={() => setShowVerifyModal(null)}
+            onClose={() => {
+
+              setShowVerifyModal(null);
+
+              setVerifyInitialMode("confirm_close");
+
+            }}
 
             onSuccess={() => {
 
               setShowVerifyModal(null);
+
+              setVerifyInitialMode("confirm_close");
 
               fetchData();
 
@@ -9467,7 +9601,9 @@ function CreateTicketModal({ onClose, token, onSuccess, addToast, userAssets = [
 
       if (res.status === 201) {
 
-        onSuccess();
+        const created = await res.json().catch(() => null);
+
+        onSuccess(created);
 
       } else {
 
@@ -11385,15 +11521,25 @@ function TicketDetailsModal({ ticket, assets = [], currentUser, token, onClose, 
 
           }}>
 
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.4rem" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem", marginBottom: "0.4rem", flexWrap: "wrap" }}>
 
-              <span className="material-symbols-outlined" style={{ fontSize: "20px", color: "var(--status-resolved-text)" }}>check_circle</span>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
 
-              <span style={{ fontSize: "0.82rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--status-resolved-text)" }}>
+                <span className="material-symbols-outlined" style={{ fontSize: "20px", color: "var(--status-resolved-text)" }}>check_circle</span>
 
-                Resolution Information
+                <span style={{ fontSize: "0.82rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--status-resolved-text)" }}>
 
-              </span>
+                  Resolution Information
+
+                </span>
+
+              </div>
+
+              {ticket.status === "RESOLVED" && (
+
+                <span className="badge-status resolved">Awaiting Employee Verification</span>
+
+              )}
 
             </div>
 
@@ -11523,25 +11669,61 @@ function TicketDetailsModal({ ticket, assets = [], currentUser, token, onClose, 
 
             {ticket.status === "RESOLVED" && currentUser && currentUser.user_id === ticket.created_by && (
 
-              <button
+              <div style={{ display: "inline-flex", gap: "0.5rem", flexWrap: "wrap" }}>
 
-                type="button"
+                <button
 
-                className="btn-primary-teal"
+                  type="button"
 
-                style={{ padding: "0.5rem 1rem", fontSize: "0.84rem" }}
+                  className="btn-primary-teal"
 
-                onClick={() => onVerify ? onVerify(ticket) : onCloseTicket(ticket)}
+                  style={{ padding: "0.5rem 0.95rem", fontSize: "0.82rem" }}
 
-                title="Verify resolution and close ticket or report issue still exists"
+                  onClick={() => onVerify ? onVerify(ticket, "confirm_close") : onCloseTicket(ticket)}
 
-              >
+                  title="Confirm issue resolved and permanently close ticket"
 
-                <span className="material-symbols-outlined" style={{ fontSize: "15px" }}>verified</span>
+                >
 
-                <span>Verify Resolution</span>
+                  <span className="material-symbols-outlined" style={{ fontSize: "15px" }}>task_alt</span>
 
-              </button>
+                  <span>Issue Resolved &ndash; Confirm &amp; Close</span>
+
+                </button>
+
+                <button
+
+                  type="button"
+
+                  className="table-btn"
+
+                  style={{
+
+                    padding: "0.5rem 0.95rem",
+
+                    fontSize: "0.82rem",
+
+                    borderColor: "var(--status-critical)",
+
+                    color: "var(--status-critical)",
+
+                    fontWeight: 600,
+
+                  }}
+
+                  onClick={() => onVerify && onVerify(ticket, "still_exists")}
+
+                  title="Report issue still exists and return ticket to In Progress"
+
+                >
+
+                  <span className="material-symbols-outlined" style={{ fontSize: "15px" }}>restart_alt</span>
+
+                  <span>Issue Not Resolved &ndash; Reopen</span>
+
+                </button>
+
+              </div>
 
             )}
 
@@ -13327,15 +13509,25 @@ function ResolveTicketModal({ ticket, assets, token, onClose, onSuccess, addToas
 
 
 
-function VerifyResolutionModal({ ticket, currentUser, token, onClose, onSuccess, addToast }) {
+function VerifyResolutionModal({ ticket, initialMode = "confirm_close", currentUser, token, onClose, onSuccess, addToast }) {
 
   const [feedback, setFeedback] = useState("");
 
   const [reopenReason, setReopenReason] = useState("");
 
-  const [activeMode, setActiveMode] = useState("confirm_close"); // 'confirm_close' (Yes) or 'still_exists' (No)
+  const [activeMode, setActiveMode] = useState(initialMode === "still_exists" ? "still_exists" : "confirm_close"); // 'confirm_close' (Yes) or 'still_exists' (No)
 
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+
+    setActiveMode(initialMode === "still_exists" ? "still_exists" : "confirm_close");
+
+    setFeedback("");
+
+    setReopenReason("");
+
+  }, [ticket && ticket.ticket_id, initialMode]);
 
 
 
@@ -13344,6 +13536,8 @@ function VerifyResolutionModal({ ticket, currentUser, token, onClose, onSuccess,
 
 
   const handleConfirmClose = async () => {
+
+    if (submitting) return;
 
     setSubmitting(true);
 
@@ -13394,6 +13588,8 @@ function VerifyResolutionModal({ ticket, currentUser, token, onClose, onSuccess,
 
 
   const handleReportIssueExists = async () => {
+
+    if (submitting) return;
 
     if (!reopenReason.trim() || reopenReason.trim().length < 5) {
 
@@ -13617,7 +13813,7 @@ function VerifyResolutionModal({ ticket, currentUser, token, onClose, onSuccess,
 
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
 
-                  <span style={{ fontWeight: 700, fontSize: "0.92rem", color: "var(--text-main)" }}>Yes, Issue Fixed</span>
+                  <span style={{ fontWeight: 700, fontSize: "0.9rem", color: "var(--text-main)" }}>Issue Resolved &ndash; Confirm &amp; Close</span>
 
                   {activeMode === "confirm_close" && (
 
@@ -13633,7 +13829,7 @@ function VerifyResolutionModal({ ticket, currentUser, token, onClose, onSuccess,
 
                 <span style={{ display: "block", fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "2px", lineHeight: 1.3 }}>
 
-                  Verify fix &amp; close ticket
+                  Verify fix &amp; permanently close ticket
 
                 </span>
 
@@ -13715,9 +13911,9 @@ function VerifyResolutionModal({ ticket, currentUser, token, onClose, onSuccess,
 
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
 
-                  <span style={{ fontWeight: 700, fontSize: "0.92rem", color: activeMode === "still_exists" ? "var(--status-critical)" : "var(--text-main)" }}>
+                  <span style={{ fontWeight: 700, fontSize: "0.9rem", color: activeMode === "still_exists" ? "var(--status-critical)" : "var(--text-main)" }}>
 
-                    No, Issue Exists
+                    Issue Not Resolved &ndash; Reopen
 
                   </span>
 
@@ -13735,7 +13931,7 @@ function VerifyResolutionModal({ ticket, currentUser, token, onClose, onSuccess,
 
                 <span style={{ display: "block", fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "2px", lineHeight: 1.3 }}>
 
-                  Reopen &amp; return to IT
+                  Reopen &amp; return to IT Support
 
                 </span>
 
@@ -13965,7 +14161,7 @@ function VerifyResolutionModal({ ticket, currentUser, token, onClose, onSuccess,
 
                     <span className="material-symbols-outlined" style={{ fontSize: "17px" }}>task_alt</span>
 
-                    <span>Confirm &amp; Close Ticket</span>
+                    <span>Issue Resolved &ndash; Confirm &amp; Close</span>
 
                   </>
 
@@ -14275,7 +14471,7 @@ function VerifyResolutionModal({ ticket, currentUser, token, onClose, onSuccess,
 
                     <span className="material-symbols-outlined" style={{ fontSize: "17px" }}>restart_alt</span>
 
-                    <span>Submit &amp; Return to In Progress</span>
+                    <span>Issue Not Resolved &ndash; Reopen</span>
 
                   </>
 

@@ -219,12 +219,22 @@ def auto_assign_ticket(
         return None
 
     with acquire_assignment_lock(db):
-        ticket = TicketRepository.get_by_ticket_id(db, ticket_id)
+        ticket = TicketRepository.get_by_ticket_id(db, ticket_id, for_update=True)
         if not ticket:
             return None
 
+        # Prevent duplicate or invalid assignments on already-assigned or closed tickets
+        if ticket.status == "CLOSED" or (ticket.assigned_to and ticket.status != "OPEN"):
+            return ticket.assigned_to
+
         specialist = get_least_loaded_support_user(db)
         if not specialist:
+            # Ensure ticket remains cleanly unassigned in OPEN status
+            if ticket.assigned_to is not None:
+                ticket.assigned_to = None
+            if ticket.status != "OPEN":
+                ticket.status = "OPEN"
+            db.flush()
             return None
 
         old_assignee = ticket.assigned_to

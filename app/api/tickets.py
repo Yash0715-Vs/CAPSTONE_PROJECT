@@ -209,6 +209,8 @@ def create_ticket(
         session.flush()
 
         if not assigned_specialist:
+            saved.assigned_to = None
+            saved.status = "OPEN"
             ActivityLogRepository.log(
                 session,
                 "TICKET_UNASSIGNED_NO_SPECIALIST",
@@ -223,6 +225,8 @@ def create_ticket(
             f"Ticket {saved.ticket_id} remains in OPEN status: Automatic assignment is disabled by Admin policy; awaiting Admin manual assignment."
         )
 
+    session.commit()
+    session.refresh(saved)
     ws_manager.trigger_ticket_broadcast("TICKET_CREATED", saved.to_dict())
     return saved
 
@@ -236,7 +240,7 @@ def update_ticket(
     staff_user: UserDB = Depends(require_roles(["ADMIN", "SUPPORT"]))
 ):
     """Updates ticket priority, category, or title (Admin / Support only)."""
-    ticket = TicketRepository.get_by_ticket_id(session, ticket_id)
+    ticket = TicketRepository.get_by_ticket_id(session, ticket_id, for_update=True)
     if not ticket:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Ticket '{ticket_id}' not found.")
 
@@ -274,8 +278,9 @@ def update_ticket(
             )
         TicketRepository.update_status(session, ticket_id, "IN_PROGRESS", staff_user.user_id, comment="Work started by engineer")
 
-    session.flush()
     ActivityLogRepository.log(session, "TICKET_UPDATED", staff_user.user_id, f"Updated ticket {ticket_id}")
+    session.commit()
+    session.refresh(ticket)
     ws_manager.trigger_ticket_broadcast("TICKET_UPDATED", ticket.to_dict())
     return ticket
 
@@ -289,7 +294,7 @@ def assign_ticket(
     admin_user: UserDB = Depends(require_roles(["ADMIN"]))  # Exclusively ADMIN per Monday specifications
 ):
     """Assigns or reassigns ticket to an IT Support specialist (ADMIN only)."""
-    ticket = TicketRepository.get_by_ticket_id(session, ticket_id)
+    ticket = TicketRepository.get_by_ticket_id(session, ticket_id, for_update=True)
     if not ticket:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Ticket '{ticket_id}' not found.")
 
@@ -336,7 +341,8 @@ def assign_ticket(
         admin_user.user_id,
         f"Admin {admin_user.user_id} assigned {ticket_id} to {assign_req.assigned_to}"
     )
-    session.flush()
+    session.commit()
+    session.refresh(ticket)
     ws_manager.trigger_ticket_broadcast("TICKET_ASSIGNED", ticket.to_dict())
     return ticket
 
@@ -350,7 +356,7 @@ def resolve_ticket(
     staff_user: UserDB = Depends(require_roles(["ADMIN", "SUPPORT"]))
 ):
     """Resolves a ticket with explanatory resolution notes."""
-    ticket = TicketRepository.get_by_ticket_id(session, ticket_id)
+    ticket = TicketRepository.get_by_ticket_id(session, ticket_id, for_update=True)
     if not ticket:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Ticket '{ticket_id}' not found.")
 
@@ -461,7 +467,8 @@ def resolve_ticket(
         changed_by=staff_user.user_id,
         comment=f"Resolved: {full_resolution}"
     )
-    session.flush()
+    session.commit()
+    session.refresh(ticket)
     ws_manager.trigger_ticket_broadcast("TICKET_RESOLVED", ticket.to_dict())
     return ticket
 
@@ -476,9 +483,9 @@ def close_ticket(
 ):
     """
     Closes a ticket after resolution verification.
-    Enforces: IT Support resolves -> Ticket creator verifies -> Ticket creator closes.
+    Enforces: IT Support resolves -> Ticket creator verifies (EMPLOYEE_VERIFIED) -> CLOSED.
     """
-    ticket = TicketRepository.get_by_ticket_id(session, ticket_id)
+    ticket = TicketRepository.get_by_ticket_id(session, ticket_id, for_update=True)
     if not ticket:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Ticket '{ticket_id}' not found.")
 
@@ -511,6 +518,14 @@ def close_ticket(
         if (close_in and close_in.feedback and close_in.feedback.strip())
         else "Issue verified fixed. Ticket confirmed and closed."
     )
+    # Record explicit EMPLOYEE_VERIFIED step followed by final CLOSED transition
+    TicketRepository.update_status(
+        session=session,
+        ticket_id=ticket_id,
+        new_status="EMPLOYEE_VERIFIED",
+        changed_by=current_user.user_id,
+        comment=f"Employee verified resolution (Decision: CONFIRMED): {feedback_text}"
+    )
     ticket.closed_date = datetime.now(timezone.utc)
     TicketRepository.update_status(
         session=session,
@@ -521,11 +536,18 @@ def close_ticket(
     )
     ActivityLogRepository.log(
         session,
+        "TICKET_EMPLOYEE_VERIFIED",
+        current_user.user_id,
+        f"Employee {current_user.user_id} verification decision CONFIRMED for {ticket_id}: {feedback_text}"
+    )
+    ActivityLogRepository.log(
+        session,
         "TICKET_CLOSED",
         current_user.user_id,
         f"Ticket {ticket_id} verified and closed by {current_user.user_id}: {feedback_text}"
     )
-    session.flush()
+    session.commit()
+    session.refresh(ticket)
     ws_manager.trigger_ticket_broadcast("TICKET_CLOSED", ticket.to_dict())
     return ticket
 
@@ -538,13 +560,13 @@ def reopen_ticket(
     current_user: UserDB = Depends(get_current_user)
 ):
     """
-    Reopens a RESOLVED ticket when employee reports 'Issue Still Exists'.
-    - Moves status back to IN_PROGRESS.
+    Reopens a RESOLVED ticket when employee reports 'Issue Not Resolved / Issue Still Exists'.
+    - Moves status back to IN_PROGRESS (or OPEN if unassigned).
     - Preserves assigned IT Support specialist so they can continue investigation.
-    - Records employee feedback in ticket history and activity log.
-    - Restricts action to ticket creator (EMPLOYEE) or Administrator.
+    - Records employee verification decision and feedback in ticket history and activity log.
+    - Restricts action strictly to the ticket creator.
     """
-    ticket = TicketRepository.get_by_ticket_id(session, ticket_id)
+    ticket = TicketRepository.get_by_ticket_id(session, ticket_id, for_update=True)
     if not ticket:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Ticket '{ticket_id}' not found.")
 
@@ -571,27 +593,30 @@ def reopen_ticket(
             detail="You are only authorized to verify or reopen support tickets created by you."
         )
 
-    # Change status back to IN_PROGRESS, strictly preserving the existing assigned specialist
-    comment = f"Employee reported issue still exists: {reopen_in.reason.strip()}"
+    # Change status back to IN_PROGRESS (or OPEN if unassigned), strictly preserving any assigned specialist
+    reason_text = reopen_in.reason.strip()
+    comment = f"Employee reported issue still exists (Decision: REOPENED): {reason_text}"
+    target_status = "IN_PROGRESS" if ticket.assigned_to else "OPEN"
     ticket.closed_date = None
     ticket.resolved_date = None
     TicketRepository.update_status(
         session=session,
         ticket_id=ticket_id,
-        new_status="IN_PROGRESS",
+        new_status=target_status,
         changed_by=current_user.user_id,
         comment=comment,
         previous_assignee=ticket.assigned_to,
         new_assignee=ticket.assigned_to,
-        assignment_method="PRESERVED"
+        assignment_method="PRESERVED" if ticket.assigned_to else None
     )
     ActivityLogRepository.log(
         session,
         "TICKET_REOPENED",
         current_user.user_id,
-        f"Ticket {ticket_id} reopened by {current_user.user_id}: {reopen_in.reason.strip()}"
+        f"Employee {current_user.user_id} verification decision REOPENED for {ticket_id}: {reason_text}"
     )
-    session.flush()
+    session.commit()
+    session.refresh(ticket)
     ws_manager.trigger_ticket_broadcast("TICKET_UPDATED", ticket.to_dict())
     return ticket
 

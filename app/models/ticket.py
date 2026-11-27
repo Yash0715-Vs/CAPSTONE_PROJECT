@@ -130,6 +130,19 @@ class Ticket:
         self._status = TicketStatus.RESOLVED
         self.resolved_date = datetime.now()
 
+    def reopen(self, reason: str) -> None:
+        """Reopen a resolved ticket when employee reports the issue still persists."""
+        if self._status != TicketStatus.RESOLVED:
+            raise InvalidStatusTransitionError(
+                f"Cannot reopen ticket '{self.ticket_id}' from status '{self._status.value}'."
+            )
+        if not reason or len(reason.strip()) < 5:
+            raise InvalidTicketError("Reopen reason must be at least 5 characters long.")
+
+        self.resolved_date = None
+        self.closed_date = None
+        self._status = TicketStatus.IN_PROGRESS if self._assigned_to else TicketStatus.OPEN
+
     def close(self) -> None:
         """Close the ticket after resolution."""
         if self._status != TicketStatus.RESOLVED:

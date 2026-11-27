@@ -16,8 +16,10 @@
   <script>
     (function() {
       try {
-        const saved = localStorage.getItem("apex_theme") || "light";
+        const raw = localStorage.getItem("apex_theme");
+        const saved = raw === "dark" ? "dark" : "light";
         document.documentElement.setAttribute("data-theme", saved);
+        document.documentElement.style.colorScheme = saved;
         if (saved === "dark") {
           document.documentElement.classList.add("dark");
         } else {
@@ -101,7 +103,7 @@
       };
     }
   </script>
-  <link rel="stylesheet" href="/css/style.css?v=3.8.4">
+  <link rel="stylesheet" href="/css/style.css?v=3.8.6">
   
   <!-- React 18 & Babel Standalone CDN (Zero Node/NPM required) -->
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
@@ -112,6 +114,6 @@
   <div id="root"></div>
 
   <!-- Load React Application -->
-  <script type="text/babel" src="/js/app.jsx?v=3.8.4"></script>
+  <script type="text/babel" src="/js/app.jsx?v=3.8.6"></script>
 </body>
 </html>

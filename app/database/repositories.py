@@ -169,8 +169,15 @@ class TicketRepository:
         return ticket
 
     @staticmethod
-    def get_by_ticket_id(session: Session, ticket_id: str) -> Optional[TicketDB]:
-        return session.query(TicketDB).filter(TicketDB.ticket_id == ticket_id).first()
+    def get_by_ticket_id(
+        session: Session, ticket_id: str, for_update: bool = False
+    ) -> Optional[TicketDB]:
+        query = session.query(TicketDB).filter(TicketDB.ticket_id == ticket_id)
+        if for_update:
+            bind = session.get_bind()
+            if bind and hasattr(bind, "dialect") and bind.dialect.name in ("mysql", "postgresql"):
+                query = query.with_for_update()
+        return query.first()
 
     @staticmethod
     def list_tickets(

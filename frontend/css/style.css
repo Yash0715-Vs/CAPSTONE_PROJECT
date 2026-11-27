@@ -4,6 +4,7 @@
    ===================================================================== */
 
 :root {
+  color-scheme: light;
   /* Typography */
   --font-headline: 'Newsreader', Georgia, serif;
   --font-serif: 'Newsreader', Georgia, serif;
@@ -17,11 +18,13 @@
   --primary-dark: #134E4A;
   --primary-light: #B7DAD4;
   --primary-soft: #E6F4F1;
+  --primary-subtle: rgba(15, 118, 110, 0.1);
   --primary-border: #B7DAD4;
   --primary-glow: rgba(15, 118, 110, 0.22);
 
   /* Warm Parchment & Ivory Neutral Surfaces */
   --bg-canvas: #faf9f5;
+  --surface-bg: #faf9f5;
   --bg-card: #ffffff;
   --bg-card-hover: #fbfaf7;
   --bg-subtle: #f4f4f0;
@@ -58,6 +61,9 @@
   --status-open: #05a6f0;
   --status-open-bg: #edf8fd;
   --status-resolved: #2d6a4f;
+  --status-resolved-bg: #eaf4ee;
+  --status-resolved-border: #b7e4c7;
+  --status-resolved-text: #1b5e20;
   --status-closed: #737069;
 
   /* Shadows */
@@ -85,8 +91,10 @@
    ===================================================================== */
 [data-theme="dark"],
 html.dark {
+  color-scheme: dark;
   /* Dark Obsidian & Carbon Surfaces */
   --bg-canvas: #0f0f0d;
+  --surface-bg: #0f0f0d;
   --bg-card: #181715;
   --bg-card-hover: #22211e;
   --bg-subtle: #141311;
@@ -105,6 +113,7 @@ html.dark {
 
   /* Deep Teal primary variations in Dark Mode */
   --primary-soft: rgba(15, 118, 110, 0.20);
+  --primary-subtle: rgba(45, 212, 191, 0.16);
   --primary-border: rgba(183, 218, 212, 0.35);
 
   /* Status Colors background in Dark Mode */
@@ -112,6 +121,9 @@ html.dark {
   --status-warning-bg: rgba(184, 115, 51, 0.22);
   --status-critical-bg: rgba(186, 26, 26, 0.22);
   --status-open-bg: rgba(5, 166, 240, 0.22);
+  --status-resolved-bg: rgba(16, 185, 129, 0.14);
+  --status-resolved-border: rgba(52, 211, 153, 0.35);
+  --status-resolved-text: #6ee7b7;
 
   /* Shadows in Dark Mode */
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
@@ -2684,4 +2696,272 @@ html.dark .verification-banner-no {
   background: rgba(186, 26, 26, 0.16);
   border-color: rgba(248, 113, 113, 0.35);
   color: #f5f4ef;
+}
+
+/* =====================================================================
+   Complete Dark Mode Consistency Overrides ([data-theme="dark"] & html.dark)
+   ===================================================================== */
+[data-theme="dark"] body,
+html.dark body {
+  background-color: var(--bg-canvas);
+  color: var(--text-main);
+}
+
+[data-theme="dark"] select,
+html.dark select,
+[data-theme="dark"] option,
+html.dark option,
+[data-theme="dark"] textarea,
+html.dark textarea,
+[data-theme="dark"] input,
+html.dark input {
+  color-scheme: dark;
+}
+
+[data-theme="dark"] select.apex-form-input option,
+html.dark select.apex-form-input option,
+[data-theme="dark"] .filter-select option,
+html.dark .filter-select option,
+[data-theme="dark"] select option,
+html.dark select option {
+  background-color: #181715;
+  color: #f5f4ef;
+}
+
+[data-theme="dark"] .btn-auth-theme-toggle,
+html.dark .btn-auth-theme-toggle {
+  background: #22211e;
+  border-color: rgba(255, 255, 255, 0.16);
+  color: #f5f4ef;
+}
+[data-theme="dark"] .btn-auth-theme-toggle:hover,
+html.dark .btn-auth-theme-toggle:hover {
+  background: #2c2a26;
+  border-color: rgba(45, 212, 191, 0.45);
+  color: #2dd4bf;
+}
+
+[data-theme="dark"] .auth-error-banner,
+html.dark .auth-error-banner {
+  background: rgba(186, 26, 26, 0.2);
+  border-color: rgba(248, 113, 113, 0.4);
+  color: #fca5a5;
+}
+
+[data-theme="dark"] .register-preverified-banner,
+html.dark .register-preverified-banner {
+  background: rgba(15, 118, 110, 0.22);
+  border-color: rgba(45, 212, 191, 0.38);
+}
+[data-theme="dark"] .register-preverified-banner span,
+html.dark .register-preverified-banner span {
+  color: #99f6e4;
+}
+
+[data-theme="dark"] .token-verified-pill,
+html.dark .token-verified-pill {
+  background: #1e1d1a;
+  border-color: rgba(255, 255, 255, 0.14);
+  color: #c5c2ba;
+}
+
+[data-theme="dark"] .register-checklist-box,
+html.dark .register-checklist-box,
+[data-theme="dark"] .register-policy-notice,
+html.dark .register-policy-notice {
+  background: #141311;
+  border-color: rgba(255, 255, 255, 0.12);
+}
+[data-theme="dark"] .checklist-item.passed .material-symbols-outlined,
+html.dark .checklist-item.passed .material-symbols-outlined {
+  color: #4ade80;
+}
+
+[data-theme="dark"] .modal-backdrop,
+html.dark .modal-backdrop {
+  background: rgba(6, 6, 5, 0.78);
+}
+[data-theme="dark"] .modal-surface,
+html.dark .modal-surface {
+  background: var(--bg-card);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: var(--text-main);
+}
+
+[data-theme="dark"] .tab-btn:hover,
+html.dark .tab-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f5f4ef;
+}
+
+[data-theme="dark"] .kpi-icon-wrap.kpi-red,
+html.dark .kpi-icon-wrap.kpi-red {
+  background: rgba(186, 26, 26, 0.22);
+  color: #fca5a5;
+  border-color: rgba(248, 113, 113, 0.35);
+}
+[data-theme="dark"] .kpi-icon-wrap.kpi-green,
+html.dark .kpi-icon-wrap.kpi-green {
+  background: rgba(16, 185, 129, 0.2);
+  color: #6ee7b7;
+  border-color: rgba(52, 211, 153, 0.35);
+}
+[data-theme="dark"] .kpi-icon-wrap.kpi-amber,
+html.dark .kpi-icon-wrap.kpi-amber {
+  background: rgba(217, 119, 6, 0.22);
+  color: #fcd34d;
+  border-color: rgba(251, 191, 36, 0.35);
+}
+
+[data-theme="dark"] .sla-badge,
+html.dark .sla-badge {
+  background: #141311;
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #c5c2ba;
+}
+[data-theme="dark"] .sla-badge.breached,
+html.dark .sla-badge.breached {
+  background: rgba(186, 26, 26, 0.22);
+  color: #fca5a5;
+  border-color: rgba(248, 113, 113, 0.38);
+}
+[data-theme="dark"] .sla-badge.ok,
+html.dark .sla-badge.ok {
+  color: #6ee7b7;
+}
+
+[data-theme="dark"] .toast,
+html.dark .toast {
+  background: #1e1d1a;
+  color: #f5f4ef;
+  border: 1px solid rgba(45, 212, 191, 0.32);
+}
+
+/* Mirror Tailwind surface/status overrides for [data-theme="dark"] as well as html.dark */
+[data-theme="dark"] .bg-surface {
+  background-color: #141311 !important;
+}
+[data-theme="dark"] .bg-surface\/80,
+html.dark .bg-surface\/80 {
+  background-color: rgba(20, 19, 17, 0.85) !important;
+}
+[data-theme="dark"] .bg-surface-container-low {
+  background-color: #161513 !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+[data-theme="dark"] .bg-surface-container {
+  background-color: #1a1916 !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+[data-theme="dark"] .bg-surface-container-lowest {
+  background-color: #1e1d1a !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+[data-theme="dark"] .bg-surface-container-high {
+  background-color: #24231f !important;
+}
+[data-theme="dark"] .bg-surface-container-highest {
+  background-color: #2c2a26 !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+[data-theme="dark"] .text-on-surface {
+  color: #f5f4ef !important;
+}
+[data-theme="dark"] .text-on-surface-variant {
+  color: #a8a59d !important;
+}
+[data-theme="dark"] .text-secondary,
+html.dark .text-secondary {
+  color: #c5c2ba !important;
+}
+[data-theme="dark"] .bg-teal-100,
+html.dark .bg-teal-100 {
+  background-color: rgba(15, 118, 110, 0.25) !important;
+}
+[data-theme="dark"] .text-teal-800,
+html.dark .text-teal-800 {
+  color: #5eead4 !important;
+}
+[data-theme="dark"] .focus-within\:bg-surface-container-lowest:focus-within,
+html.dark .focus-within\:bg-surface-container-lowest:focus-within {
+  background-color: #1e1d1a !important;
+}
+[data-theme="dark"] .text-primary {
+  color: #2dd4bf !important;
+}
+[data-theme="dark"] .text-primary-container {
+  color: #5eead4 !important;
+}
+[data-theme="dark"] .text-tertiary,
+html.dark .text-tertiary {
+  color: #2dd4bf !important;
+}
+[data-theme="dark"] .bg-primary-fixed {
+  background-color: rgba(15, 118, 110, 0.22) !important;
+}
+[data-theme="dark"] .text-on-primary-fixed {
+  color: #B7DAD4 !important;
+}
+[data-theme="dark"] .bg-primary {
+  background-color: #0F766E !important;
+}
+[data-theme="dark"] .bg-primary-container {
+  background-color: #115E59 !important;
+}
+[data-theme="dark"] .bg-primary\/20,
+html.dark .bg-primary\/20 {
+  background-color: rgba(45, 212, 191, 0.22) !important;
+}
+[data-theme="dark"] .bg-error-container,
+html.dark .bg-error-container {
+  background-color: rgba(186, 26, 26, 0.25) !important;
+}
+[data-theme="dark"] .bg-error-container\/60,
+html.dark .bg-error-container\/60 {
+  background-color: rgba(186, 26, 26, 0.2) !important;
+}
+[data-theme="dark"] .text-on-error-container,
+html.dark .text-on-error-container {
+  color: #fca5a5 !important;
+}
+[data-theme="dark"] .divide-surface-container-low > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-surface-container-low > :not([hidden]) ~ :not([hidden]) {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+[data-theme="dark"] [class*="border-surface-container-highest"],
+html.dark [class*="border-surface-container-highest"] {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+[data-theme="dark"] .hover\:bg-surface-container:hover {
+  background-color: #24231f !important;
+}
+[data-theme="dark"] .hover\:bg-surface-container-low:hover {
+  background-color: #201f1b !important;
+}
+[data-theme="dark"] .hover\:bg-surface-container-highest:hover,
+html.dark .hover\:bg-surface-container-highest:hover {
+  background-color: #34322d !important;
+}
+[data-theme="dark"] .hover\:text-on-surface:hover,
+html.dark .hover\:text-on-surface:hover {
+  color: #f5f4ef !important;
+}
+[data-theme="dark"] aside.fixed {
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+[data-theme="dark"] header.fixed {
+  background-color: rgba(20, 19, 17, 0.85) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Employee Verification Banner Box on Overview */
+.verification-alert-card {
+  background: linear-gradient(135deg, rgba(15, 118, 110, 0.08), rgba(230, 244, 241, 0.45));
+  border: 1.5px solid var(--primary-border);
+  border-radius: var(--radius-xl);
+}
+[data-theme="dark"] .verification-alert-card,
+html.dark .verification-alert-card {
+  background: linear-gradient(135deg, rgba(15, 118, 110, 0.2), rgba(24, 23, 21, 0.92));
+  border-color: rgba(45, 212, 191, 0.35);
 }
